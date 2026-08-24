@@ -1,0 +1,505 @@
+from __future__ import annotations
+
+import os
+import sqlite3
+import threading
+import uuid
+from contextlib import asynccontextmanager, contextmanager
+from datetime import datetime
+from pathlib import Path
+from typing import Any, AsyncIterator, Callable, Iterator, Mapping
+
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+
+from backend import __version__
+from backend.admin_models import CredentialWriteRequest, PipelineRunRequest, ProviderVerifyRequest
+from backend.admin_repository import (
+    PipelineNotFoundError,
+    ProviderNotFoundError,
+    StrategyNotFoundError,
+    get_data_inventory,
+    get_overview,
+    get_pipeline,
+    get_provider,
+    get_strategy,
+    list_providers,
+    list_strategies,
+    mark_credential_changed,
+    run_pipeline,
+    utc_now,
+    verify_provider,
+)
+from backend.admin_security import direct_loopback_guard, operator_guard, validate_admin_origins
+from backend.database import PROJECT_ROOT, connect, initialize_database, resolve_database_path
+from backend.providers import FredV2Verifier, ProviderVerifier
+from backend.repository import (
+    SnapshotNotFoundError,
+    SymbolNotFoundError,
+    get_latest_cross_section,
+    get_latest_desk,
+    get_latest_snapshot_meta,
+    get_latest_symbol,
+    list_latest_symbols,
+)
+from backend.secrets import (
+    KeyringEnvironmentSecretStore,
+    SecretStore,
+    SecretStoreUnavailable,
+)
+
+
+def _not_found(code: str, message: str) -> HTTPException:
+    return HTTPException(status_code=404, detail={"code": code, "message": message})
+
+
+def create_app(
+    database_path: str | Path | None = None,
+    *,
+    frontend_dist: str | Path | None = None,
+    secret_store: SecretStore | None = None,
+    provider_verifiers: Mapping[str, ProviderVerifier] | None = None,
+    now: Callable[[], datetime] | None = None,
+) -> FastAPI:
+    path = resolve_database_path(database_path or os.getenv("HEAE_DATABASE_PATH"))
+    static_root = Path(frontend_dist) if frontend_dist is not None else PROJECT_ROOT / "frontend" / "dist"
+    secrets = secret_store or KeyringEnvironmentSecretStore()
+    verifiers = dict(provider_verifiers or {"fred_v2": FredV2Verifier()})
+    now_fn = now or utc_now
+    runtime_id = f"runtime-{uuid.uuid4()}"
+    provider_operation_locks: dict[str, threading.Lock] = {}
+    provider_operation_locks_guard = threading.Lock()
+    admin_origins = validate_admin_origins(os.getenv("HEAE_ADMIN_ALLOWED_ORIGINS"))
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        # Schema creation is safe and honest; synthetic content remains explicit opt-in.
+        initialize_database(path)
+        yield
+
+    application = FastAPI(
+        title="Hierarchical Exposure Allocation Engine API",
+        version=__version__,
+        description="Decision-state reads with a loopback-only local operator console. Empty databases remain empty until ingestion or an explicit seed runs.",
+        lifespan=lifespan,
+    )
+    application.state.database_path = path
+    application.state.frontend_dist = static_root
+    application.state.secret_store = secrets
+    application.state.provider_verifiers = verifiers
+    application.state.admin_origins = admin_origins
+    application.state.runtime_id = runtime_id
+    application.state.provider_operation_locks = provider_operation_locks
+
+    @contextmanager
+    def serialized_provider_operation(provider_key: str) -> Iterator[str]:
+        """Serialize credential mutation and verification for one provider.
+
+        The lock begins before any credential/revision read and remains held
+        through the external secret-store operation and final serialization.
+        This is an in-process boundary for the local single-worker draft.
+        """
+
+        normalized_key = provider_key.strip().lower()
+        with connect(path, read_only=True) as connection:
+            exists = connection.execute(
+                "SELECT 1 FROM operator_providers WHERE provider_key = ?",
+                (normalized_key,),
+            ).fetchone()
+        if exists is None:
+            raise ProviderNotFoundError(provider_key)
+        with provider_operation_locks_guard:
+            provider_lock = provider_operation_locks.setdefault(
+                normalized_key, threading.Lock()
+            )
+        if not provider_lock.acquire(timeout=7.0):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "provider_operation_in_progress",
+                    "message": "Another credential or smoke-verification operation is already in progress for this provider.",
+                },
+            )
+        try:
+            yield normalized_key
+        finally:
+            provider_lock.release()
+
+    configured_origins = os.getenv(
+        "HEAE_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000",
+    )
+    origins = [origin.strip() for origin in configured_origins.split(",") if origin.strip()]
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Accept", "Content-Type", "X-Operator-Action"],
+    )
+
+    @application.middleware("http")
+    async def response_hardening(request: Any, call_next: Callable[..., Any]) -> Any:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Frame-Options"] = "DENY"
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @application.exception_handler(RequestValidationError)
+    async def sanitized_validation_error(
+        _request: Any, error: RequestValidationError
+    ) -> JSONResponse:
+        # Pydantic's default error rendering includes the rejected `input`, which
+        # can be a credential supplied to an invalid request. Keep useful field
+        # locations and messages while dropping inputs and validation context.
+        sanitized = [
+            {
+                "type": item.get("type", "validation_error"),
+                "loc": item.get("loc", ()),
+                "msg": item.get("msg", "Invalid request value."),
+            }
+            for item in error.errors()
+        ]
+        return JSONResponse(status_code=422, content={"detail": sanitized})
+
+    @application.exception_handler(SecretStoreUnavailable)
+    async def credential_store_unavailable(
+        _request: Any, _error: SecretStoreUnavailable
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": {
+                    "code": "credential_store_unavailable",
+                    "message": "Credential storage is unavailable and no environment fallback could be resolved.",
+                }
+            },
+        )
+
+    @application.get("/api/health", tags=["system"])
+    def health() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            snapshot = get_latest_snapshot_meta(connection)
+            metadata = {
+                row["key"]: row["value"]
+                for row in connection.execute(
+                    "SELECT key, value FROM schema_metadata ORDER BY key"
+                ).fetchall()
+            }
+        return {
+            "status": "ok",
+            "service": "hierarchical-exposure-allocation-engine",
+            "version": __version__,
+            "read_only_api": False,
+            "decision_api_read_only": True,
+            "operator_api_local_only": True,
+            "operator_mutations_local_only": True,
+            "data_status": snapshot["status"] if snapshot is not None else "empty",
+            "snapshot": snapshot,
+            "schema_version": metadata.get("schema_version"),
+            "seed_policy": metadata.get("seed_policy"),
+        }
+
+    @application.get("/api/v1/desk/latest", tags=["desk"])
+    def desk_latest() -> dict[str, Any]:
+        try:
+            with connect(path, read_only=True) as connection:
+                return get_latest_desk(connection)
+        except SnapshotNotFoundError as error:
+            raise _not_found(
+                "snapshot_not_found",
+                "No desk snapshot is available. Run live ingestion or explicitly seed the synthetic demo.",
+            ) from error
+
+    @application.get("/api/v1/cross-section/latest", tags=["desk"])
+    def cross_section_latest() -> dict[str, Any]:
+        try:
+            with connect(path, read_only=True) as connection:
+                return get_latest_cross_section(connection)
+        except SnapshotNotFoundError as error:
+            raise _not_found(
+                "snapshot_not_found",
+                "No cross-sectional snapshot is available.",
+            ) from error
+
+    @application.get("/api/v1/symbols", tags=["symbols"])
+    def symbols() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            return list_latest_symbols(connection)
+
+    @application.get("/api/v1/symbols/{symbol}", tags=["symbols"])
+    def symbol_detail(symbol: str) -> dict[str, Any]:
+        try:
+            with connect(path, read_only=True) as connection:
+                return get_latest_symbol(connection, symbol)
+        except SnapshotNotFoundError as error:
+            raise _not_found(
+                "snapshot_not_found",
+                "No desk snapshot is available.",
+            ) from error
+        except SymbolNotFoundError as error:
+            raise _not_found(
+                "symbol_not_found",
+                f"Symbol {error.args[0]} is not present in the latest snapshot.",
+            ) from error
+
+    @application.get(
+        "/api/v1/admin/overview",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_overview() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            return get_overview(connection, secrets, now_fn(), runtime_id)
+
+    @application.get(
+        "/api/v1/admin/providers",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_providers() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            return list_providers(connection, secrets, now_fn(), runtime_id)
+
+    @application.put(
+        "/api/v1/admin/providers/{provider_key}/credential",
+        tags=["operator"],
+        dependencies=[Depends(operator_guard("credential.write", admin_origins))],
+    )
+    def admin_write_credential(
+        provider_key: str, payload: CredentialWriteRequest
+    ) -> dict[str, Any]:
+        invalidation_committed = False
+        try:
+            with serialized_provider_operation(provider_key) as normalized_key:
+                timestamp = now_fn()
+                with connect(path, read_only=True) as connection:
+                    provider = get_provider(
+                        connection, normalized_key, secrets, timestamp, runtime_id
+                    )
+                    if (
+                        provider["credential"]["configured"]
+                        and not provider["credential"]["managed"]
+                    ):
+                        raise HTTPException(
+                            status_code=409,
+                            detail={
+                                "code": "credential_environment_managed",
+                                "message": f"Unset {provider['credential']['environment_variable']} before storing an OS-managed credential.",
+                            },
+                        )
+                    credential_name = connection.execute(
+                        "SELECT credential_name FROM operator_providers WHERE provider_key = ?",
+                        (provider["key"],),
+                    ).fetchone()["credential_name"]
+                # Commit invalidation before touching the external credential
+                # store. The provider lock prevents a verifier from testing the
+                # old key under the new revision during this interval.
+                with connect(path) as connection:
+                    mark_credential_changed(connection, provider["key"], timestamp)
+                invalidation_committed = True
+                # The request model masks its repr, and only this call unwraps it.
+                secrets.set(credential_name, payload.secret.get_secret_value())
+                with connect(path, read_only=True) as connection:
+                    result = get_provider(
+                        connection, provider["key"], secrets, timestamp, runtime_id
+                    )
+        except ProviderNotFoundError as error:
+            raise _not_found("provider_not_found", f"Provider {provider_key} is not registered.") from error
+        except sqlite3.Error as error:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "operator_state_unavailable",
+                    "message": (
+                        "Credential metadata could not be read after prior health was invalidated."
+                        if invalidation_committed
+                        else "Credential metadata could not be updated; the credential store was not changed."
+                    ),
+                },
+            ) from error
+        except SecretStoreUnavailable as error:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "credential_store_unavailable",
+                    "message": "Credential storage is unavailable and no environment fallback could be resolved.",
+                },
+            ) from error
+        return {"provider": result}
+
+    @application.delete(
+        "/api/v1/admin/providers/{provider_key}/credential",
+        tags=["operator"],
+        dependencies=[Depends(operator_guard("credential.delete", admin_origins))],
+    )
+    def admin_delete_credential(provider_key: str) -> dict[str, Any]:
+        invalidation_committed = False
+        try:
+            with serialized_provider_operation(provider_key) as normalized_key:
+                timestamp = now_fn()
+                with connect(path, read_only=True) as connection:
+                    row = connection.execute(
+                        "SELECT * FROM operator_providers WHERE provider_key = ?",
+                        (normalized_key,),
+                    ).fetchone()
+                    current = secrets.get(
+                        row["credential_name"], row["environment_variable"]
+                    )
+                    if current is not None and not current.managed:
+                        raise HTTPException(
+                            status_code=409,
+                            detail={
+                                "code": "credential_environment_managed",
+                                "message": f"Unset {row['environment_variable']} in the server environment to remove this credential.",
+                            },
+                        )
+                    credential_name = row["credential_name"]
+                if current:
+                    # As with rotation, invalidate health before the external
+                    # delete while excluding concurrent verification.
+                    with connect(path) as connection:
+                        mark_credential_changed(
+                            connection, normalized_key, timestamp
+                        )
+                    invalidation_committed = True
+                    deleted = secrets.delete(credential_name)
+                else:
+                    deleted = False
+                with connect(path, read_only=True) as connection:
+                    result = get_provider(
+                        connection,
+                        normalized_key,
+                        secrets,
+                        timestamp,
+                        runtime_id,
+                    )
+        except ProviderNotFoundError as error:
+            raise _not_found("provider_not_found", f"Provider {provider_key} is not registered.") from error
+        except sqlite3.Error as error:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "operator_state_unavailable",
+                    "message": (
+                        "Credential metadata could not be read after prior health was invalidated."
+                        if invalidation_committed
+                        else "Credential metadata could not be updated; the credential store was not changed."
+                    ),
+                },
+            ) from error
+        except SecretStoreUnavailable as error:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "credential_store_unavailable",
+                    "message": "Credential storage is unavailable and no environment fallback could be resolved.",
+                },
+            ) from error
+        return {"deleted": deleted, "provider": result}
+
+    @application.post(
+        "/api/v1/admin/providers/{provider_key}/verify",
+        tags=["operator"],
+        dependencies=[Depends(operator_guard("provider.verify", admin_origins))],
+    )
+    def admin_verify_provider(
+        provider_key: str, _: ProviderVerifyRequest
+    ) -> dict[str, Any]:
+        try:
+            with serialized_provider_operation(provider_key) as normalized_key:
+                # No SQLite write transaction is held while provider I/O runs.
+                with connect(path) as connection:
+                    return verify_provider(
+                        connection,
+                        normalized_key,
+                        secrets,
+                        verifiers,
+                        now_fn(),
+                        runtime_id,
+                    )
+        except ProviderNotFoundError as error:
+            raise _not_found("provider_not_found", f"Provider {provider_key} is not registered.") from error
+
+    @application.get(
+        "/api/v1/admin/data",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_data() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            return get_data_inventory(connection, now_fn())
+
+    @application.get(
+        "/api/v1/admin/pipeline",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_pipeline() -> dict[str, Any]:
+        try:
+            with connect(path, read_only=True) as connection:
+                return get_pipeline(connection)
+        except PipelineNotFoundError as error:
+            raise _not_found("pipeline_not_found", "The daily desk pipeline is not registered.") from error
+
+    @application.post(
+        "/api/v1/admin/pipeline/runs",
+        tags=["operator"],
+        dependencies=[Depends(operator_guard("pipeline.run", admin_origins))],
+    )
+    def admin_run_pipeline(payload: PipelineRunRequest) -> dict[str, Any]:
+        try:
+            with connect(path) as connection:
+                return run_pipeline(
+                    connection,
+                    secrets,
+                    now_fn(),
+                    dry_run=payload.dry_run,
+                    runtime_id=runtime_id,
+                )
+        except PipelineNotFoundError as error:
+            raise _not_found("pipeline_not_found", "The daily desk pipeline is not available.") from error
+
+    @application.get(
+        "/api/v1/admin/strategies",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_strategies() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            return list_strategies(connection)
+
+    @application.get(
+        "/api/v1/admin/strategies/{strategy_key}",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_strategy(strategy_key: str) -> dict[str, Any]:
+        try:
+            with connect(path, read_only=True) as connection:
+                return get_strategy(connection, strategy_key)
+        except StrategyNotFoundError as error:
+            raise _not_found("strategy_not_found", f"Strategy {strategy_key} is not registered.") from error
+
+    @application.get("/{full_path:path}", include_in_schema=False)
+    def frontend(full_path: str) -> FileResponse:
+        if full_path == "api" or full_path.startswith("api/"):
+            raise _not_found("route_not_found", "API route does not exist.")
+        root = application.state.frontend_dist.resolve()
+        index_path = root / "index.html"
+        if not index_path.is_file():
+            raise _not_found("frontend_not_built", "The frontend production bundle is not present.")
+        requested = (root / full_path).resolve()
+        if requested.is_relative_to(root) and requested.is_file():
+            return FileResponse(requested)
+        return FileResponse(index_path)
+
+    return application
+
+
+app = create_app()

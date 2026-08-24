@@ -1,0 +1,1823 @@
+from __future__ import annotations
+
+import sqlite3
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+
+from backend.database import connect, initialize_database
+from backend.main import create_app
+from backend.providers import FredV2Verifier, VerificationResult
+from backend.secrets import (
+    KeyringEnvironmentSecretStore,
+    SecretStoreUnavailable,
+    SecretValue,
+)
+from backend.seed import DEMO_DATASET_ID, DEMO_SNAPSHOT_ID, seed_demo
+
+
+NOW = datetime(2026, 8, 24, 12, 0, tzinfo=timezone.utc)
+ORIGIN = "http://127.0.0.1:8000"
+
+
+@dataclass
+class MemorySecretStore:
+    values: dict[str, SecretValue] = field(default_factory=dict)
+    set_calls: list[tuple[str, str]] = field(default_factory=list)
+    delete_calls: list[str] = field(default_factory=list)
+    fail_set: bool = False
+    fail_delete: bool = False
+
+    def get(self, credential_name: str, environment_variable: str | None) -> SecretValue | None:
+        return self.values.get(credential_name)
+
+    def set(self, credential_name: str, secret: str) -> None:
+        self.set_calls.append((credential_name, secret))
+        if self.fail_set:
+            raise SecretStoreUnavailable("Injected credential-store write failure.")
+        self.values[credential_name] = SecretValue(secret, "keyring", True)
+
+    def delete(self, credential_name: str) -> bool:
+        self.delete_calls.append(credential_name)
+        if self.fail_delete:
+            raise SecretStoreUnavailable("Injected credential-store delete failure.")
+        return self.values.pop(credential_name, None) is not None
+
+
+@dataclass
+class FakeVerifier:
+    result: VerificationResult = VerificationResult(
+        status="healthy",
+        message="Provider accepted the credential.",
+        http_status=200,
+        latency_ms=12,
+    )
+    calls: list[str] = field(default_factory=list)
+
+    def verify(self, secret: str) -> VerificationResult:
+        self.calls.append(secret)
+        return self.result
+
+
+@pytest.fixture
+def admin_context(tmp_path: Path):
+    database = tmp_path / "desk.db"
+    seed_demo(database)
+    secret_store = MemorySecretStore()
+    verifier = FakeVerifier()
+    app = create_app(
+        database,
+        frontend_dist=tmp_path / "missing-dist",
+        secret_store=secret_store,
+        provider_verifiers={"fred_v2": verifier},
+        now=lambda: NOW,
+    )
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+    ) as client:
+        yield database, client, secret_store, verifier
+
+
+def operator_headers(action: str, *, origin: str = ORIGIN) -> dict[str, str]:
+    return {"Origin": origin, "X-Operator-Action": action}
+
+
+def test_empty_v4_database_has_operator_catalog_but_no_decision_snapshot(
+    tmp_path: Path,
+) -> None:
+    database = initialize_database(tmp_path / "empty.db")
+    store = MemorySecretStore()
+    app = create_app(
+        database,
+        frontend_dist=tmp_path / "missing",
+        secret_store=store,
+        provider_verifiers={"fred_v2": FakeVerifier()},
+        now=lambda: NOW,
+    )
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+    ) as client:
+        assert client.get("/api/health").json()["schema_version"] == "4"
+        assert client.get("/api/v1/desk/latest").status_code == 404
+        providers = client.get("/api/v1/admin/providers").json()["providers"]
+        assert [provider["key"] for provider in providers] == ["fred"]
+        assert providers[0]["credential"]["configured"] is False
+        assert providers[0]["credential"]["source"] is None
+        pipeline = client.get("/api/v1/admin/pipeline").json()
+        assert pipeline["definition"]["manual_only"] is True
+        assert pipeline["definition"]["stages"][0]["implemented"] is True
+        assert pipeline["latest_run"] is None
+
+
+def test_seeded_admin_inventory_strategies_signals_and_chart_annotations(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    _, client, _, _ = admin_context
+    overview = client.get("/api/v1/admin/overview").json()
+    assert overview["manual_only"] is True
+    assert overview["data"] == {
+        "assets": 6,
+        "ready": 3,
+        "stale": 0,
+        "missing": 3,
+        "partial": 0,
+        "invalid": 0,
+        "invalid_assets": 0,
+        "invalid_symbols": 0,
+    }
+    data = client.get("/api/v1/admin/data").json()
+    demo = next(
+        asset for asset in data["assets"] if asset["key"] == "demo_daily_bars"
+    )
+    assert demo["freshness"] == "not_applicable"
+    assert demo["classification"] == "synthetic"
+    fred = next(asset for asset in data["assets"] if asset["key"] == "fred_release_observations")
+    assert fred["freshness"] == "missing"
+    assert fred["row_count"] == 0
+    assert len(data["symbols"]) == 6
+    spy_data = next(item for item in data["symbols"] if item["symbol"] == "SPY")
+    assert spy_data["row_count"] == 8
+    assert spy_data["freshness"] == "not_applicable"
+    assert spy_data["classification"] == "synthetic"
+
+    strategies = client.get("/api/v1/admin/strategies").json()
+    assert strategies["summary"]["total"] == 2
+    assert strategies["strategies"][0]["decay"]["value"] is None
+    detail = client.get(
+        "/api/v1/admin/strategies/state_conditioned_exposure"
+    ).json()["strategy"]
+    assert detail["versions"][0]["diagnostics"][0]["value"] is None
+    assert detail["research_runs"] == []
+    assert detail["public_spec_url"] is None
+
+    tlt = client.get("/api/v1/symbols/TLT").json()
+    assert tlt["current_signal"]["status"] == "candidate"
+    assert tlt["current_signal"]["direction"] == "bullish"
+    signal_event = next(event for event in tlt["events"] if event["type"] == "signal_entry")
+    assert signal_event["id"] == "tlt_signal_candidate"
+    assert signal_event["status"] == "signal_state"
+    assert "no order" in signal_event["detail"].lower()
+    assert "no fill" in signal_event["detail"].lower()
+    qqq = client.get("/api/v1/symbols/QQQ").json()
+    assert qqq["current_signal"]["status"] == "none"
+    assert qqq["current_signal"]["strength"] is None
+
+    hardened = client.get("/api/v1/admin/providers")
+    assert hardened.headers["cache-control"] == "no-store"
+    assert hardened.headers["x-content-type-options"] == "nosniff"
+    assert hardened.headers["referrer-policy"] == "no-referrer"
+    assert hardened.headers["x-frame-options"] == "DENY"
+
+
+def test_mutations_require_direct_loopback_origin_and_exact_action(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    _, client, store, _ = admin_context
+    route = "/api/v1/admin/providers/fred/credential"
+    payload = {"secret": "safe-test-value"}
+    assert client.put(route, json=payload).status_code == 403
+    assert client.put(
+        route,
+        json=payload,
+        headers=operator_headers("credential.write", origin="https://example.com"),
+    ).status_code == 403
+    assert client.put(
+        route,
+        json=payload,
+        headers={**operator_headers("wrong.action"), "X-Forwarded-For": "127.0.0.1"},
+    ).status_code == 403
+    assert store.set_calls == []
+
+
+def test_mutation_rejects_non_loopback_client(tmp_path: Path) -> None:
+    database = initialize_database(tmp_path / "desk.db")
+    store = MemorySecretStore()
+    app = create_app(database, secret_store=store, now=lambda: NOW)
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("198.51.100.4", 52000),
+    ) as client:
+        read_response = client.get("/api/v1/admin/overview")
+        response = client.put(
+            "/api/v1/admin/providers/fred/credential",
+            json={"secret": "safe-test-value"},
+            headers=operator_headers("credential.write"),
+        )
+    assert read_response.status_code == 403
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "operator_loopback_required"
+    assert store.set_calls == []
+
+
+def test_invalid_secret_validation_never_echoes_rejected_input(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    _, client, store, _ = admin_context
+    rejected = " DO-NOT-ECHO-THIS-CREDENTIAL "
+    response = client.put(
+        "/api/v1/admin/providers/fred/credential",
+        json={"secret": rejected},
+        headers=operator_headers("credential.write"),
+    )
+    assert response.status_code == 422
+    assert rejected not in response.text
+    assert "DO-NOT-ECHO" not in response.text
+    assert "input" not in response.text
+    assert store.set_calls == []
+
+
+def test_credential_is_keyring_only_and_verification_is_cached_and_invalidated(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    database, client, store, verifier = admin_context
+    first_secret = "first-local-test-credential"
+    write = client.put(
+        "/api/v1/admin/providers/fred/credential",
+        json={"secret": first_secret},
+        headers=operator_headers("credential.write"),
+    )
+    assert write.status_code == 200
+    assert first_secret not in write.text
+    assert write.json()["provider"]["credential"]["status"] == "unverified"
+
+    first = client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    )
+    second = client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    )
+    assert first.json()["cached"] is False
+    assert second.json()["cached"] is True
+    assert verifier.calls == [first_secret]
+    assert first_secret not in first.text + second.text
+    provider = client.get("/api/v1/admin/providers").json()["providers"][0]
+    assert provider["credential"]["verification_status"] == "healthy"
+    assert provider["verification"]["http_status"] == 200
+
+    second_secret = "second-local-test-credential"
+    rotated = client.put(
+        "/api/v1/admin/providers/fred/credential",
+        json={"secret": second_secret},
+        headers=operator_headers("credential.write"),
+    ).json()["provider"]
+    assert rotated["verification"] is None
+    assert rotated["credential"]["verification_status"] is None
+    verified_again = client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    ).json()
+    assert verified_again["cached"] is False
+    assert verifier.calls == [first_secret, second_secret]
+
+    deleted = client.delete(
+        "/api/v1/admin/providers/fred/credential",
+        headers=operator_headers("credential.delete"),
+    ).json()
+    assert deleted["deleted"] is True
+    assert deleted["provider"]["verification"] is None
+    assert deleted["provider"]["credential"]["configured"] is False
+
+    # SQLite contains metadata and sanitized verification history, never either secret.
+    with connect(database, read_only=True) as connection:
+        for table_row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall():
+            rows = connection.execute(f'SELECT * FROM "{table_row["name"]}"').fetchall()
+            serialized = repr([tuple(row) for row in rows])
+            assert first_secret not in serialized
+            assert second_secret not in serialized
+        assert connection.execute("SELECT COUNT(*) FROM provider_verifications").fetchone()[0] == 2
+    assert store.values == {}
+
+
+def test_environment_managed_credential_cannot_be_overridden_or_deleted(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    _, client, store, _ = admin_context
+    store.values["fred_api_key"] = SecretValue(
+        "environment-only-value", "environment", False
+    )
+    put = client.put(
+        "/api/v1/admin/providers/fred/credential",
+        json={"secret": "replacement-value"},
+        headers=operator_headers("credential.write"),
+    )
+    delete = client.delete(
+        "/api/v1/admin/providers/fred/credential",
+        headers=operator_headers("credential.delete"),
+    )
+    assert put.status_code == 409
+    assert delete.status_code == 409
+    assert put.json()["detail"]["code"] == "credential_environment_managed"
+    assert store.set_calls == []
+    assert store.delete_calls == []
+
+
+def test_manual_pipeline_preflight_requires_current_healthy_verification(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    database, client, _, _ = admin_context
+    client.put(
+        "/api/v1/admin/providers/fred/credential",
+        json={"secret": "pipeline-test-credential"},
+        headers=operator_headers("credential.write"),
+    )
+    unverified = client.post(
+        "/api/v1/admin/pipeline/runs",
+        json={"dry_run": True},
+        headers=operator_headers("pipeline.run"),
+    ).json()["run"]
+    assert unverified["status"] == "partial"
+    assert "unverified" in unverified["stages"][0]["detail"]
+
+    client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    )
+    ready = client.post(
+        "/api/v1/admin/pipeline/runs",
+        json={"dry_run": True},
+        headers=operator_headers("pipeline.run"),
+    ).json()["run"]
+    assert ready["status"] == "completed"
+    assert ready["stages"][0]["status"] == "completed"
+    assert all(stage["status"] == "skipped" for stage in ready["stages"][1:])
+
+    actual = client.post(
+        "/api/v1/admin/pipeline/runs",
+        json={"dry_run": False},
+        headers=operator_headers("pipeline.run"),
+    ).json()["run"]
+    assert actual["status"] == "blocked"
+    fetch = next(stage for stage in actual["stages"] if stage["key"] == "fetch_data")
+    assert fetch["error_code"] == "stage_not_implemented"
+    assert actual["desk_snapshot_id"] is None
+
+    with connect(database) as connection:
+        connection.execute(
+            "UPDATE operator_providers SET enabled = 0 WHERE provider_key = 'fred'"
+        )
+    disabled = client.post(
+        "/api/v1/admin/pipeline/runs",
+        json={"dry_run": True},
+        headers=operator_headers("pipeline.run"),
+    ).json()["run"]
+    assert disabled["status"] == "partial"
+    assert "disabled fred" in disabled["stages"][0]["detail"]
+
+
+def test_verification_cooldown_and_health_ttl_are_separate_fail_closed_boundaries(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+    tmp_path: Path,
+) -> None:
+    database, client, store, _ = admin_context
+    client.put(
+        "/api/v1/admin/providers/fred/credential",
+        json={"secret": "expiry-boundary-test"},
+        headers=operator_headers("credential.write"),
+    )
+    verified = client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    ).json()["verification"]
+    assert verified["status"] == "healthy"
+
+    after_cooldown = NOW + timedelta(minutes=16)
+    cooldown_verifier = FakeVerifier()
+    restarted = create_app(
+        database,
+        frontend_dist=tmp_path / "missing-cooldown-dist",
+        secret_store=store,
+        provider_verifiers={"fred_v2": cooldown_verifier},
+        now=lambda: after_cooldown,
+    )
+    with TestClient(
+        restarted,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52001),
+    ) as cooldown_client:
+        provider = cooldown_client.get("/api/v1/admin/providers").json()["providers"][0]
+        assert provider["credential"]["status"] == "verified"
+        assert provider["credential"]["verification_status"] == "healthy"
+        assert provider["credential"]["cooldown_remaining_seconds"] == 0
+        assert provider["verification"]["current"] is True
+        assert provider["last_verification"]["expired"] is False
+        run = cooldown_client.post(
+            "/api/v1/admin/pipeline/runs",
+            json={"dry_run": True},
+            headers=operator_headers("pipeline.run"),
+        ).json()["run"]
+        assert run["status"] == "completed"
+        reverified = cooldown_client.post(
+            "/api/v1/admin/providers/fred/verify",
+            json={},
+            headers=operator_headers("provider.verify"),
+        ).json()
+        assert reverified["cached"] is False
+    assert cooldown_verifier.calls == ["expiry-boundary-test"]
+
+    after_ttl = NOW + timedelta(days=8)
+    expired = create_app(
+        database,
+        frontend_dist=tmp_path / "missing-expired-dist",
+        secret_store=store,
+        provider_verifiers={"fred_v2": FakeVerifier()},
+        now=lambda: after_ttl,
+    )
+    with TestClient(
+        expired,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52002),
+    ) as expired_client:
+        provider = expired_client.get("/api/v1/admin/providers").json()["providers"][0]
+        assert provider["credential"]["status"] == "expired"
+        assert provider["credential"]["verification_status"] is None
+        assert provider["verification"] is None
+        assert provider["last_verification"]["current"] is False
+        assert provider["last_verification"]["expired"] is True
+        assert provider["credential"]["last_verified_at"] is not None
+        run = expired_client.post(
+            "/api/v1/admin/pipeline/runs",
+            json={"dry_run": True},
+            headers=operator_headers("pipeline.run"),
+        ).json()["run"]
+        assert run["status"] == "partial"
+        assert "expired fred" in run["stages"][0]["detail"]
+
+
+def test_environment_and_artifact_guards_are_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HEAE_ADMIN_ALLOWED_ORIGINS", "https://example.com")
+    with pytest.raises(ValueError, match="loopback"):
+        create_app(
+            tmp_path / "bad-origin.db",
+            secret_store=MemorySecretStore(),
+            now=lambda: NOW,
+        )
+    monkeypatch.delenv("HEAE_ADMIN_ALLOWED_ORIGINS")
+
+    database = tmp_path / "research.db"
+    seed_demo(database)
+    with connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO research_runs (
+                research_run_id, strategy_key, strategy_version,
+                dataset_snapshot_id, parameters_json, status, summary
+            ) VALUES (?, ?, ?, ?, '{}', 'completed', ?)
+            """,
+            (
+                "research-1",
+                "state_conditioned_exposure",
+                "0.1.0-demo",
+                DEMO_DATASET_ID,
+                "Metadata-only test run.",
+            ),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO research_artifacts (
+                    research_run_id, artifact_key, relative_path, media_type,
+                    sha256, size_bytes, curated, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "research-1",
+                    "unsafe",
+                    "/Users/example/private.md",
+                    "text/markdown",
+                    "0" * 64,
+                    10,
+                    0,
+                    "2026-08-24T12:00:00Z",
+                ),
+            )
+
+
+def test_published_symbol_signal_is_immutable(admin_context) -> None:
+    database, _, _, _ = admin_context
+    with connect(database) as connection:
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                UPDATE symbol_signals SET status = 'active'
+                WHERE snapshot_id = ? AND symbol = 'TLT'
+                """,
+                (DEMO_SNAPSHOT_ID,),
+            )
+
+
+def test_fred_verifier_uses_bearer_header_without_redirects_or_secret_in_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict[str, Any]:
+            return {"release": {"release_id": 10}, "series": []}
+
+    class Client:
+        def __init__(self, **kwargs: Any) -> None:
+            captured["kwargs"] = kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_: Any) -> None:
+            return None
+
+        def get(self, url: str, *, params: dict[str, Any]):
+            captured["url"] = url
+            captured["params"] = params
+            return Response()
+
+    monkeypatch.setattr("backend.providers.httpx.Client", Client)
+    secret = "fred-test-secret"
+    result = FredV2Verifier().verify(secret)
+    assert result.status == "healthy"
+    assert captured["kwargs"]["follow_redirects"] is False
+    assert captured["kwargs"]["trust_env"] is False
+    assert captured["kwargs"]["headers"]["Authorization"] == f"Bearer {secret}"
+    assert secret not in captured["url"]
+    assert secret not in repr(captured["params"])
+    assert secret not in repr(result)
+
+
+def test_newer_mutable_snapshot_is_never_published_by_decision_or_inventory_apis(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    database, client, _, _ = admin_context
+    published_id = client.get("/api/v1/desk/latest").json()["snapshot"]["id"]
+    published_dataset = client.get("/api/v1/admin/data").json()["symbols"][0][
+        "dataset_snapshot_id"
+    ]
+    with connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO dataset_snapshots (
+                id, as_of, created_at, mode, data_classification, is_live,
+                is_demo, status, immutable, source_manifest_json
+            ) VALUES (?, ?, ?, 'research', 'real', 0, 0, 'draft', 0, '{}')
+            """,
+            (
+                "newer-mutable-dataset",
+                "2026-08-30T20:00:00Z",
+                "2026-08-30T20:01:00Z",
+            ),
+        )
+        source = connection.execute(
+            "SELECT * FROM desk_snapshots WHERE id = ?", (published_id,)
+        ).fetchone()
+        columns = [item["name"] for item in connection.execute("PRAGMA table_info(desk_snapshots)")]
+        values = dict(source)
+        values.update(
+            {
+                "id": "newer-mutable-desk",
+                "dataset_snapshot_id": "newer-mutable-dataset",
+                "as_of": "2026-08-30T20:00:00Z",
+                "created_at": "2026-08-30T20:01:00Z",
+                "mode": "research",
+                "data_classification": "real",
+                "is_live": 0,
+                "is_demo": 0,
+                "status": "draft",
+                "immutable": 0,
+                "title": "Unpublished draft",
+            }
+        )
+        connection.execute(
+            f"INSERT INTO desk_snapshots ({', '.join(columns)}) VALUES ({', '.join('?' for _ in columns)})",
+            tuple(values[column] for column in columns),
+        )
+
+    assert client.get("/api/v1/desk/latest").json()["snapshot"]["id"] == published_id
+    assert client.get("/api/health").json()["snapshot"]["id"] == published_id
+    assert client.get("/api/v1/symbols").json()["snapshot"]["id"] == published_id
+    inventory = client.get("/api/v1/admin/data").json()
+    assert {item["dataset_snapshot_id"] for item in inventory["symbols"]} == {
+        published_dataset
+    }
+
+
+def test_credential_partial_failures_always_fail_closed(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    database, client, store, _ = admin_context
+    write_route = "/api/v1/admin/providers/fred/credential"
+    verify_route = "/api/v1/admin/providers/fred/verify"
+    client.put(
+        write_route,
+        json={"secret": "old-keyring-value"},
+        headers=operator_headers("credential.write"),
+    )
+    client.post(
+        verify_route, json={}, headers=operator_headers("provider.verify")
+    )
+
+    store.fail_set = True
+    failed_rotation = client.put(
+        write_route,
+        json={"secret": "new-value-that-must-not-leak"},
+        headers=operator_headers("credential.write"),
+    )
+    assert failed_rotation.status_code == 503
+    assert "new-value-that-must-not-leak" not in failed_rotation.text
+    provider = client.get("/api/v1/admin/providers").json()["providers"][0]
+    assert provider["credential"]["configured"] is True
+    assert provider["credential"]["status"] == "unverified"
+    assert provider["verification"] is None
+    assert store.values["fred_api_key"].value == "old-keyring-value"
+
+    store.fail_set = False
+    client.post(
+        verify_route, json={}, headers=operator_headers("provider.verify")
+    )
+    store.fail_delete = True
+    failed_delete = client.delete(
+        write_route, headers=operator_headers("credential.delete")
+    )
+    assert failed_delete.status_code == 503
+    provider = client.get("/api/v1/admin/providers").json()["providers"][0]
+    assert provider["credential"]["status"] == "unverified"
+    assert provider["verification"] is None
+    assert store.values["fred_api_key"].value == "old-keyring-value"
+
+    store.fail_delete = False
+    client.post(
+        verify_route, json={}, headers=operator_headers("provider.verify")
+    )
+    with connect(database) as connection:
+        connection.execute(
+            """
+            CREATE TRIGGER reject_credential_revision
+            BEFORE UPDATE ON operator_providers
+            BEGIN
+                SELECT RAISE(ABORT, 'injected metadata failure');
+            END
+            """
+        )
+    set_call_count = len(store.set_calls)
+    delete_call_count = len(store.delete_calls)
+    db_failed_rotation = client.put(
+        write_route,
+        json={"secret": "external-store-must-not-change"},
+        headers=operator_headers("credential.write"),
+    )
+    db_failed_delete = client.delete(
+        write_route, headers=operator_headers("credential.delete")
+    )
+    assert db_failed_rotation.status_code == 503
+    assert db_failed_delete.status_code == 503
+    assert len(store.set_calls) == set_call_count
+    assert len(store.delete_calls) == delete_call_count
+    assert store.values["fred_api_key"].value == "old-keyring-value"
+    provider = client.get("/api/v1/admin/providers").json()["providers"][0]
+    assert provider["credential"]["verification_status"] == "healthy"
+
+
+def test_verification_source_and_environment_runtime_must_match(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+    tmp_path: Path,
+) -> None:
+    database, client, store, verifier = admin_context
+    client.put(
+        "/api/v1/admin/providers/fred/credential",
+        json={"secret": "keyring-source-value"},
+        headers=operator_headers("credential.write"),
+    )
+    client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    )
+    store.values["fred_api_key"] = SecretValue(
+        "environment-runtime-one", "environment", False
+    )
+    source_changed = client.get("/api/v1/admin/providers").json()["providers"][0]
+    assert source_changed["credential"]["status"] == "unverified"
+    assert source_changed["verification"] is None
+    client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    )
+    assert verifier.calls[-1] == "environment-runtime-one"
+
+    store.values["fred_api_key"] = SecretValue(
+        "environment-runtime-two", "environment", False
+    )
+    restarted_verifier = FakeVerifier()
+    restarted_app = create_app(
+        database,
+        frontend_dist=tmp_path / "missing-restarted-dist",
+        secret_store=store,
+        provider_verifiers={"fred_v2": restarted_verifier},
+        now=lambda: NOW,
+    )
+    with TestClient(
+        restarted_app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52001),
+    ) as restarted:
+        provider = restarted.get("/api/v1/admin/providers").json()["providers"][0]
+        assert provider["credential"]["status"] == "unverified"
+        assert provider["verification"] is None
+        result = restarted.post(
+            "/api/v1/admin/providers/fred/verify",
+            json={},
+            headers=operator_headers("provider.verify"),
+        ).json()
+        assert result["cached"] is False
+    assert restarted_verifier.calls == ["environment-runtime-two"]
+
+
+def test_same_timestamp_latest_rows_follow_insertion_order(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    database, client, _, _ = admin_context
+    client.put(
+        "/api/v1/admin/providers/fred/credential",
+        json={"secret": "same-time-value"},
+        headers=operator_headers("credential.write"),
+    )
+    with connect(database) as connection:
+        revision = connection.execute(
+            "SELECT credential_revision FROM operator_providers WHERE provider_key = 'fred'"
+        ).fetchone()[0]
+        rows = [
+            ("verify-z-first", "healthy", "First inserted."),
+            ("verify-a-second", "invalid_credentials", "Second inserted."),
+        ]
+        for verification_id, status, message in rows:
+            connection.execute(
+                """
+                INSERT INTO provider_verifications (
+                    verification_id, provider_key, checked_at, expires_at,
+                    status, message, credential_revision, runtime_id,
+                    credential_source
+                ) VALUES (?, 'fred', ?, ?, ?, ?, ?, 'irrelevant-for-keyring', 'keyring')
+                """,
+                (
+                    verification_id,
+                    "2026-08-24T12:00:00.000000Z",
+                    "2026-08-24T12:15:00.000000Z",
+                    status,
+                    message,
+                    revision,
+                ),
+            )
+    provider = client.get("/api/v1/admin/providers").json()["providers"][0]
+    assert provider["verification"]["id"] == "verify-a-second"
+    assert provider["credential"]["verification_status"] == "invalid_credentials"
+
+    first = client.post(
+        "/api/v1/admin/pipeline/runs",
+        json={"dry_run": True},
+        headers=operator_headers("pipeline.run"),
+    ).json()["run"]
+    second = client.post(
+        "/api/v1/admin/pipeline/runs",
+        json={"dry_run": True},
+        headers=operator_headers("pipeline.run"),
+    ).json()["run"]
+    latest = client.get("/api/v1/admin/pipeline").json()["latest_run"]
+    assert first["id"] != second["id"]
+    assert latest["id"] == second["id"]
+    assert latest["requested_at"].endswith(".000000Z")
+
+
+def test_future_dated_verification_fails_closed_and_current_reverify_recovers(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    database, client, _, verifier = admin_context
+    credential = "clock-correction-test-key"
+    client.put(
+        "/api/v1/admin/providers/fred/credential",
+        json={"secret": credential},
+        headers=operator_headers("credential.write"),
+    )
+    client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    )
+    assert verifier.calls == [credential]
+    with connect(database) as connection:
+        revision = connection.execute(
+            "SELECT credential_revision FROM operator_providers WHERE provider_key = 'fred'"
+        ).fetchone()[0]
+        connection.execute(
+            """
+            INSERT INTO provider_verifications (
+                verification_id, provider_key, checked_at, expires_at, status,
+                message, credential_revision, runtime_id, credential_source
+            ) VALUES (
+                'future-clock-row', 'fred', '2026-08-25T12:00:00.000000Z',
+                '2026-09-01T12:00:00.000000Z', 'healthy',
+                'Injected future-clock result.', ?, 'future-runtime', 'keyring'
+            )
+            """,
+            (revision,),
+        )
+
+    provider = client.get("/api/v1/admin/providers").json()["providers"][0]
+    assert provider["credential"]["status"] == "invalid_clock"
+    assert provider["credential"]["verification_status"] is None
+    assert provider["credential"]["cooldown_remaining_seconds"] == 0
+    assert provider["verification"] is None
+    assert provider["last_verification"]["id"] == "future-clock-row"
+    assert provider["last_verification"]["future_dated"] is True
+    run = client.post(
+        "/api/v1/admin/pipeline/runs",
+        json={"dry_run": True},
+        headers=operator_headers("pipeline.run"),
+    ).json()["run"]
+    assert run["status"] == "partial"
+    assert "invalid clock fred" in run["stages"][0]["detail"]
+
+    corrected = client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    ).json()
+    assert corrected["cached"] is False
+    assert verifier.calls == [credential, credential]
+    provider = client.get("/api/v1/admin/providers").json()["providers"][0]
+    assert provider["credential"]["status"] == "verified"
+    assert provider["credential"]["verification_status"] == "healthy"
+    assert provider["last_verification"]["id"] == corrected["verification"]["id"]
+    assert provider["last_verification"]["future_dated"] is False
+
+
+def test_future_observations_are_invalid_beyond_named_clock_tolerance(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "future.db"
+    seed_demo(database)
+    future_now = datetime(2026, 8, 21, 19, 50, tzinfo=timezone.utc)
+    store = MemorySecretStore()
+    app = create_app(
+        database,
+        secret_store=store,
+        provider_verifiers={"fred_v2": FakeVerifier()},
+        now=lambda: future_now,
+    )
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+    ) as client:
+        data = client.get("/api/v1/admin/data").json()
+        bars = next(
+            asset
+            for asset in data["assets"]
+            if asset["key"] == "demo_daily_bars"
+        )
+        spy = next(symbol for symbol in data["symbols"] if symbol["symbol"] == "SPY")
+        assert bars["freshness"] == "future"
+        assert bars["status"] == "invalid"
+        assert bars["age_seconds"] == -600
+        assert spy["freshness"] == "future"
+        assert spy["status"] == "invalid"
+        assert spy["age_seconds"] == -600
+        assert data["summary"]["invalid_assets"] == 3
+        assert data["summary"]["invalid_symbols"] == 6
+        run = client.post(
+            "/api/v1/admin/pipeline/runs",
+            json={"dry_run": True},
+            headers=operator_headers("pipeline.run"),
+        ).json()["run"]
+        assert run["status"] == "partial"
+        assert (
+            "invalid future-dated inventory records: 9 (assets 3, symbols 6)"
+            in run["stages"][0]["detail"]
+        )
+
+        # Invalid existing inventory is visible during preflight, but fetch must
+        # still be allowed to refresh it. With the provider healthy, the first
+        # hard stop is therefore the intentionally scaffolded fetch stage.
+        client.put(
+            "/api/v1/admin/providers/fred/credential",
+            json={"secret": "future-inventory-refresh-test"},
+            headers=operator_headers("credential.write"),
+        )
+        client.post(
+            "/api/v1/admin/providers/fred/verify",
+            json={},
+            headers=operator_headers("provider.verify"),
+        )
+        actual = client.post(
+            "/api/v1/admin/pipeline/runs",
+            json={"dry_run": False},
+            headers=operator_headers("pipeline.run"),
+        ).json()["run"]
+        fetch = next(stage for stage in actual["stages"] if stage["key"] == "fetch_data")
+        assert fetch["error_code"] == "stage_not_implemented"
+
+
+def test_keyring_read_failure_uses_explicit_environment_fallback_or_safe_503(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class BrokenKeyring:
+        @staticmethod
+        def get_password(_service_name: str, _credential_name: str) -> str | None:
+            raise RuntimeError("private backend diagnostic must not escape")
+
+    monkeypatch.setattr(
+        KeyringEnvironmentSecretStore,
+        "_keyring",
+        staticmethod(lambda: BrokenKeyring()),
+    )
+    store = KeyringEnvironmentSecretStore()
+    monkeypatch.setenv("HEAE_FRED_API_KEY", "environment-fallback-test")
+    fallback = store.get("fred_api_key", "HEAE_FRED_API_KEY")
+    assert fallback == SecretValue(
+        "environment-fallback-test", "environment", False
+    )
+
+    monkeypatch.delenv("HEAE_FRED_API_KEY")
+    with pytest.raises(SecretStoreUnavailable):
+        store.get("fred_api_key", "HEAE_FRED_API_KEY")
+
+    database = initialize_database(tmp_path / "keyring-unavailable.db")
+    app = create_app(database, secret_store=store, now=lambda: NOW)
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+    ) as client:
+        responses = [
+            client.get("/api/v1/admin/overview"),
+            client.get("/api/v1/admin/providers"),
+            client.post(
+                "/api/v1/admin/providers/fred/verify",
+                json={},
+                headers=operator_headers("provider.verify"),
+            ),
+            client.post(
+                "/api/v1/admin/pipeline/runs",
+                json={"dry_run": True},
+                headers=operator_headers("pipeline.run"),
+            ),
+        ]
+    for response in responses:
+        assert response.status_code == 503
+        assert response.json()["detail"]["code"] == "credential_store_unavailable"
+        assert "private backend diagnostic" not in response.text
+        assert response.headers["cache-control"] == "no-store"
+
+
+def test_research_completion_requires_sealed_dataset_provenance(tmp_path: Path) -> None:
+    database = tmp_path / "research-provenance.db"
+    seed_demo(database)
+    with connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO research_runs (
+                research_run_id, strategy_key, strategy_version,
+                parameters_json, status, summary
+            ) VALUES ('research-transition', 'state_conditioned_exposure',
+                      '0.1.0-demo', '{}', 'queued', 'Pending research.')
+            """
+        )
+        connection.commit()
+        connection.execute(
+            "UPDATE research_runs SET status = 'running' WHERE research_run_id = 'research-transition'"
+        )
+        connection.commit()
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "UPDATE research_runs SET status = 'completed' WHERE research_run_id = 'research-transition'"
+            )
+        connection.rollback()
+        connection.execute(
+            """
+            INSERT INTO dataset_snapshots (
+                id, as_of, created_at, mode, data_classification, is_live,
+                is_demo, status, immutable, source_manifest_json
+            ) VALUES ('research-draft-data', ?, ?, 'research', 'real', 0, 0,
+                      'draft', 0, '{}')
+            """,
+            ("2026-08-24T12:00:00Z", "2026-08-24T12:01:00Z"),
+        )
+        connection.commit()
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                UPDATE research_runs
+                SET status = 'completed', dataset_snapshot_id = 'research-draft-data'
+                WHERE research_run_id = 'research-transition'
+                """
+            )
+        connection.rollback()
+        connection.execute(
+            "UPDATE dataset_snapshots SET immutable = 1 WHERE id = 'research-draft-data'"
+        )
+        connection.execute(
+            """
+            UPDATE research_runs
+            SET status = 'completed', dataset_snapshot_id = 'research-draft-data'
+            WHERE research_run_id = 'research-transition'
+            """
+        )
+        connection.commit()
+        completed = connection.execute(
+            "SELECT status, dataset_snapshot_id FROM research_runs WHERE research_run_id = 'research-transition'"
+        ).fetchone()
+        assert tuple(completed) == ("completed", "research-draft-data")
+
+
+def test_v3_event_migration_only_backfills_unambiguous_fills(tmp_path: Path) -> None:
+    database = tmp_path / "legacy-v3.db"
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            """
+            PRAGMA foreign_keys = ON;
+            CREATE TABLE schema_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO schema_metadata VALUES ('schema_version', '3');
+            CREATE TABLE dataset_snapshots (
+                id TEXT PRIMARY KEY, as_of TEXT NOT NULL, created_at TEXT NOT NULL,
+                mode TEXT NOT NULL, data_classification TEXT NOT NULL,
+                is_live INTEGER NOT NULL, is_demo INTEGER NOT NULL,
+                status TEXT NOT NULL, immutable INTEGER NOT NULL,
+                source_manifest_json TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE TABLE securities (
+                security_id TEXT PRIMARY KEY, primary_symbol TEXT NOT NULL,
+                name TEXT NOT NULL, asset_type TEXT NOT NULL, exchange TEXT,
+                currency TEXT NOT NULL, sector TEXT, active INTEGER NOT NULL
+            );
+            CREATE TABLE symbol_events (
+                dataset_snapshot_id TEXT NOT NULL REFERENCES dataset_snapshots(id),
+                security_id TEXT NOT NULL REFERENCES securities(security_id),
+                event_id TEXT NOT NULL, time TEXT NOT NULL, event_type TEXT NOT NULL,
+                label TEXT NOT NULL, price REAL, detail TEXT, source_key TEXT,
+                observed_at TEXT, available_at TEXT, ingested_at TEXT NOT NULL,
+                PRIMARY KEY (dataset_snapshot_id, security_id, event_id)
+            );
+            INSERT INTO dataset_snapshots VALUES (
+                'legacy-data', '2026-01-01T00:00:00Z', '2026-01-01T00:01:00Z',
+                'research', 'real', 0, 0, 'sealed', 1, '{}'
+            );
+            INSERT INTO securities VALUES (
+                'legacy-spy', 'SPY', 'Legacy SPY', 'ETF', 'ARCA', 'USD', NULL, 1
+            );
+            INSERT INTO symbol_events VALUES
+                ('legacy-data','legacy-spy','fill','2026-01-01T00:00:00Z',
+                 'execution_fill','Confirmed legacy fill',1,NULL,NULL,NULL,NULL,
+                 '2026-01-01T00:01:00Z'),
+                ('legacy-data','legacy-spy','signal','2026-01-01T00:00:00Z',
+                 'signal_entry','Legacy signal',1,NULL,NULL,NULL,NULL,
+                 '2026-01-01T00:01:00Z'),
+                ('legacy-data','legacy-spy','pattern','2026-01-01T00:00:00Z',
+                 'pattern_higher_high','Legacy pattern',1,NULL,NULL,NULL,NULL,
+                 '2026-01-01T00:01:00Z');
+            CREATE TRIGGER immutable_symbol_events_update
+            BEFORE UPDATE ON symbol_events
+            WHEN COALESCE((
+                SELECT immutable FROM dataset_snapshots
+                WHERE id = OLD.dataset_snapshot_id
+            ), 0) = 1
+            BEGIN
+                SELECT RAISE(ABORT, 'cannot update sealed dataset snapshot');
+            END;
+            """
+        )
+    initialize_database(database)
+    with connect(database, read_only=True) as connection:
+        statuses = {
+            row["event_id"]: row["event_status"]
+            for row in connection.execute(
+                "SELECT event_id, event_status FROM symbol_events"
+            ).fetchall()
+        }
+        assert statuses == {
+            "fill": "executed",
+            "signal": "annotation",
+            "pattern": "annotation",
+        }
+    with connect(database) as connection:
+        assert connection.execute(
+            """
+            SELECT 1 FROM sqlite_master
+            WHERE type = 'trigger' AND name = 'immutable_symbol_events_update'
+            """
+        ).fetchone() is not None
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                UPDATE symbol_events SET label = 'must remain sealed'
+                WHERE dataset_snapshot_id = 'legacy-data' AND event_id = 'fill'
+                """
+            )
+
+
+def test_concurrent_provider_verification_is_serialized_by_cooldown(tmp_path: Path) -> None:
+    database = tmp_path / "concurrent.db"
+    seed_demo(database)
+    store = MemorySecretStore(
+        values={"fred_api_key": SecretValue("concurrent-value", "keyring", True)}
+    )
+
+    class BlockingVerifier:
+        def __init__(self) -> None:
+            self.started = threading.Event()
+            self.release = threading.Event()
+            self.calls = 0
+
+        def verify(self, secret: str) -> VerificationResult:
+            self.calls += 1
+            self.started.set()
+            assert self.release.wait(timeout=3)
+            return VerificationResult(
+                status="healthy", message="Verified once.", http_status=200
+            )
+
+    verifier = BlockingVerifier()
+    app = create_app(
+        database,
+        secret_store=store,
+        provider_verifiers={"fred_v2": verifier},
+        now=lambda: NOW,
+    )
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+    ) as client, ThreadPoolExecutor(max_workers=2) as pool:
+        call = lambda: client.post(
+            "/api/v1/admin/providers/fred/verify",
+            json={},
+            headers=operator_headers("provider.verify"),
+        )
+        first = pool.submit(call)
+        assert verifier.started.wait(timeout=2)
+        second = pool.submit(call)
+        verifier.release.set()
+        responses = [first.result(timeout=4), second.result(timeout=4)]
+    assert all(response.status_code == 200 for response in responses)
+    assert verifier.calls == 1
+    assert {response.json()["cached"] for response in responses} == {False, True}
+
+
+def test_credential_rotation_delete_and_verification_share_one_provider_lock(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "credential-operation-race.db"
+    seed_demo(database)
+
+    class BlockingMutationStore(MemorySecretStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.block_operation: str | None = None
+            self.operation_entered = threading.Event()
+            self.operation_release = threading.Event()
+
+        def prepare(self, operation: str) -> None:
+            self.block_operation = operation
+            self.operation_entered.clear()
+            self.operation_release.clear()
+
+        def set(self, credential_name: str, secret: str) -> None:
+            self.set_calls.append((credential_name, secret))
+            if self.block_operation == "set":
+                self.operation_entered.set()
+                assert self.operation_release.wait(timeout=3)
+            self.values[credential_name] = SecretValue(secret, "keyring", True)
+
+        def delete(self, credential_name: str) -> bool:
+            self.delete_calls.append(credential_name)
+            if self.block_operation == "delete":
+                self.operation_entered.set()
+                assert self.operation_release.wait(timeout=3)
+            return self.values.pop(credential_name, None) is not None
+
+    class TrackingLock:
+        def __init__(self) -> None:
+            self._lock = threading.Lock()
+            self._attempt_guard = threading.Lock()
+            self._attempts = 0
+            self.second_attempted = threading.Event()
+
+        def acquire(self, *, timeout: float) -> bool:
+            with self._attempt_guard:
+                self._attempts += 1
+                if self._attempts == 2:
+                    self.second_attempted.set()
+            return self._lock.acquire(timeout=timeout)
+
+        def release(self) -> None:
+            self._lock.release()
+
+    store = BlockingMutationStore()
+    verifier = FakeVerifier()
+    app = create_app(
+        database,
+        secret_store=store,
+        provider_verifiers={"fred_v2": verifier},
+        now=lambda: NOW,
+    )
+    write_route = "/api/v1/admin/providers/fred/credential"
+    verify_route = "/api/v1/admin/providers/fred/verify"
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+    ) as client, ThreadPoolExecutor(max_workers=2) as pool:
+        assert client.put(
+            write_route,
+            json={"secret": "old-race-key"},
+            headers=operator_headers("credential.write"),
+        ).status_code == 200
+        assert client.post(
+            verify_route,
+            json={},
+            headers=operator_headers("provider.verify"),
+        ).status_code == 200
+        assert verifier.calls == ["old-race-key"]
+        verifier.calls.clear()
+
+        # Rotation blocks after committing the new credential revision but
+        # before replacing the old external key. Verification deterministically
+        # reaches the same lock and must wait rather than testing the old key
+        # under that new revision.
+        rotation_lock = TrackingLock()
+        app.state.provider_operation_locks["fred"] = rotation_lock
+        store.prepare("set")
+        rotation = pool.submit(
+            lambda: client.put(
+                write_route,
+                json={"secret": "new-race-key"},
+                headers=operator_headers("credential.write"),
+            )
+        )
+        assert store.operation_entered.wait(timeout=2)
+        concurrent_verify = pool.submit(
+            lambda: client.post(
+                verify_route,
+                json={},
+                headers=operator_headers("provider.verify"),
+            )
+        )
+        assert rotation_lock.second_attempted.wait(timeout=2)
+        assert verifier.calls == []
+        store.operation_release.set()
+        assert rotation.result(timeout=3).status_code == 200
+        verify_response = concurrent_verify.result(timeout=3)
+        assert verify_response.status_code == 200
+        assert verifier.calls == ["new-race-key"]
+        assert verify_response.json()["cached"] is False
+        provider = client.get("/api/v1/admin/providers").json()["providers"][0]
+        assert provider["credential"]["verification_status"] == "healthy"
+        assert provider["verification"]["current"] is True
+
+        # Delete holds the same boundary through external removal. The queued
+        # verifier observes no key and cannot call the provider with a key that
+        # is being deleted.
+        delete_lock = TrackingLock()
+        app.state.provider_operation_locks["fred"] = delete_lock
+        store.prepare("delete")
+        delete = pool.submit(
+            lambda: client.delete(
+                write_route,
+                headers=operator_headers("credential.delete"),
+            )
+        )
+        assert store.operation_entered.wait(timeout=2)
+        verify_after_delete = pool.submit(
+            lambda: client.post(
+                verify_route,
+                json={},
+                headers=operator_headers("provider.verify"),
+            )
+        )
+        assert delete_lock.second_attempted.wait(timeout=2)
+        assert verifier.calls == ["new-race-key"]
+        store.operation_release.set()
+        delete_response = delete.result(timeout=3)
+        missing_response = verify_after_delete.result(timeout=3)
+        assert delete_response.status_code == 200
+        assert delete_response.json()["deleted"] is True
+        assert missing_response.status_code == 200
+        assert missing_response.json()["verification"]["status"] == "not_configured"
+        assert verifier.calls == ["new-race-key"]
+        provider = client.get("/api/v1/admin/providers").json()["providers"][0]
+        assert provider["credential"]["status"] == "missing"
+        assert provider["verification"] is None
+
+    with connect(database, read_only=True) as connection:
+        provider_revision = connection.execute(
+            "SELECT credential_revision FROM operator_providers WHERE provider_key = 'fred'"
+        ).fetchone()[0]
+        latest_revision = connection.execute(
+            """
+            SELECT credential_revision FROM provider_verifications
+            WHERE provider_key = 'fred' ORDER BY checked_at DESC, rowid DESC LIMIT 1
+            """
+        ).fetchone()[0]
+        assert provider_revision == latest_revision == 3
+
+
+def test_legacy_demo_gets_complete_versioned_v3_fixture_on_reseed(tmp_path: Path) -> None:
+    database = initialize_database(tmp_path / "catalog-backfill.db")
+    legacy_dataset_id = "demo-market-2026-08-21-v2"
+    legacy_snapshot_id = "demo-2026-08-21-v2"
+    with connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO dataset_snapshots (
+                id, as_of, created_at, mode, data_classification, is_live,
+                is_demo, status, immutable, source_manifest_json
+            ) VALUES (?, ?, ?, 'demo', 'synthetic', 0, 1, 'legacy_demo', 0, '{}')
+            """,
+            (legacy_dataset_id, "2026-08-21T20:00:00Z", "2026-08-21T20:05:00Z"),
+        )
+        connection.execute(
+            """
+            INSERT INTO desk_snapshots (
+                id, dataset_snapshot_id, as_of, created_at, mode,
+                data_classification, is_live, is_demo, status, immutable,
+                seed_revision, title, subtitle, disclaimer, regime_label,
+                regime_summary, recommendation_posture,
+                recommendation_summary, change_summary
+            ) VALUES (?, ?, ?, ?, 'demo', 'synthetic', 0, 1, 'legacy_demo', 0,
+                      'legacy-v3', 'Legacy demo', 'Before operator catalog',
+                      'Synthetic only', 'Unknown', 'No conclusion', 'observe',
+                      'No recommendation', 'No change')
+            """,
+            (
+                legacy_snapshot_id,
+                legacy_dataset_id,
+                "2026-08-21T20:00:00Z",
+                "2026-08-21T20:05:00Z",
+            ),
+        )
+        connection.executemany(
+            """
+            INSERT INTO data_assets (
+                asset_key, label, kind, classification, row_count, status,
+                dataset_snapshot_id, detail, updated_at
+            ) VALUES (?, ?, ?, 'synthetic', ?, 'ready', ?, 'Legacy v2 row.', ?)
+            """,
+            [
+                ("demo_daily_bars", "Old bars", "price_bars", 12, legacy_dataset_id, "2026-08-21T20:05:00Z"),
+                ("demo_chart_events", "Old events", "symbol_events", 1, legacy_dataset_id, "2026-08-21T20:05:00Z"),
+                ("demo_tlt_options", "Old options", "option_chain_fixture", 1, legacy_dataset_id, "2026-08-21T20:05:00Z"),
+            ],
+        )
+        connection.execute(
+            "UPDATE dataset_snapshots SET immutable = 1 WHERE id = ?",
+            (legacy_dataset_id,),
+        )
+        connection.execute(
+            "UPDATE desk_snapshots SET immutable = 1 WHERE id = ?",
+            (legacy_snapshot_id,),
+        )
+    _, created = seed_demo(database)
+    assert created is True
+    with connect(database, read_only=True) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM data_assets").fetchone()[0] == 6
+        assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 6
+        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 2
+        synthetic_assets = connection.execute(
+            """
+            SELECT asset_key, dataset_snapshot_id, row_count
+            FROM data_assets WHERE classification = 'synthetic'
+            ORDER BY asset_key
+            """
+        ).fetchall()
+        assert [row["asset_key"] for row in synthetic_assets] == [
+            "demo_chart_events",
+            "demo_daily_bars",
+            "demo_tlt_options",
+        ]
+        assert {row["dataset_snapshot_id"] for row in synthetic_assets} == {
+            DEMO_DATASET_ID
+        }
+        assert connection.execute(
+            "SELECT COUNT(*) FROM symbol_signals WHERE snapshot_id = ?",
+            (DEMO_SNAPSHOT_ID,),
+        ).fetchone()[0] == 6
+        assert connection.execute("SELECT COUNT(*) FROM desk_snapshots").fetchone()[0] == 2
+
+
+def test_application_catalog_upsert_refreshes_definitions_but_preserves_enabled(
+    tmp_path: Path,
+) -> None:
+    database = initialize_database(tmp_path / "catalog-upsert.db")
+    with connect(database) as connection:
+        connection.execute(
+            """
+            UPDATE operator_providers
+            SET enabled = 0, name = 'Stale provider name',
+                credential_name = 'legacy_credential', credential_revision = 5,
+                verification_ttl_seconds = 1209600
+            WHERE provider_key = 'fred'
+            """
+        )
+        connection.execute(
+            "UPDATE pipeline_definitions SET enabled = 0, version = 'old' WHERE pipeline_key = 'daily_desk'"
+        )
+        connection.execute(
+            """
+            UPDATE pipeline_stage_definitions SET description = 'stale'
+            WHERE pipeline_key = 'daily_desk' AND stage_key = 'fetch_data'
+            """
+        )
+    initialize_database(database)
+    with connect(database, read_only=True) as connection:
+        provider = connection.execute(
+            """
+            SELECT enabled, name, credential_name, credential_revision,
+                   verification_ttl_seconds, attribution_notice
+            FROM operator_providers WHERE provider_key = 'fred'
+            """
+        ).fetchone()
+        assert tuple(provider[:5]) == (
+            0,
+            "FRED / ALFRED",
+            "fred_api_key",
+            6,
+            604800,
+        )
+        assert "not endorsed or certified" in provider["attribution_notice"]
+        pipeline = connection.execute(
+            "SELECT enabled, version FROM pipeline_definitions WHERE pipeline_key = 'daily_desk'"
+        ).fetchone()
+        assert tuple(pipeline) == (0, "0.1.0")
+        stage = connection.execute(
+            """
+            SELECT description FROM pipeline_stage_definitions
+            WHERE pipeline_key = 'daily_desk' AND stage_key = 'fetch_data'
+            """
+        ).fetchone()[0]
+        assert "point-in-time macro" in stage
+    initialize_database(database)
+    with connect(database, read_only=True) as connection:
+        assert connection.execute(
+            "SELECT credential_revision FROM operator_providers WHERE provider_key = 'fred'"
+        ).fetchone()[0] == 6
+
+
+def test_old_provider_catalog_adds_columns_before_application_upsert(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "old-provider-catalog.db"
+    with sqlite3.connect(database) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE operator_providers (
+                provider_key TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                description TEXT NOT NULL,
+                enabled INTEGER NOT NULL,
+                required INTEGER NOT NULL,
+                credential_label TEXT,
+                credential_name TEXT,
+                environment_variable TEXT,
+                documentation_url TEXT,
+                signup_url TEXT,
+                terms_url TEXT,
+                instructions TEXT NOT NULL,
+                capabilities_json TEXT NOT NULL DEFAULT '[]',
+                verifier_kind TEXT,
+                credential_revision INTEGER NOT NULL DEFAULT 0,
+                verification_cooldown_seconds INTEGER NOT NULL DEFAULT 900,
+                sort_order INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            INSERT INTO operator_providers VALUES (
+                'fred', 'Legacy FRED', 'macro', 'Legacy definition', 0, 1,
+                'FRED key', 'fred_api_key', 'HEAE_FRED_API_KEY', NULL, NULL,
+                NULL, 'Legacy instructions', '[]', 'fred_v2', 3, 900, 10,
+                '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z'
+            );
+            """
+        )
+    initialize_database(database)
+    with connect(database, read_only=True) as connection:
+        columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(operator_providers)"
+            ).fetchall()
+        }
+        assert {"attribution_notice", "verification_ttl_seconds"} <= columns
+        provider = connection.execute(
+            """
+            SELECT enabled, name, credential_revision,
+                   verification_ttl_seconds, attribution_notice
+            FROM operator_providers WHERE provider_key = 'fred'
+            """
+        ).fetchone()
+        assert provider["enabled"] == 0
+        assert provider["name"] == "FRED / ALFRED"
+        assert provider["credential_revision"] == 3
+        assert provider["verification_ttl_seconds"] == 604800
+        assert "not endorsed or certified" in provider["attribution_notice"]
+
+
+def test_shortened_catalog_ttl_caps_existing_verification_immediately(
+    tmp_path: Path,
+) -> None:
+    database = initialize_database(tmp_path / "ttl-policy-upgrade.db")
+    with connect(database) as connection:
+        revision = connection.execute(
+            "SELECT credential_revision FROM operator_providers WHERE provider_key = 'fred'"
+        ).fetchone()[0]
+        connection.execute(
+            """
+            UPDATE operator_providers
+            SET verification_ttl_seconds = 1209600
+            WHERE provider_key = 'fred'
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO provider_verifications (
+                verification_id, provider_key, checked_at, expires_at, status,
+                message, credential_revision, runtime_id, credential_source
+            ) VALUES (
+                'old-long-ttl', 'fred', '2030-01-01T00:00:00.000000Z',
+                '2030-01-15T00:00:00.000000Z', 'healthy',
+                'Healthy under an older longer policy.', ?, 'old-runtime', 'keyring'
+            )
+            """,
+            (revision,),
+        )
+
+    # Application catalog policy returns to seven days. The immutable history
+    # retains its original stored expiry, while serialization caps current
+    # health against the newly installed TTL.
+    initialize_database(database)
+    store = MemorySecretStore(
+        values={"fred_api_key": SecretValue("ttl-policy-key", "keyring", True)}
+    )
+    app = create_app(
+        database,
+        secret_store=store,
+        provider_verifiers={"fred_v2": FakeVerifier()},
+        now=lambda: datetime(2030, 1, 9, tzinfo=timezone.utc),
+    )
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+    ) as client:
+        provider = client.get("/api/v1/admin/providers").json()["providers"][0]
+    assert provider["credential"]["verification_ttl_seconds"] == 604800
+    assert provider["credential"]["status"] == "expired"
+    assert provider["verification"] is None
+    assert provider["last_verification"]["expires_at"] == (
+        "2030-01-15T00:00:00.000000Z"
+    )
+    assert provider["last_verification"]["effective_expires_at"] == (
+        "2030-01-08T00:00:00.000000Z"
+    )
+
+
+def test_terminal_history_and_artifact_manifests_are_immutable(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    database, client, _, _ = admin_context
+    verification = client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    ).json()["verification"]
+    run = client.post(
+        "/api/v1/admin/pipeline/runs",
+        json={"dry_run": True},
+        headers=operator_headers("pipeline.run"),
+    ).json()["run"]
+    with connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO research_runs (
+                research_run_id, strategy_key, strategy_version,
+                dataset_snapshot_id, parameters_json, status, summary
+            ) VALUES ('immutable-research', 'state_conditioned_exposure',
+                      '0.1.0-demo', ?, '{}', 'completed', 'Completed fixture.')
+            """,
+            (DEMO_DATASET_ID,),
+        )
+        connection.execute(
+            """
+            INSERT INTO research_artifacts (
+                research_run_id, artifact_key, relative_path, media_type,
+                sha256, size_bytes, curated, created_at
+            ) VALUES ('immutable-research', 'summary', 'artifacts/runs/immutable-research/summary.md',
+                      'text/markdown', ?, 10, 1, ?)
+            """,
+            ("a" * 64, "2026-08-24T12:00:00Z"),
+        )
+        connection.commit()
+        mutations = [
+            (
+                "UPDATE provider_verifications SET message = 'changed' WHERE verification_id = ?",
+                (verification["id"],),
+            ),
+            (
+                "UPDATE pipeline_runs SET summary = 'changed' WHERE run_id = ?",
+                (run["id"],),
+            ),
+            (
+                "UPDATE pipeline_stage_runs SET message = 'changed' WHERE run_id = ?",
+                (run["id"],),
+            ),
+            (
+                "DELETE FROM pipeline_runs WHERE run_id = ?",
+                (run["id"],),
+            ),
+            (
+                "UPDATE strategy_lifecycle_events SET reason = 'changed' WHERE event_id = 'demo-state-added'",
+                (),
+            ),
+            (
+                "UPDATE research_runs SET summary = 'changed' WHERE research_run_id = 'immutable-research'",
+                (),
+            ),
+            (
+                "UPDATE research_artifacts SET size_bytes = 11 WHERE research_run_id = 'immutable-research'",
+                (),
+            ),
+            (
+                "DELETE FROM research_artifacts WHERE research_run_id = 'immutable-research'",
+                (),
+            ),
+        ]
+        for sql, values in mutations:
+            with pytest.raises(sqlite3.IntegrityError):
+                connection.execute(sql, values)
+            connection.rollback()
+
+
+def test_desk_cannot_publish_without_sealed_dataset(tmp_path: Path) -> None:
+    database = initialize_database(tmp_path / "publish-guard.db")
+    with connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO dataset_snapshots (
+                id, as_of, created_at, mode, data_classification, is_live,
+                is_demo, status, immutable, source_manifest_json
+            ) VALUES ('draft-data', ?, ?, 'research', 'real', 0, 0, 'draft', 0, '{}')
+            """,
+            ("2026-08-24T00:00:00Z", "2026-08-24T00:01:00Z"),
+        )
+        connection.execute(
+            """
+            INSERT INTO desk_snapshots (
+                id, dataset_snapshot_id, as_of, created_at, mode,
+                data_classification, is_live, is_demo, status, immutable,
+                seed_revision, title, subtitle, disclaimer, regime_label,
+                regime_summary, recommendation_posture,
+                recommendation_summary, change_summary
+            ) VALUES ('draft-desk', 'draft-data', ?, ?, 'research', 'real', 0, 0,
+                      'draft', 0, 'test', 'Draft', 'Draft', 'Draft', 'Unknown',
+                      'None', 'observe', 'None', 'None')
+            """,
+            ("2026-08-24T00:00:00Z", "2026-08-24T00:01:00Z"),
+        )
+        connection.commit()
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "UPDATE desk_snapshots SET immutable = 1 WHERE id = 'draft-desk'"
+            )
+        connection.rollback()
+
+        # Direct publication cannot bypass the draft-to-sealed transition guard.
+        columns = [
+            item["name"]
+            for item in connection.execute("PRAGMA table_info(desk_snapshots)")
+        ]
+        source = dict(
+            connection.execute(
+                "SELECT * FROM desk_snapshots WHERE id = 'draft-desk'"
+            ).fetchone()
+        )
+        for desk_id, dataset_id in (
+            ("sealed-with-null-data", None),
+            ("sealed-with-draft-data", "draft-data"),
+        ):
+            values = {
+                **source,
+                "id": desk_id,
+                "dataset_snapshot_id": dataset_id,
+                "immutable": 1,
+            }
+            with pytest.raises(sqlite3.IntegrityError):
+                connection.execute(
+                    f"INSERT INTO desk_snapshots ({', '.join(columns)}) "
+                    f"VALUES ({', '.join('?' for _ in columns)})",
+                    tuple(values[column] for column in columns),
+                )
+            connection.rollback()
+
+        connection.execute(
+            "UPDATE dataset_snapshots SET immutable = 1 WHERE id = 'draft-data'"
+        )
+        connection.commit()
+        mismatches = (
+            ("data_classification", "synthetic"),
+            ("is_live", 1),
+            ("is_demo", 1),
+        )
+        for field, mismatched_value in mismatches:
+            with pytest.raises(sqlite3.IntegrityError):
+                connection.execute(
+                    f"UPDATE desk_snapshots SET {field} = ?, immutable = 1 "
+                    "WHERE id = 'draft-desk'",
+                    (mismatched_value,),
+                )
+            connection.rollback()
+
+            values = {
+                **source,
+                "id": f"sealed-mismatch-{field}",
+                "immutable": 1,
+                field: mismatched_value,
+            }
+            with pytest.raises(sqlite3.IntegrityError):
+                connection.execute(
+                    f"INSERT INTO desk_snapshots ({', '.join(columns)}) "
+                    f"VALUES ({', '.join('?' for _ in columns)})",
+                    tuple(values[column] for column in columns),
+                )
+            connection.rollback()
+
+        # Matching sealed provenance remains the successful publication path.
+        connection.execute(
+            "UPDATE desk_snapshots SET immutable = 1 WHERE id = 'draft-desk'"
+        )
+        connection.commit()
+
+
+def test_migration_rejects_dangling_published_provenance(tmp_path: Path) -> None:
+    desk_database = tmp_path / "dangling-desk.db"
+    seed_demo(desk_database)
+    with sqlite3.connect(desk_database) as legacy:
+        legacy.executescript(
+            """
+            PRAGMA foreign_keys = OFF;
+            DROP TRIGGER IF EXISTS desk_snapshots_are_immutable_update;
+            DROP TRIGGER IF EXISTS desk_snapshot_publish_requires_sealed_dataset_update;
+            UPDATE desk_snapshots
+            SET dataset_snapshot_id = 'missing-legacy-dataset'
+            WHERE id = 'demo-2026-08-21-v3';
+            """
+        )
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="published desk snapshots require sealed dataset provenance",
+    ):
+        initialize_database(desk_database)
+
+    research_database = tmp_path / "dangling-research.db"
+    seed_demo(research_database)
+    with sqlite3.connect(research_database) as legacy:
+        legacy.executescript(
+            """
+            PRAGMA foreign_keys = OFF;
+            DROP TRIGGER IF EXISTS research_completed_requires_sealed_dataset_insert;
+            INSERT INTO research_runs (
+                research_run_id, strategy_key, strategy_version,
+                dataset_snapshot_id, parameters_json, status, summary
+            ) VALUES (
+                'dangling-research', 'state_conditioned_exposure',
+                '0.1.0-demo', 'missing-legacy-dataset', '{}', 'completed',
+                'Legacy result with broken provenance.'
+            );
+            """
+        )
+    with pytest.raises(
+        sqlite3.IntegrityError,
+        match="completed research runs require sealed dataset provenance",
+    ):
+        initialize_database(research_database)
