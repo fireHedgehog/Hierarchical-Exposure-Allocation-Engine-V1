@@ -2,6 +2,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   ExternalLink,
+  FlaskConical,
+  Factory,
   KeyRound,
   RefreshCw,
   ShieldCheck,
@@ -14,6 +16,7 @@ import {
   deleteProviderCredential,
   endpoints,
   operatorErrorMessage,
+  setEngineMode,
   useApi,
   verifyProvider,
   writeProviderCredential,
@@ -23,10 +26,12 @@ import { Panel, ResourceState, SectionHeading, StatusPill, Unavailable } from ".
 import type {
   AdminProvider,
   CredentialStatus,
+  EngineMode,
   ProviderLastVerification,
   ProviderRoadmap,
   ProviderRoadmapAccount,
   ProvidersResponse,
+  UniverseResponse,
 } from "../types";
 import { formatNumber, formatTimestamp, humanize, NOT_AVAILABLE } from "../utils/format";
 
@@ -102,6 +107,9 @@ export function CredentialsPage() {
       />
       <ResourceState loading={state.loading} error={state.error} onRetry={state.reload} resource="provider registry" />
 
+      <EngineModePanel engineMode={state.data?.engine_mode ?? null} onChanged={state.reload} />
+      <StagingUniversePanel />
+
       {roadmap ? <ProviderRoadmapPanel roadmap={roadmap} /> : null}
 
       {state.data ? (
@@ -130,6 +138,105 @@ export function CredentialsPage() {
         </Panel>
       ) : null}
     </div>
+  );
+}
+
+export function EngineModePanel({
+  engineMode,
+  onChanged,
+}: {
+  engineMode: EngineMode | null;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const mode = engineMode?.mode ?? "pilot";
+
+  const switchTo = async (next: "pilot" | "production") => {
+    if (next === mode || busy) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await setEngineMode<unknown>(next);
+      setMessage({
+        kind: "success",
+        text: next === "pilot"
+          ? "Switched to pilot mode. Only free-data-tier providers may run engine stages."
+          : "Switched to production mode. Stages requiring paid-tier providers are no longer blocked by mode alone.",
+      });
+      onChanged();
+    } catch (error) {
+      setMessage({ kind: "error", text: operatorErrorMessage(error, "Could not change the engine operating mode.") });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Panel className="engine-mode-panel">
+      <SectionHeading
+        eyebrow="Engine operating mode"
+        title="Pilot vs. production"
+        description="A real, gated choice — not a label. Pilot mode blocks any engine stage that requires a paid-tier provider, even if that provider happens to be configured. Every snapshot a run produces is stamped with the mode that was active when it ran, so outputs stay honestly attributable. Switching to production does not remove the free staging symbols below — it only lifts the block on paid-tier stages. Without Intrinio/Benzinga/Trading Economics keys configured, production mode still only has the free-tier universe to work with."
+      />
+      <div className="engine-mode-current">
+        <span>Current mode</span>
+        <StatusPill value={mode} tone={mode === "pilot" ? "info" : "positive"} />
+        {engineMode?.updated_at ? <small>Since {formatTimestamp(engineMode.updated_at)}</small> : null}
+      </div>
+      <div className="engine-mode-actions">
+        <button
+          className={`button button--quiet ${mode === "pilot" ? "engine-mode-actions__button--active" : ""}`}
+          type="button"
+          aria-pressed={mode === "pilot"}
+          disabled={busy}
+          onClick={() => switchTo("pilot")}
+        >
+          <FlaskConical aria-hidden="true" size={15} /> Pilot — free data only{mode === "pilot" ? " (current)" : ""}
+        </button>
+        <button
+          className={`button button--quiet ${mode === "production" ? "engine-mode-actions__button--active" : ""}`}
+          type="button"
+          aria-pressed={mode === "production"}
+          disabled={busy}
+          onClick={() => switchTo("production")}
+        >
+          <Factory aria-hidden="true" size={15} /> Production — full provider stack{mode === "production" ? " (current)" : ""}
+        </button>
+      </div>
+      {message ? (
+        <div className={`operator-action-message operator-action-message--${message.kind}`} role="status">
+          {message.kind === "success" ? <CheckCircle2 aria-hidden="true" size={15} /> : <AlertTriangle aria-hidden="true" size={15} />}
+          {message.text}
+        </div>
+      ) : null}
+    </Panel>
+  );
+}
+
+export function StagingUniversePanel() {
+  const state = useApi<UniverseResponse>(endpoints.adminUniverse);
+  const summary = state.data?.summary;
+  const categories = summary ? Object.entries(summary.by_category).sort(([a], [b]) => a.localeCompare(b)) : [];
+
+  return (
+    <Panel className="staging-universe-panel">
+      <SectionHeading
+        eyebrow="Free-tier staging universe"
+        title="Default symbols — no paid key required"
+        description="Seeded automatically from the database schema on every fresh clone (never hard-coded in frontend or strategy code). This is what pilot mode has to work with; production mode does not remove it, but without paid-tier keys configured, production mode still only has this list."
+      />
+      {summary ? (
+        <div className="provider-roadmap-summary" aria-label="Staging universe summary">
+          <RoadmapMetric label="Active symbols" value={`${summary.active}/${summary.total}`} detail="Seeded by schema.sql, not hard-coded in the app" />
+          {categories.map(([category, count]) => (
+            <RoadmapMetric key={category} label={humanize(category)} value={String(count)} detail="free tier" />
+          ))}
+        </div>
+      ) : (
+        <Unavailable compact title="Universe not available" detail="No staging symbol catalog was returned." />
+      )}
+    </Panel>
   );
 }
 

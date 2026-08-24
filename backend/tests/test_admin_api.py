@@ -4,7 +4,7 @@ import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +13,9 @@ from fastapi.testclient import TestClient
 
 from backend.database import connect, initialize_database
 from backend.main import create_app
-from backend.providers import FredV2Verifier, VerificationResult
+from backend.providers import VerificationResult
+from backend.providers.fred import FredObservation, FredV2Verifier
+from backend.providers.yahoo import PriceBar
 from backend.secrets import (
     KeyringEnvironmentSecretStore,
     SecretStoreUnavailable,
@@ -65,6 +67,72 @@ class FakeVerifier:
         return self.result
 
 
+def make_fred_fetcher(
+    values: dict[str, tuple[float, float]] | None = None,
+):
+    """Fake FredFetcher: two synthetic observations (year-ago, latest) per
+    series, dated relative to the requested window so freshness/staleness
+    checks pass regardless of which `now` a given test uses. No real network
+    call is ever made."""
+
+    series_values = values or {
+        "INDPRO": (100.0, 102.0),
+        "CPIAUCSL": (300.0, 306.0),
+        "PPIACO": (250.0, 254.0),
+        "PCEPILFE": (120.0, 122.4),
+        "PAYEMS": (158000.0, 159200.0),
+        "NFCI": (0.1, -0.2),
+        "VIXCLS": (22.0, 16.0),
+        "DGS10": (4.3, 4.1),
+    }
+    calls: list[tuple[Any, ...]] = []
+
+    def fetcher(
+        secret: str,
+        series_id: str,
+        *,
+        observation_start: str,
+        observation_end: str,
+        realtime_start: str,
+        realtime_end: str,
+    ) -> list[FredObservation]:
+        calls.append((secret, series_id, observation_start, observation_end))
+        year_ago_value, latest_value = series_values[series_id]
+        end = date.fromisoformat(observation_end)
+        year_ago_date = (end - timedelta(days=365)).isoformat()
+        return [
+            FredObservation(series_id, year_ago_date, year_ago_value, realtime_start, realtime_end, "lin"),
+            FredObservation(series_id, observation_end, latest_value, realtime_start, realtime_end, "lin"),
+        ]
+
+    fetcher.calls = calls  # type: ignore[attr-defined]
+    return fetcher
+
+
+def make_price_fetcher(as_of: date, *, count: int = 260):
+    """Fake PriceFetcher: `count` synthetic daily bars per symbol, ending
+    exactly on `as_of` so freshness checks pass regardless of which `now` a
+    test uses, with a small symbol-dependent drift so cross-sectional ranks
+    aren't all tied. No real network call is ever made."""
+
+    calls: list[tuple[str, str]] = []
+
+    def fetcher(symbol: str, *, range_: str = "1y") -> list[PriceBar]:
+        calls.append((symbol, range_))
+        seed = sum(ord(character) for character in symbol) % 11
+        drift = 0.0003 * (seed - 5)
+        price = 50.0 + seed * 10.0
+        dates = [as_of - timedelta(days=offset) for offset in range(count - 1, -1, -1)]
+        bars = []
+        for bar_date in dates:
+            price = max(1.0, price * (1 + drift))
+            bars.append(PriceBar(symbol, bar_date.isoformat(), price, price, price, price, 1_000_000.0))
+        return bars
+
+    fetcher.calls = calls  # type: ignore[attr-defined]
+    return fetcher
+
+
 @pytest.fixture
 def admin_context(tmp_path: Path):
     database = tmp_path / "desk.db"
@@ -76,6 +144,8 @@ def admin_context(tmp_path: Path):
         frontend_dist=tmp_path / "missing-dist",
         secret_store=secret_store,
         provider_verifiers={"fred_v2": verifier},
+        fred_observation_fetcher=make_fred_fetcher(),
+        price_fetcher=make_price_fetcher(NOW.date()),
         now=lambda: NOW,
     )
     with TestClient(
@@ -107,7 +177,7 @@ def test_empty_v6_database_has_operator_and_readiness_catalog_but_no_decision_sn
         base_url="http://127.0.0.1:8000",
         client=("127.0.0.1", 52000),
     ) as client:
-        assert client.get("/api/health").json()["schema_version"] == "6"
+        assert client.get("/api/health").json()["schema_version"] == "11"
         assert client.get("/api/v1/desk/latest").status_code == 404
         payload = client.get("/api/v1/admin/providers").json()
         providers = payload["providers"]
@@ -209,6 +279,81 @@ def test_empty_v6_database_has_operator_and_readiness_catalog_but_no_decision_sn
         assert connection.execute(
             "SELECT COUNT(*) FROM readiness_gate_dependencies"
         ).fetchone()[0] == 14
+
+
+def test_real_pipeline_run_persists_backtest_events_and_metrics_per_symbol(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    _, client, _, _ = admin_context
+    client.put(
+        "/api/v1/admin/providers/fred/credential",
+        json={"secret": "backtest-wiring-test"},
+        headers=operator_headers("credential.write"),
+    )
+    client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    )
+    run = client.post(
+        "/api/v1/admin/pipeline/runs",
+        json={"dry_run": False},
+        headers=operator_headers("pipeline.run"),
+    ).json()["run"]
+    factor = next(stage for stage in run["stages"] if stage["key"] == "factor_engine")
+    assert factor["status"] == "completed"
+
+    symbols = client.get("/api/v1/symbols").json()["symbols"]
+    assert len(symbols) == 22
+    top = next(item for item in symbols if item["rank"] == 1)
+
+    detail = client.get(f"/api/v1/symbols/{top['symbol']}").json()
+    metric_keys = {metric["key"] for metric in detail["metrics"]}
+    assert {"total_return", "buy_hold_return", "trade_count", "sharpe_ratio", "max_drawdown"} <= metric_keys
+    total_return_metric = next(m for m in detail["metrics"] if m["key"] == "total_return")
+    assert total_return_metric["value"] is not None
+
+    event_types = {event["type"] for event in detail["events"]}
+    assert event_types <= {"backtest_entry_fill", "backtest_exit_fill"}
+    for event in detail["events"]:
+        assert event["status"] == "executed"
+        assert event["detail"]  # every entry/exit carries a real why-reason
+
+
+def test_staging_universe_is_seeded_by_default_with_no_paid_provider_references(
+    tmp_path: Path,
+) -> None:
+    database = initialize_database(tmp_path / "empty-universe.db")
+    store = MemorySecretStore()
+    app = create_app(
+        database,
+        frontend_dist=tmp_path / "missing",
+        secret_store=store,
+        provider_verifiers={"fred_v2": FakeVerifier()},
+        now=lambda: NOW,
+    )
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+    ) as client:
+        universe = client.get("/api/v1/admin/universe").json()
+    assert universe["summary"]["total"] == 26
+    assert universe["summary"]["active"] == 26
+    assert universe["summary"]["by_category"]["macro_series"] == 4
+    assert universe["summary"]["by_category"]["sector_equity_etf"] == 11
+    symbols_by_key = {item["symbol"]: item for item in universe["symbols"]}
+    assert set(symbols_by_key) >= {
+        "INDPRO", "CPIAUCSL", "NFCI", "VIXCLS",
+        "SPY", "QQQ", "DIA", "TLT", "IEF", "GLD", "BTC-USD",
+        "XLC", "XLY", "XLP", "XLE", "XLF", "XLV", "XLI", "XLB", "XLRE", "XLK", "XLU",
+        "AAPL", "NVDA", "SMH", "IGV",
+    }
+    assert all(item["tier"] == "free" for item in universe["symbols"])
+    assert symbols_by_key["INDPRO"]["production_provider_key"] == "fred"
+    assert symbols_by_key["SPY"]["production_provider_key"] == "intrinio"
+    assert symbols_by_key["SPY"]["production_provider_name"] == "Intrinio"
+    assert symbols_by_key["BTC-USD"]["production_provider_key"] is None
 
 
 def test_seeded_admin_inventory_strategies_signals_and_chart_annotations(
@@ -648,8 +793,25 @@ def test_manual_pipeline_preflight_requires_current_healthy_verification(
     ).json()["run"]
     assert actual["status"] == "blocked"
     fetch = next(stage for stage in actual["stages"] if stage["key"] == "fetch_data")
-    assert fetch["error_code"] == "stage_not_implemented"
-    assert actual["desk_snapshot_id"] is None
+    validate = next(stage for stage in actual["stages"] if stage["key"] == "validate_data")
+    regime = next(stage for stage in actual["stages"] if stage["key"] == "regime_filter")
+    factor = next(stage for stage in actual["stages"] if stage["key"] == "factor_engine")
+    allocation = next(stage for stage in actual["stages"] if stage["key"] == "allocation_engine")
+    instrument = next(stage for stage in actual["stages"] if stage["key"] == "instrument_engine")
+    publish = next(stage for stage in actual["stages"] if stage["key"] == "publish_snapshot")
+    assert fetch["status"] == "completed"
+    assert fetch["error_code"] is None
+    assert validate["status"] == "completed"
+    assert regime["status"] == "completed"
+    assert factor["status"] == "completed"
+    assert factor["error_code"] is None
+    assert allocation["status"] == "completed"
+    assert allocation["error_code"] is None
+    assert instrument["status"] == "completed"
+    assert instrument["error_code"] is None
+    assert publish["error_code"] == "stage_not_implemented"
+    assert actual["dataset_snapshot_id"] is not None
+    assert actual["desk_snapshot_id"] is not None
 
     with connect(database) as connection:
         connection.execute(
@@ -835,7 +997,7 @@ def test_fred_verifier_uses_bearer_header_without_redirects_or_secret_in_url(
             captured["params"] = params
             return Response()
 
-    monkeypatch.setattr("backend.providers.httpx.Client", Client)
+    monkeypatch.setattr("backend.providers.fred.httpx.Client", Client)
     secret = "fred-test-secret"
     result = FredV2Verifier().verify(secret)
     assert result.status == "healthy"
@@ -1164,6 +1326,8 @@ def test_future_observations_are_invalid_beyond_named_clock_tolerance(
         database,
         secret_store=store,
         provider_verifiers={"fred_v2": FakeVerifier()},
+        fred_observation_fetcher=make_fred_fetcher(),
+        price_fetcher=make_price_fetcher(future_now.date()),
         now=lambda: future_now,
     )
     with TestClient(
@@ -1198,8 +1362,9 @@ def test_future_observations_are_invalid_beyond_named_clock_tolerance(
         )
 
         # Invalid existing inventory is visible during preflight, but fetch must
-        # still be allowed to refresh it. With the provider healthy, the first
-        # hard stop is therefore the intentionally scaffolded fetch stage.
+        # still be allowed to refresh it. With the provider healthy, fetch_data
+        # now runs for real and succeeds; the run proceeds through validate_data
+        # and regime_filter and stops at the still-scaffolded factor_engine stage.
         client.put(
             "/api/v1/admin/providers/fred/credential",
             json={"secret": "future-inventory-refresh-test"},
@@ -1216,7 +1381,8 @@ def test_future_observations_are_invalid_beyond_named_clock_tolerance(
             headers=operator_headers("pipeline.run"),
         ).json()["run"]
         fetch = next(stage for stage in actual["stages"] if stage["key"] == "fetch_data")
-        assert fetch["error_code"] == "stage_not_implemented"
+        assert fetch["status"] == "completed"
+        assert fetch["error_code"] is None
 
 
 def test_keyring_read_failure_uses_explicit_environment_fallback_or_safe_503(

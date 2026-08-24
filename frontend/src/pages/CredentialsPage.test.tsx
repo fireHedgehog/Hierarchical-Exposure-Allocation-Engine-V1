@@ -1,9 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { AdminProvider, ProviderRoadmap } from "../types";
+import type { AdminProvider, EngineMode, ProviderRoadmap } from "../types";
 import { formatTimestamp } from "../utils/format";
 import {
   credentialVerificationStatus,
+  EngineModePanel,
   formatCredentialDuration,
   lastVerificationContext,
   ProviderCard,
@@ -202,5 +203,24 @@ describe("credential health presentation", () => {
     expect(markup).toContain("Register Later");
     expect(markup).toContain("Stored-data health is a separate gate");
     expect(markup).not.toContain('type="password"');
+  });
+});
+
+describe("engine operating mode panel", () => {
+  it("defaults to presenting pilot mode when no engine_mode is returned yet", () => {
+    const markup = renderToStaticMarkup(<EngineModePanel engineMode={null} onChanged={() => undefined} />);
+    expect(markup).toContain("Pilot");
+    expect(markup).toContain("paid-tier provider");
+  });
+
+  it("presents production mode distinctly from pilot", () => {
+    const engineMode: EngineMode = {
+      mode: "production",
+      updated_at: "2026-08-24T12:00:00Z",
+      updated_reason: "Paid providers connected.",
+    };
+    const markup = renderToStaticMarkup(<EngineModePanel engineMode={engineMode} onChanged={() => undefined} />);
+    expect(markup).toContain("Production");
+    expect(markup).toContain(formatTimestamp(engineMode.updated_at));
   });
 });

@@ -10,6 +10,7 @@ export const endpoints = {
   symbol: (symbol: string) => `/api/v1/symbols/${encodeURIComponent(symbol)}`,
   adminOverview: "/api/v1/admin/overview",
   adminProviders: "/api/v1/admin/providers",
+  adminUniverse: "/api/v1/admin/universe",
   adminData: "/api/v1/admin/data",
   adminPipeline: "/api/v1/admin/pipeline",
   adminStrategies: "/api/v1/admin/strategies",
@@ -83,7 +84,12 @@ export async function fetchJson<T>(path: string, signal?: AbortSignal): Promise<
   return payload as T;
 }
 
-type OperatorAction = "credential.write" | "credential.delete" | "provider.verify" | "pipeline.run";
+type OperatorAction =
+  | "credential.write"
+  | "credential.delete"
+  | "provider.verify"
+  | "pipeline.run"
+  | "engine_mode.write";
 type OperatorMethod = "POST" | "PUT" | "DELETE";
 
 interface OperatorRequest {
@@ -142,6 +148,14 @@ export function runPipeline<T>(dryRun = true): Promise<T> {
   });
 }
 
+export function setEngineMode<T>(mode: "pilot" | "production", reason?: string): Promise<T> {
+  return operatorJson<T>("/api/v1/admin/engine-mode", {
+    method: "PUT",
+    action: "engine_mode.write",
+    body: reason ? { mode, reason } : { mode },
+  });
+}
+
 function safeAdminKey(value: string): string {
   const key = value.trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(key)) {
@@ -157,7 +171,8 @@ function assertOperatorPath(path: string, method: OperatorMethod, action: Operat
     (providerCredential.test(path) && method === "PUT" && action === "credential.write") ||
     (providerCredential.test(path) && method === "DELETE" && action === "credential.delete") ||
     (providerVerify.test(path) && method === "POST" && action === "provider.verify") ||
-    (path === "/api/v1/admin/pipeline/runs" && method === "POST" && action === "pipeline.run");
+    (path === "/api/v1/admin/pipeline/runs" && method === "POST" && action === "pipeline.run") ||
+    (path === "/api/v1/admin/engine-mode" && method === "PUT" && action === "engine_mode.write");
   if (!allowed) throw new Error("Blocked unsafe operator request.");
 }
 

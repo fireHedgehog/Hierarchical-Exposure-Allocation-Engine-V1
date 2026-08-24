@@ -40,7 +40,7 @@ DESK_SNAPSHOT_CHILD_TABLES = (
     "cross_section_legend",
 )
 
-DATASET_SNAPSHOT_CHILD_TABLES = ("symbol_bars", "symbol_events")
+DATASET_SNAPSHOT_CHILD_TABLES = ("symbol_bars", "symbol_events", "fred_observations")
 
 
 def resolve_database_path(database_path: str | Path | None = None) -> Path:
@@ -112,6 +112,11 @@ def _catalog_compatibility_prelude(connection: sqlite3.Connection) -> str:
             "ALTER TABLE operator_providers ADD COLUMN verification_ttl_seconds "
             "INTEGER NOT NULL DEFAULT 31536000 CHECK (verification_ttl_seconds > 0);"
         )
+    if "tier" not in columns:
+        statements.append(
+            "ALTER TABLE operator_providers ADD COLUMN tier "
+            "TEXT NOT NULL DEFAULT 'paid' CHECK (tier IN ('free', 'paid'));"
+        )
     return "\n".join(statements)
 
 
@@ -133,6 +138,25 @@ def _install_compatible_columns(connection: sqlite3.Connection) -> None:
             "ALTER TABLE position_candidates ADD COLUMN input_completeness_scope TEXT "
             "CHECK (input_completeness_scope IN ('live_market_data', "
             "'synthetic_simulation_inputs', 'other'))"
+        )
+
+    dataset_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(dataset_snapshots)").fetchall()
+    }
+    if "engine_mode" not in dataset_columns:
+        connection.execute(
+            "ALTER TABLE dataset_snapshots ADD COLUMN engine_mode TEXT "
+            "CHECK (engine_mode IS NULL OR engine_mode IN ('pilot', 'production'))"
+        )
+    desk_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(desk_snapshots)").fetchall()
+    }
+    if "engine_mode" not in desk_columns:
+        connection.execute(
+            "ALTER TABLE desk_snapshots ADD COLUMN engine_mode TEXT "
+            "CHECK (engine_mode IS NULL OR engine_mode IN ('pilot', 'production'))"
         )
 
     event_columns = {

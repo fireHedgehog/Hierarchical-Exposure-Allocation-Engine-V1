@@ -1889,13 +1889,17 @@ summary:focus-visible,
 .chart-range i { width: 20px; height: 1px; background: var(--line-strong); }
 .chart-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; color: var(--faint); font-size: 7px; }
 .chart-legend > span { width: 8px; height: 8px; margin-left: 5px; border-radius: 2px; }
+.chart-timeframes { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.chart-timeframe-button { padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-quiet); color: var(--muted); font-size: 8px; cursor: pointer; }
+.chart-timeframe-button:hover { color: var(--text); border-color: var(--line-strong); }
+.chart-timeframe-button--active { border-color: rgba(101,218,181,.4); background: var(--mint-soft); color: var(--mint); }
 .chart-legend__up { background: var(--mint); }
 .chart-legend__down { background: var(--red); }
 .chart-legend__entry { border: 1px solid var(--mint); transform: rotate(45deg); }
 .chart-legend__exit { border: 1px solid var(--red); transform: rotate(45deg); }
 .chart-legend__signal { border: 1px solid var(--blue); border-radius: 50% !important; background: var(--blue-soft); }
 .chart-legend__pattern { border: 1px solid var(--amber); background: var(--amber-soft); }
-.price-chart { width: 100%; min-height: 430px; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; }
+.price-chart { width: 100%; min-height: 620px; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; }
 .chart-footnote { margin: 8px 2px 0; color: var(--faint); font-size: 8px; line-height: 1.5; }
 
 .trace-flow { display: grid; }
@@ -2118,6 +2122,10 @@ summary:focus-visible,
 
 /* Credentials */
 .provider-roadmap-panel { display: grid; gap: 17px; }
+.engine-mode-current { display: flex; align-items: center; gap: 9px; margin: 4px 0 11px; }
+.engine-mode-current > span { color: var(--faint); font-size: 8px; text-transform: uppercase; }
+.engine-mode-current small { color: var(--faint); font-size: 8px; }
+.engine-mode-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .provider-roadmap-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .provider-roadmap-summary > div { display: grid; min-width: 0; gap: 5px; padding: 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-quiet); }
 .provider-roadmap-summary span { color: var(--faint); font-size: 7px; letter-spacing: .04em; text-transform: uppercase; }

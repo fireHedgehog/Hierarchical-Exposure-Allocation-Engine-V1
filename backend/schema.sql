@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
     value TEXT NOT NULL
 );
 
-INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '6')
+INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '11')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 INSERT OR IGNORE INTO schema_metadata (key, value) VALUES
@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS dataset_snapshots (
     is_demo INTEGER NOT NULL CHECK (is_demo IN (0, 1)),
     status TEXT NOT NULL,
     immutable INTEGER NOT NULL CHECK (immutable IN (0, 1)),
-    source_manifest_json TEXT NOT NULL DEFAULT '{}'
+    source_manifest_json TEXT NOT NULL DEFAULT '{}',
+    engine_mode TEXT CHECK (engine_mode IS NULL OR engine_mode IN ('pilot', 'production'))
 );
 
 CREATE TRIGGER IF NOT EXISTS dataset_snapshots_are_immutable_update
@@ -86,7 +87,8 @@ CREATE TABLE IF NOT EXISTS desk_snapshots (
     delta_net_exposure REAL,
     delta_gross_exposure REAL,
     change_summary TEXT NOT NULL,
-    next_review_at TEXT
+    next_review_at TEXT,
+    engine_mode TEXT CHECK (engine_mode IS NULL OR engine_mode IN ('pilot', 'production'))
 );
 
 CREATE TRIGGER IF NOT EXISTS desk_snapshots_are_immutable_update
@@ -403,6 +405,26 @@ CREATE TABLE IF NOT EXISTS symbol_events (
     PRIMARY KEY (dataset_snapshot_id, security_id, event_id)
 );
 
+-- Raw fetched FRED series observations, point-in-time (ALFRED vintage) aware.
+-- One row per series/date/vintage; regime scoring reads from here, it never
+-- refetches from FRED at read time. Dataset-snapshot-scoped like symbol_bars,
+-- so it seals and becomes append-only with its parent dataset snapshot.
+CREATE TABLE IF NOT EXISTS fred_observations (
+    dataset_snapshot_id TEXT NOT NULL REFERENCES dataset_snapshots(id),
+    series_id TEXT NOT NULL,
+    observation_date TEXT NOT NULL,
+    value REAL,
+    realtime_start TEXT NOT NULL,
+    realtime_end TEXT NOT NULL,
+    units TEXT,
+    frequency TEXT,
+    source_key TEXT NOT NULL DEFAULT 'fred',
+    observed_at TEXT NOT NULL,
+    available_at TEXT NOT NULL,
+    ingested_at TEXT NOT NULL,
+    PRIMARY KEY (dataset_snapshot_id, series_id, observation_date, realtime_start)
+);
+
 -- A signal is an engine observation, not an order or a fill. Published signals
 -- belong to the immutable desk snapshot and may therefore be audited alongside
 -- the allocation and instrument recommendation which consumed them.
@@ -647,9 +669,43 @@ CREATE TABLE IF NOT EXISTS operator_providers (
             verification_ttl_seconds > 0
             AND verification_ttl_seconds >= verification_cooldown_seconds
         ),
+    tier TEXT NOT NULL DEFAULT 'paid' CHECK (tier IN ('free', 'paid')),
     sort_order INTEGER NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+
+-- Pilot mode is a real, gated engine-wide choice, not a cosmetic label: it
+-- blocks any pipeline stage whose required providers include a 'paid' tier
+-- provider (see run_pipeline), and every snapshot a run produces is stamped
+-- with the mode active when it ran. Singleton row, `id` always 1.
+CREATE TABLE IF NOT EXISTS engine_operating_mode (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    mode TEXT NOT NULL CHECK (mode IN ('pilot', 'production')),
+    updated_at TEXT NOT NULL,
+    updated_reason TEXT
+);
+
+INSERT OR IGNORE INTO engine_operating_mode (id, mode, updated_at, updated_reason)
+VALUES (1, 'pilot', CURRENT_TIMESTAMP, 'Default for a fresh clone: free-data-only pilot mode.');
+
+-- Staging position-sizing defaults. Kept here, not as a Python constant, so a
+-- fresh clone and every running instance see the same inspectable, editable
+-- number instead of one buried in source. instrument_engine reads this row;
+-- see backend/engine/instruments/sizing.py for the sizing formula itself.
+CREATE TABLE IF NOT EXISTS staging_budget_config (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    notional_budget REAL NOT NULL,
+    risk_per_position_fraction REAL NOT NULL,
+    rationale TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO staging_budget_config (id, notional_budget, risk_per_position_fraction, rationale, updated_at)
+VALUES (
+    1, 1000000.0, 0.02,
+    'A disclosed, naive staging default, not a real account or a recommendation. This staging universe is 21 US-listed rotation symbols plus GLD and a BTC-USD reference, not a global long/short book (unlike, say, a 300+-symbol worldwide 13F); a flat $1M notional with a 2%-of-budget max risk per position is a simple, real, inspectable convention to turn percentages into concrete share/contract counts, nothing more.',
+    CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS provider_verifications (
@@ -714,6 +770,29 @@ CREATE TABLE IF NOT EXISTS provider_plan_capabilities (
     coverage_role TEXT NOT NULL CHECK (coverage_role IN ('primary', 'supplemental')),
     coverage_note TEXT NOT NULL,
     PRIMARY KEY (plan_key, capability_key)
+);
+
+-- The pilot/staging symbol roster. Database-driven per this project's own
+-- rule that universe eligibility must never be a hard-coded ticker list in
+-- frontend or strategy code. Auto-installed on every schema init (like
+-- operator_providers/provider_onboarding_plan below) so a fresh clone has a
+-- real, free-data-tier starting universe with zero manual setup. This is a
+-- flat starting roster, not yet the effective-dated, membership-revisioned
+-- universe the roadmap's "versioned_security_universe" gate calls for —
+-- that remains future work; this table is its free-tier seed data.
+CREATE TABLE IF NOT EXISTS staging_symbols (
+    symbol TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL CHECK (category IN (
+        'macro_series', 'broad_equity_etf', 'sector_equity_etf',
+        'bond_duration_etf', 'commodity_etf', 'crypto_reference',
+        'mega_cap_equity', 'thematic_etf'
+    )),
+    tier TEXT NOT NULL DEFAULT 'free' CHECK (tier IN ('free', 'paid')),
+    production_provider_key TEXT REFERENCES provider_onboarding_plan(plan_key),
+    notes TEXT,
+    active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+    sort_order INTEGER NOT NULL
 );
 
 -- Readiness definitions are application configuration. Their current state is
@@ -1065,7 +1144,7 @@ INSERT INTO operator_providers (
     credential_label, credential_name, environment_variable,
     documentation_url, signup_url, terms_url, attribution_notice, instructions,
     capabilities_json, verifier_kind, verification_cooldown_seconds,
-    verification_ttl_seconds,
+    verification_ttl_seconds, tier,
     sort_order, created_at, updated_at
 ) VALUES (
     'fred', 'FRED / ALFRED', 'macro',
@@ -1077,7 +1156,7 @@ INSERT INTO operator_providers (
     'This product uses the FRED API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.',
     'Create a distinct key for this application in your FRED account, store it here, then run one smoke verification. The key stays in the OS credential store.',
     '["macro_releases","release_observations","vintage_metadata"]',
-    'fred_v2', 900, 31536000, 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    'fred_v2', 900, 31536000, 'free', 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 )
 ON CONFLICT(provider_key) DO UPDATE SET
     name = excluded.name,
@@ -1096,6 +1175,7 @@ ON CONFLICT(provider_key) DO UPDATE SET
     verifier_kind = excluded.verifier_kind,
     verification_cooldown_seconds = excluded.verification_cooldown_seconds,
     verification_ttl_seconds = excluded.verification_ttl_seconds,
+    tier = excluded.tier,
     sort_order = excluded.sort_order,
     credential_revision = operator_providers.credential_revision + CASE
         WHEN operator_providers.credential_name IS NOT excluded.credential_name
@@ -1220,6 +1300,43 @@ INSERT INTO provider_plan_capabilities (
 ON CONFLICT(plan_key, capability_key) DO UPDATE SET
     coverage_role = excluded.coverage_role,
     coverage_note = excluded.coverage_note;
+
+INSERT INTO staging_symbols (
+    symbol, name, category, tier, production_provider_key, notes, active, sort_order
+) VALUES
+    ('INDPRO', 'Industrial Production Index', 'macro_series', 'free', 'fred', 'Already used by regime_filter.', 1, 10),
+    ('CPIAUCSL', 'CPI for All Urban Consumers', 'macro_series', 'free', 'fred', 'Already used by regime_filter.', 1, 11),
+    ('NFCI', 'Chicago Fed National Financial Conditions Index', 'macro_series', 'free', 'fred', 'Already used by regime_filter.', 1, 12),
+    ('VIXCLS', 'CBOE Volatility Index', 'macro_series', 'free', 'fred', 'Already used by regime_filter.', 1, 13),
+    ('SPY', 'SPDR S&P 500 ETF Trust', 'broad_equity_etf', 'free', 'intrinio', NULL, 1, 20),
+    ('QQQ', 'Invesco QQQ Trust', 'broad_equity_etf', 'free', 'intrinio', NULL, 1, 21),
+    ('DIA', 'SPDR Dow Jones Industrial Average ETF Trust', 'broad_equity_etf', 'free', 'intrinio', NULL, 1, 22),
+    ('TLT', 'iShares 20+ Year Treasury Bond ETF', 'bond_duration_etf', 'free', 'intrinio', NULL, 1, 30),
+    ('IEF', 'iShares 7-10 Year Treasury Bond ETF', 'bond_duration_etf', 'free', 'intrinio', NULL, 1, 31),
+    ('GLD', 'SPDR Gold Shares', 'commodity_etf', 'free', 'intrinio', NULL, 1, 40),
+    ('BTC-USD', 'Bitcoin / U.S. dollar reference series', 'crypto_reference', 'free', NULL, 'No production provider selected yet; research reference only, per roadmap.md — never spliced into a listed instrument''s history.', 1, 50),
+    ('XLC', 'Communication Services Select Sector SPDR Fund', 'sector_equity_etf', 'free', 'intrinio', NULL, 1, 60),
+    ('XLY', 'Consumer Discretionary Select Sector SPDR Fund', 'sector_equity_etf', 'free', 'intrinio', NULL, 1, 61),
+    ('XLP', 'Consumer Staples Select Sector SPDR Fund', 'sector_equity_etf', 'free', 'intrinio', NULL, 1, 62),
+    ('XLE', 'Energy Select Sector SPDR Fund', 'sector_equity_etf', 'free', 'intrinio', NULL, 1, 63),
+    ('XLF', 'Financial Select Sector SPDR Fund', 'sector_equity_etf', 'free', 'intrinio', NULL, 1, 64),
+    ('XLV', 'Health Care Select Sector SPDR Fund', 'sector_equity_etf', 'free', 'intrinio', NULL, 1, 65),
+    ('XLI', 'Industrial Select Sector SPDR Fund', 'sector_equity_etf', 'free', 'intrinio', NULL, 1, 66),
+    ('XLB', 'Materials Select Sector SPDR Fund', 'sector_equity_etf', 'free', 'intrinio', NULL, 1, 67),
+    ('XLRE', 'Real Estate Select Sector SPDR Fund', 'sector_equity_etf', 'free', 'intrinio', NULL, 1, 68),
+    ('XLK', 'Technology Select Sector SPDR Fund', 'sector_equity_etf', 'free', 'intrinio', NULL, 1, 69),
+    ('XLU', 'Utilities Select Sector SPDR Fund', 'sector_equity_etf', 'free', 'intrinio', NULL, 1, 70),
+    ('AAPL', 'Apple Inc.', 'mega_cap_equity', 'free', 'intrinio', NULL, 1, 80),
+    ('NVDA', 'NVIDIA Corporation', 'mega_cap_equity', 'free', 'intrinio', NULL, 1, 81),
+    ('SMH', 'VanEck Semiconductor ETF', 'thematic_etf', 'free', 'intrinio', NULL, 1, 90),
+    ('IGV', 'iShares Expanded Tech-Software Sector ETF', 'thematic_etf', 'free', 'intrinio', NULL, 1, 91)
+ON CONFLICT(symbol) DO UPDATE SET
+    name = excluded.name,
+    category = excluded.category,
+    tier = excluded.tier,
+    production_provider_key = excluded.production_provider_key,
+    notes = excluded.notes,
+    sort_order = excluded.sort_order;
 
 INSERT INTO readiness_milestones (
     milestone_key, name, description, sort_order
@@ -1425,12 +1542,12 @@ INSERT INTO pipeline_stage_definitions (
     implementation_status, required_provider_keys_json
 ) VALUES
     ('daily_desk', 'preflight', 'Preflight', 'Check provider credentials, data inventory, and pipeline readiness.', 10, 'ready', '["fred"]'),
-    ('daily_desk', 'fetch_data', 'Fetch data', 'Fetch point-in-time macro and market inputs into a new dataset snapshot.', 20, 'scaffolded', '["fred"]'),
-    ('daily_desk', 'validate_data', 'Validate data', 'Apply completeness, freshness, schema, and look-ahead checks.', 30, 'scaffolded', '[]'),
-    ('daily_desk', 'regime_filter', 'Regime filter', 'Classify state and compute regime evidence contributions.', 40, 'scaffolded', '[]'),
-    ('daily_desk', 'factor_engine', 'Factor engine', 'Score the eligible cross-section with current strategy versions.', 50, 'scaffolded', '[]'),
-    ('daily_desk', 'allocation_engine', 'Allocation engine', 'Translate state and factor evidence into bounded target exposure.', 60, 'scaffolded', '[]'),
-    ('daily_desk', 'instrument_engine', 'Instrument engine', 'Compare legitimate cash and defined-risk expressions without placing orders.', 70, 'scaffolded', '[]'),
+    ('daily_desk', 'fetch_data', 'Fetch data', 'Fetch point-in-time macro and market inputs into a new dataset snapshot.', 20, 'ready', '["fred"]'),
+    ('daily_desk', 'validate_data', 'Validate data', 'Apply completeness, freshness, schema, and look-ahead checks.', 30, 'ready', '[]'),
+    ('daily_desk', 'regime_filter', 'Regime filter', 'Classify state and compute regime evidence contributions.', 40, 'ready', '[]'),
+    ('daily_desk', 'factor_engine', 'Factor engine', 'Score the eligible cross-section with current strategy versions.', 50, 'ready', '[]'),
+    ('daily_desk', 'allocation_engine', 'Allocation engine', 'Translate state and factor evidence into bounded target exposure.', 60, 'ready', '[]'),
+    ('daily_desk', 'instrument_engine', 'Instrument engine', 'Compare legitimate cash and defined-risk expressions without placing orders.', 70, 'ready', '[]'),
     ('daily_desk', 'publish_snapshot', 'Publish snapshot', 'Seal one internally consistent desk snapshot after every required gate passes.', 80, 'scaffolded', '[]')
 ON CONFLICT(pipeline_key, stage_key) DO UPDATE SET
     label = excluded.label,

@@ -42,7 +42,7 @@ Before beta, an operator starts each run and reviews every stage:
 
 The first-draft run record stores stage state, start and finish times, record counts, snapshot references, a concise message, and an error code. Before scheduling, add normalized input hashes, explicit output references, an idempotency key, locking, and resumable-stage semantics.
 
-In the first draft, only preflight is implemented. Dry preflight records later stages as skipped; a full manual attempt stops at the unimplemented fetch stage and publishes nothing. That blocker is deliberate and visible in the UI.
+All six compute stages (`fetch_data` through `instrument_engine`) are implemented against live free-tier data; a full manual run now completes real regime, factor, allocation, and instrument computation and only stops at the still-scaffolded `publish_snapshot` stage. That blocker is deliberate and visible in the UI. Dry preflight still records later stages as skipped without fetching data. See [engine milestones](engine-milestones.md) for current stage-by-stage status.
 
 ## Scheduling gate
 

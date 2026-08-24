@@ -5,26 +5,25 @@ This is the authoritative catch-up page for maintainers and coding agents. Keep 
 ## Current state
 
 - Version: `0.1.0`, the initial manual-first repository edition; no release tag has been created.
-- Design record: [Edition V1](editions/edition-v1.md) preserves the corrected product thesis and scope that this implementation establishes.
+- Design record: [Edition V2](editions/edition-v2.md) is the current design record; [Edition V1](editions/edition-v1.md) stays archived, unedited, for historical context.
 - Product: a database-driven hierarchical exposure allocation and research application.
-- Available: Today desk, decision graph, cross-sectional matrix, data health, symbol signal/chart/event/metric views, and position candidates backed by SQLite snapshots.
-- Operating mode: local, manual-first, and read-only with respect to brokers. The included demonstration dataset is synthetic and explicitly seeded.
-- The six seeded ETF symbols are a presentation fixture, not a production universe or candidate-selection policy.
+- Available: Today desk, decision graph, cross-sectional matrix, data health, symbol signal/chart/event/metric views, per-symbol and desk-level backtest evaluation, and position candidates backed by SQLite snapshots.
+- Operating mode: local, manual-first, and read-only with respect to brokers. A DB-backed engine operating mode (pilot/production, Operations → Credentials) gates any future stage that requires a paid-tier provider; pilot is the default and requires no paid credentials.
+- The staging universe (21 tradeable symbols plus 8 FRED macro series, database-driven, auto-seeded on every fresh clone — see [engine milestones](engine-milestones.md)) is a free-data staging fixture, not the governed, effective-dated production universe roadmap phase 2 calls for.
 - Operations: a loopback-only, lower-frequency control plane provides an evidence-derived demo-to-real readiness map, a database-driven provider/capability onboarding roadmap, credential smoke tests, source freshness, dry/full manual run records, and strategy/research lifecycle views below the decision surfaces.
-- Provider plan: FRED/ALFRED is the only actionable account and is sufficient for the next regime slice. Three researched full-desk accounts remain planned, but their adapters and entitlement checks are not implemented and no keys are requested yet.
-- Not available yet: production provider ingestion, a production security master and versioned universe, real strategy computation or dynamic candidate discovery, scheduled runs, broker connectivity, or order placement.
-- Initial baseline: the application, schema, versioned documentation, automated checks, and primary browser flows together define the reviewed first substantive application edition.
+- Provider plan: FRED/ALFRED is the only actionable account. Three researched full-desk accounts remain planned, but their adapters and entitlement checks are not implemented and no keys are requested yet.
+- Real engine: all six compute stages — `fetch_data`, `validate_data`, `regime_filter`, `factor_engine`, `allocation_engine`, `instrument_engine` — are implemented and proven against live FRED and Yahoo data, every value traceable to a fetched observation or a function over one (deliberately naive/overfit scoring throughout; see [engine milestones](engine-milestones.md)). Only `publish_snapshot` remains scaffolded.
+- Not available yet: a production security master and versioned universe, real options-chain quotes (options are priced with a real Black-Scholes engine off real inputs, not a market quote — honestly labeled theoretical-pricing-only), walk-forward/IC/decay evidence, covariance-aware portfolio construction, scheduled runs, broker connectivity, or order placement.
 
 ## Next product task
 
-Build the first real business-logic slice from source to decision:
+The engine's free-data pilot slice (all six compute stages, through `instrument_engine`) is done — see [engine milestones](engine-milestones.md) for status and verified examples. Next:
 
-1. Ingest selected FRED series with ALFRED real-time/vintage metadata into local point-in-time records.
-2. Validate source identity, observation dates, availability dates, freshness, completeness, units, and revision lineage.
-3. Seal an immutable dataset snapshot only when its required inputs pass validation.
-4. Compute and publish the first manual regime state with inspectable inputs, transformations, weights, uncertainty, and nulls.
+1. Build the point-in-time security master and versioned universe (roadmap phase 2) — the staging universe remains a free-data fixture with no governed, effective-dated eligibility contract.
+2. Decide whether `publish_snapshot` needs its own implementation or is redundant now that the orchestrator seals snapshots directly (see engine-milestones.md's open decision note).
+3. Milestone 4: optimize within pilot mode — the naive factor/backtest formulas are real but currently lose to buy-and-hold on average; start reducing that gap.
 
-Then build the point-in-time security master and universe, allocate the risk envelope across broad sleeves, discover securities cross-sectionally, evaluate entry and exit with an independently revisioned time-series layer, construct the target portfolio, and only then select its instrument expression. The complete gap sequence and completion evidence live in the [roadmap](roadmap.md). Scheduling remains out of scope until repeated manual runs are safe and reproducible.
+Each stage follows the same contract proven since `regime_filter`: a real function over real (free-tier) data, naive/overfit scoring accepted for now, a hand-typed output never accepted. Scheduling remains out of scope until repeated manual runs are safe and reproducible.
 
 ## Non-negotiable rules
 
@@ -52,8 +51,10 @@ Then build the point-in-time security master and universe, allocate the risk env
 ## Document map
 
 - [Root README](../README.md): product identity and quick start.
+- [Edition V2](editions/edition-v2.md): current design record — what's real now, what V1 established, what's still not real.
 - [Edition V1](editions/edition-v1.md): archived initial product thesis, hierarchy, and operating principles.
 - [Roadmap](roadmap.md): durable demo-to-real sequence, completion evidence, and the UI surface unlocked by each phase.
+- [Engine milestones](engine-milestones.md): living working doc for the current free-data-first engine build sequence; edited in place, versioned by a table at its top, not archived per change.
 - [Architecture](architecture.md): boundaries and data flow.
 - [Operations](operations.md): credentials, manual runs, testing, and scheduling gate.
 - [Strategy lifecycle](strategy-lifecycle.md): evidence, promotion, monitoring, and retirement.

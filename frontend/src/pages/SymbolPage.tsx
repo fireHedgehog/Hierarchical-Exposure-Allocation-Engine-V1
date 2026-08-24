@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { endpoints, useApi } from "../api/client";
+import { BacktestLedger } from "../components/BacktestLedger";
 import { DataHealth } from "../components/DataHealth";
 import { HierarchyTrace } from "../components/HierarchyTrace";
 import { MetricsGrid } from "../components/MetricsGrid";
@@ -101,6 +102,15 @@ export function SymbolPage() {
             />
             <PriceChart bars={data.bars} events={data.events} symbol={data.symbol} currency={data.currency} />
             <ProvenanceStrip provenance={latestBar(data.bars)} sourceLabel="Price-bar dataset" compact />
+          </Panel>
+
+          <Panel>
+            <SectionHeading
+              eyebrow="Full history, independent of chart timeframe"
+              title="Backtest trade ledger"
+              description="Every entry/exit round trip the server's MACD/RSI backtest logged, oldest first. The chart above only draws markers inside the selected timeframe; this table always shows the full history."
+            />
+            <BacktestLedger events={data.events} currency={data.currency} />
           </Panel>
 
           <Panel className="panel--trace">

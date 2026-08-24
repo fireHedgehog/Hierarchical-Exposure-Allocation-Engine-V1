@@ -15,7 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
 from backend import __version__
-from backend.admin_models import CredentialWriteRequest, PipelineRunRequest, ProviderVerifyRequest
+from backend.admin_models import (
+    CredentialWriteRequest,
+    EngineModeWriteRequest,
+    PipelineRunRequest,
+    ProviderVerifyRequest,
+)
 from backend.admin_repository import (
     PipelineNotFoundError,
     ProviderNotFoundError,
@@ -26,15 +31,20 @@ from backend.admin_repository import (
     get_provider,
     get_strategy,
     list_providers,
+    list_staging_symbols,
     list_strategies,
     mark_credential_changed,
     run_pipeline,
+    set_engine_mode,
     utc_now,
     verify_provider,
 )
 from backend.admin_security import direct_loopback_guard, operator_guard, validate_admin_origins
 from backend.database import PROJECT_ROOT, connect, initialize_database, resolve_database_path
-from backend.providers import FredV2Verifier, ProviderVerifier
+from backend.pipeline.stages import FredFetcher, PriceFetcher
+from backend.providers import ProviderVerifier
+from backend.providers.fred import FredV2Verifier, fetch_series_observations
+from backend.providers.yahoo import fetch_daily_bars
 from backend.repository import (
     SnapshotNotFoundError,
     SymbolNotFoundError,
@@ -61,12 +71,16 @@ def create_app(
     frontend_dist: str | Path | None = None,
     secret_store: SecretStore | None = None,
     provider_verifiers: Mapping[str, ProviderVerifier] | None = None,
+    fred_observation_fetcher: FredFetcher | None = None,
+    price_fetcher: PriceFetcher | None = None,
     now: Callable[[], datetime] | None = None,
 ) -> FastAPI:
     path = resolve_database_path(database_path or os.getenv("HEAE_DATABASE_PATH"))
     static_root = Path(frontend_dist) if frontend_dist is not None else PROJECT_ROOT / "frontend" / "dist"
     secrets = secret_store or KeyringEnvironmentSecretStore()
     verifiers = dict(provider_verifiers or {"fred_v2": FredV2Verifier()})
+    fred_fetcher = fred_observation_fetcher or fetch_series_observations
+    price_fetcher_fn = price_fetcher or fetch_daily_bars
     now_fn = now or utc_now
     runtime_id = f"runtime-{uuid.uuid4()}"
     provider_operation_locks: dict[str, threading.Lock] = {}
@@ -89,6 +103,8 @@ def create_app(
     application.state.frontend_dist = static_root
     application.state.secret_store = secrets
     application.state.provider_verifiers = verifiers
+    application.state.fred_observation_fetcher = fred_fetcher
+    application.state.price_fetcher = price_fetcher_fn
     application.state.admin_origins = admin_origins
     application.state.runtime_id = runtime_id
     application.state.provider_operation_locks = provider_operation_locks
@@ -436,6 +452,15 @@ def create_app(
             return get_data_inventory(connection, now_fn())
 
     @application.get(
+        "/api/v1/admin/universe",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_universe() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            return list_staging_symbols(connection)
+
+    @application.get(
         "/api/v1/admin/pipeline",
         tags=["operator"],
         dependencies=[Depends(direct_loopback_guard)],
@@ -461,9 +486,24 @@ def create_app(
                     now_fn(),
                     dry_run=payload.dry_run,
                     runtime_id=runtime_id,
+                    fred_observation_fetcher=fred_fetcher,
+                    price_fetcher=price_fetcher_fn,
                 )
         except PipelineNotFoundError as error:
             raise _not_found("pipeline_not_found", "The daily desk pipeline is not available.") from error
+
+    @application.put(
+        "/api/v1/admin/engine-mode",
+        tags=["operator"],
+        dependencies=[Depends(operator_guard("engine_mode.write", admin_origins))],
+    )
+    def admin_write_engine_mode(payload: EngineModeWriteRequest) -> dict[str, Any]:
+        with connect(path) as connection:
+            return {
+                "engine_mode": set_engine_mode(
+                    connection, payload.mode, now_fn(), payload.reason
+                )
+            }
 
     @application.get(
         "/api/v1/admin/strategies",

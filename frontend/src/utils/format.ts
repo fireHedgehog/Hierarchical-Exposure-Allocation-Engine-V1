@@ -84,17 +84,24 @@ export function formatScalar(value: Scalar | undefined, unit?: string | null): s
   return unit ? `${formatNumber(value)} ${unit}` : formatNumber(value);
 }
 
+// Every stored timestamp is UTC. Displaying it in the viewer's local zone
+// (previously the browser default, e.g. NZST) makes cross-referencing with
+// US market hours confusing regardless of where the app is opened from —
+// shown in US Eastern time instead, the market's own convention, always.
+const MARKET_TIME_ZONE = "America/New_York";
+
 export function formatTimestamp(value: string | null | undefined): string {
   if (!value) return NOT_AVAILABLE;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat("en-NZ", {
+  return new Intl.DateTimeFormat("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     timeZoneName: "short",
+    timeZone: MARKET_TIME_ZONE,
   }).format(parsed);
 }
 
@@ -102,7 +109,7 @@ export function formatDate(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return NOT_AVAILABLE;
   const parsed = typeof value === "number" ? new Date(value * 1000) : new Date(value);
   if (Number.isNaN(parsed.getTime())) return String(value);
-  return new Intl.DateTimeFormat("en-NZ", { dateStyle: "medium" }).format(parsed);
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: MARKET_TIME_ZONE }).format(parsed);
 }
 
 export function humanize(value: string | null | undefined): string {

@@ -21,7 +21,7 @@ Each decision passes through a hierarchy:
 
 Research validity, simulation readiness, and live execution are separate gates. Every promoted conclusion is expected to reference point-in-time inputs and explicit strategy or factor revisions, with unavailable evidence remaining visibly unavailable.
 
-The original product thesis and the design decisions incorporated into this draft are preserved in [Edition V1](docs/editions/edition-v1.md).
+The original product thesis is preserved in [Edition V1](docs/editions/edition-v1.md); [Edition V2](docs/editions/edition-v2.md) is the current design record, covering the free-data engine build described below.
 
 ## What the current draft provides
 
@@ -60,7 +60,7 @@ make verify
 
 Version `0.1.0` is the initial manual-first application draft. It provides the application shell, persistence model, operational controls, synthetic examples, and inspection surfaces needed to develop the engine in small, testable vertical slices.
 
-The manual pipeline currently completes preflight only. Live provider ingestion, production strategy computation, scheduling, broker connectivity, and order handling remain outside this milestone. The application is therefore a research and simulation environment; its demonstration records are not trading instructions.
+The manual pipeline's six compute stages — `fetch_data`, `validate_data`, `regime_filter`, `factor_engine`, `allocation_engine`, `instrument_engine` — are real, running on free-tier data (FRED for macro, Yahoo for prices) over a database-seeded staging universe of 21 tradeable symbols. Only `publish_snapshot` remains scaffolded. See [engine milestones](docs/engine-milestones.md) for verified status and examples. Live paid-provider ingestion, a governed production universe, scheduling, broker connectivity, and order handling remain outside this milestone. The application is therefore a research and simulation environment; its records are not trading instructions.
 
 Runtime databases, caches, vendor data, and generated run artifacts live outside version control. Provider secrets are resolved from the operating-system keychain or injected environment variables. They are neither stored in the application database nor returned to the browser after submission. See [Operations](docs/operations.md) for credential setup, verification behavior, and the scheduling gate.
 
@@ -78,21 +78,21 @@ Do not purchase or enter those three keys yet. Their adapters, entitlement-speci
 
 ## Next milestone
 
-The next vertical slice connects FRED/ALFRED end to end:
+The free-data engine build (all six compute stages) is done — see [engine milestones](docs/engine-milestones.md). Next:
 
-1. register non-secret provider configuration and verify credential health;
-2. ingest a point-in-time macroeconomic dataset with observed, available, and ingested timestamps;
-3. validate freshness, completeness, and provenance, then seal the dataset snapshot;
-4. run the first regime stage manually and display its contribution in the hierarchy.
+1. build the point-in-time security master and versioned universe (roadmap phase 2) — the staging universe is still a free-data fixture, not a governed, effective-dated eligibility contract;
+2. decide whether `publish_snapshot` needs its own implementation or is redundant now that the orchestrator seals snapshots directly;
+3. optimize within pilot mode (Milestone 4) — the naive factor/backtest formulas are real but currently lose to buy-and-hold on average.
 
-Further stages will follow the same inspectable pattern: broad risk and sleeve allocation, a versioned universe, cross-sectional discovery, independent symbol timing, portfolio construction, and instrument expression. Scheduling becomes appropriate only after repeated manual runs are reproducible and operationally safe.
+Scheduling becomes appropriate only after repeated manual runs are reproducible and operationally safe.
 
 The complete capability sequence and the evidence required to move each surface from demonstration data to real decisions are maintained in the [Roadmap](docs/roadmap.md).
 
 ## Documentation
 
 - [Project checkpoint](docs/README.md) — current state, operating rules, and the authoritative next task
-- [Edition V1](docs/editions/edition-v1.md) — the first professional statement of the product thesis and desk design
+- [Edition V2](docs/editions/edition-v2.md) — current design record: what's real now, what's still not
+- [Edition V1](docs/editions/edition-v1.md) — archived: the first professional statement of the product thesis and desk design
 - [Roadmap](docs/roadmap.md) — the durable capability sequence from synthetic demonstration to real decision support
 - [Architecture](docs/architecture.md) — system boundaries, data flow, and trust model
 - [Operations](docs/operations.md) — local operation, credentials, manual runs, and scheduling criteria

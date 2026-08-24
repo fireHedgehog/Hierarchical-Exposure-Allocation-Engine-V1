@@ -698,10 +698,37 @@ export interface ProviderRoadmap {
   capabilities?: Nullable<DataCapabilityRoadmap[]>;
 }
 
+export interface EngineMode {
+  mode: "pilot" | "production";
+  updated_at?: Nullable<string>;
+  updated_reason?: Nullable<string>;
+}
+
+export interface StagingSymbol {
+  symbol: string;
+  name: string;
+  category: string;
+  tier: "free" | "paid";
+  production_provider_key?: Nullable<string>;
+  production_provider_name?: Nullable<string>;
+  notes?: Nullable<string>;
+  active: boolean;
+}
+
+export interface UniverseResponse {
+  summary: {
+    total: number;
+    active: number;
+    by_category: Record<string, number>;
+  };
+  symbols: StagingSymbol[];
+}
+
 export interface ProvidersResponse {
   as_of?: Nullable<string>;
   providers?: Nullable<AdminProvider[]>;
   roadmap?: Nullable<ProviderRoadmap>;
+  engine_mode?: Nullable<EngineMode>;
 }
 
 export interface AdminDataAsset {

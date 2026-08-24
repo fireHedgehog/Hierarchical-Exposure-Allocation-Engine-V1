@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CandlestickSeries,
   ColorType,
   createChart,
   createSeriesMarkers,
   HistogramSeries,
+  LineSeries,
   type HistogramData,
   type SeriesMarker,
   type Time,
@@ -12,8 +13,21 @@ import {
   type WhitespaceData,
 } from "lightweight-charts";
 import type { PriceBar, SymbolEvent } from "../types";
+import { computeMacd, computeRsi } from "../utils/indicators";
 import { formatDate, NOT_AVAILABLE } from "../utils/format";
 import { Unavailable } from "./Ui";
+
+const TIMEFRAMES = [
+  { key: "1m", label: "1M", days: 30 },
+  { key: "3m", label: "3M", days: 90 },
+  { key: "6m", label: "6M", days: 182 },
+  { key: "1y", label: "1Y", days: 365 },
+  { key: "5y", label: "5Y", days: 365 * 5 },
+  { key: "10y", label: "10Y", days: 365 * 10 },
+  { key: "max", label: "Max", days: null as number | null },
+] as const;
+
+type TimeframeKey = (typeof TIMEFRAMES)[number]["key"];
 
 export function PriceChart({
   bars,
@@ -27,7 +41,9 @@ export function PriceChart({
   currency?: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const cleanBars = useMemo(() => sanitizeBars(bars ?? []), [bars]);
+  const [timeframe, setTimeframe] = useState<TimeframeKey>("1y");
+  const allBars = useMemo(() => sanitizeBars(bars ?? []), [bars]);
+  const cleanBars = useMemo(() => windowBars(allBars, timeframe), [allBars, timeframe]);
   const chartEvents = useMemo(() => (events ?? []).filter((event) => classifyChartEvent(event) !== "excluded"), [events]);
 
   useEffect(() => {
@@ -35,7 +51,7 @@ export function PriceChart({
     const container = containerRef.current;
     const chart = createChart(container, {
       width: container.clientWidth,
-      height: 430,
+      height: 620,
       layout: {
         background: { type: ColorType.Solid, color: "#0a1513" },
         textColor: "#879b95",
@@ -66,27 +82,35 @@ export function PriceChart({
       handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
     });
 
-    const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: "#55d9ae",
-      downColor: "#ef6b73",
-      borderUpColor: "#55d9ae",
-      borderDownColor: "#ef6b73",
-      wickUpColor: "rgba(85,217,174,0.8)",
-      wickDownColor: "rgba(239,107,115,0.8)",
-      priceLineColor: "rgba(105,232,198,0.5)",
-      priceLineWidth: 1,
-      lastValueVisible: true,
-    });
+    const candleSeries = chart.addSeries(
+      CandlestickSeries,
+      {
+        upColor: "#55d9ae",
+        downColor: "#ef6b73",
+        borderUpColor: "#55d9ae",
+        borderDownColor: "#ef6b73",
+        wickUpColor: "rgba(85,217,174,0.8)",
+        wickDownColor: "rgba(239,107,115,0.8)",
+        priceLineColor: "rgba(105,232,198,0.5)",
+        priceLineWidth: 1,
+        lastValueVisible: true,
+      },
+      0,
+    );
     candleSeries.setData(cleanBars.map(({ time, open, high, low, close }) => ({ time, open, high, low, close })));
 
     const volumeData = buildVolumeSeriesData(cleanBars);
     if (volumeData.some((point) => "value" in point)) {
-      const volumeSeries = chart.addSeries(HistogramSeries, {
-        priceFormat: { type: "volume" },
-        priceScaleId: "volume",
-        lastValueVisible: false,
-        priceLineVisible: false,
-      });
+      const volumeSeries = chart.addSeries(
+        HistogramSeries,
+        {
+          priceFormat: { type: "volume" },
+          priceScaleId: "volume",
+          lastValueVisible: false,
+          priceLineVisible: false,
+        },
+        0,
+      );
       chart.priceScale("volume").applyOptions({
         scaleMargins: { top: 0.82, bottom: 0 },
         borderVisible: false,
@@ -94,11 +118,84 @@ export function PriceChart({
       volumeSeries.setData(volumeData);
     }
 
+    // Markers are clipped to the visible timeframe window. lightweight-charts
+    // clamps out-of-range markers to the nearest visible bar rather than
+    // hiding them, which squishes decades of history into one ugly stack at
+    // the chart edge on a short timeframe. The full history still lives in
+    // the trade ledger table below the chart.
+    const windowStart = timeSortValue(cleanBars[0].time);
+    const windowEnd = timeSortValue(cleanBars[cleanBars.length - 1].time);
     const markers = chartEvents
       .map(eventMarker)
       .filter((marker): marker is SeriesMarker<Time> => marker !== null)
+      .filter((marker) => {
+        const t = timeSortValue(marker.time);
+        return t >= windowStart && t <= windowEnd;
+      })
       .sort((a, b) => timeSortValue(a.time) - timeSortValue(b.time));
     if (markers.length) createSeriesMarkers(candleSeries, markers);
+
+    // RSI(14) and MACD(12,26,9) — computed client-side over the FULL fetched
+    // history (not just the visible window, so short timeframes don't show a
+    // sparse cold-start), using the identical formulas the backend's real
+    // backtest already traded on (backend/engine/indicators/). These panes
+    // only draw the lines; the trade decisions were made once, on the
+    // server, over full history.
+    const visibleTimes = new Set(cleanBars.map((bar) => timeSortValue(bar.time)));
+    const fullCloses = allBars.map((bar) => bar.close);
+    const fullRsi = computeRsi(fullCloses, 14);
+    const fullMacd = computeMacd(fullCloses);
+    const visibleIndices = allBars
+      .map((bar, index) => ({ index, visible: visibleTimes.has(timeSortValue(bar.time)) }))
+      .filter((item) => item.visible)
+      .map((item) => item.index);
+    const times = visibleIndices.map((index) => allBars[index].time);
+    const rsi = visibleIndices.map((index) => fullRsi[index]);
+    const rsiPoints = times
+      .map((time, i) => (rsi[i] === null ? null : { time, value: rsi[i] as number }))
+      .filter((point): point is { time: Time; value: number } => point !== null);
+    if (rsiPoints.length) {
+      const rsiSeries = chart.addSeries(
+        LineSeries,
+        { color: "#78a9ef", lineWidth: 1, priceScaleId: "rsi", lastValueVisible: true, title: "RSI(14)" },
+        1,
+      );
+      rsiSeries.setData(rsiPoints);
+      rsiSeries.createPriceLine({ price: 70, color: "rgba(239,107,115,0.4)", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "70" });
+      rsiSeries.createPriceLine({ price: 30, color: "rgba(85,217,174,0.4)", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "30" });
+      chart.priceScale("rsi").applyOptions({ autoScale: false, scaleMargins: { top: 0.1, bottom: 0.1 } });
+      rsiSeries.applyOptions({ autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) });
+    }
+
+    const macdLine = visibleIndices.map((index) => fullMacd.macdLine[index]);
+    const signalLine = visibleIndices.map((index) => fullMacd.signalLine[index]);
+    const histogram = visibleIndices.map((index) => fullMacd.histogram[index]);
+    const macdPoints = times
+      .map((time, i) => (macdLine[i] === null ? null : { time, value: macdLine[i] as number }))
+      .filter((point): point is { time: Time; value: number } => point !== null);
+    const signalPoints = times
+      .map((time, i) => (signalLine[i] === null ? null : { time, value: signalLine[i] as number }))
+      .filter((point): point is { time: Time; value: number } => point !== null);
+    const histogramPoints = times
+      .map((time, i) =>
+        histogram[i] === null
+          ? null
+          : { time, value: histogram[i] as number, color: (histogram[i] as number) >= 0 ? "rgba(85,217,174,0.5)" : "rgba(239,107,115,0.45)" },
+      )
+      .filter((point): point is { time: Time; value: number; color: string } => point !== null);
+    if (macdPoints.length) {
+      const histogramSeries = chart.addSeries(HistogramSeries, { priceScaleId: "macd", lastValueVisible: false, priceLineVisible: false }, 2);
+      histogramSeries.setData(histogramPoints);
+      const macdSeries = chart.addSeries(LineSeries, { color: "#67e4bf", lineWidth: 1, priceScaleId: "macd", title: "MACD" }, 2);
+      macdSeries.setData(macdPoints);
+      const signalSeries = chart.addSeries(LineSeries, { color: "#e5b15d", lineWidth: 1, priceScaleId: "macd", title: "Signal" }, 2);
+      signalSeries.setData(signalPoints);
+    }
+
+    const panes = chart.panes();
+    if (panes[0]) panes[0].setStretchFactor(4);
+    if (panes[1]) panes[1].setStretchFactor(1.1);
+    if (panes[2]) panes[2].setStretchFactor(1.1);
 
     chart.timeScale().fitContent();
 
@@ -112,9 +209,9 @@ export function PriceChart({
       resizeObserver.disconnect();
       chart.remove();
     };
-  }, [cleanBars, chartEvents]);
+  }, [cleanBars, chartEvents, allBars]);
 
-  if (!cleanBars.length) {
+  if (!allBars.length) {
     return (
       <Unavailable
         title="Price history not available"
@@ -123,8 +220,8 @@ export function PriceChart({
     );
   }
 
-  const first = cleanBars[0];
-  const last = cleanBars[cleanBars.length - 1];
+  const first = cleanBars[0] ?? allBars[0];
+  const last = cleanBars[cleanBars.length - 1] ?? allBars[allBars.length - 1];
   return (
     <div className="chart-block">
       <div className="chart-toolbar">
@@ -146,17 +243,38 @@ export function PriceChart({
           <span className="chart-legend__pattern" /> Pattern annotation
         </div>
       </div>
+      <div className="chart-timeframes" role="group" aria-label="Chart timeframe">
+        {TIMEFRAMES.map((option) => (
+          <button
+            key={option.key}
+            type="button"
+            className={`chart-timeframe-button ${timeframe === option.key ? "chart-timeframe-button--active" : ""}`}
+            onClick={() => setTimeframe(option.key)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
       <div
         className="price-chart"
         ref={containerRef}
         role="img"
-        aria-label={`${symbol} candlestick chart with ${cleanBars.length} database bars and ${chartEvents.length} persisted annotations`}
+        aria-label={`${symbol} candlestick chart with ${cleanBars.length} database bars, RSI and MACD panes, and ${chartEvents.length} persisted annotations`}
       />
       <p className="chart-footnote">
-        Executed or backtest entry/exit history, signal observations, and price patterns are distinct. Proposals and candidates are excluded from chart markers.
+        Executed or backtest entry/exit history, signal observations, and price patterns are distinct. Proposals and candidates are excluded from chart markers. RSI/MACD panes are computed in the browser from the same bars for display only; the backtest's actual trades were decided once, on the server, over full history.
       </p>
     </div>
   );
+}
+
+function windowBars(bars: CleanBar[], timeframe: TimeframeKey): CleanBar[] {
+  const option = TIMEFRAMES.find((item) => item.key === timeframe);
+  if (!option || option.days === null || !bars.length) return bars;
+  const lastSeconds = timeSortValue(bars[bars.length - 1].time);
+  const cutoff = lastSeconds - option.days * 86400;
+  const windowed = bars.filter((bar) => timeSortValue(bar.time) >= cutoff);
+  return windowed.length ? windowed : bars;
 }
 
 interface CleanBar extends Omit<PriceBar, "time"> {

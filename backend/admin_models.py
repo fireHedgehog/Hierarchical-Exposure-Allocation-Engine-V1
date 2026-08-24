@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 
@@ -27,3 +29,10 @@ class PipelineRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dry_run: bool = True
+
+
+class EngineModeWriteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["pilot", "production"]
+    reason: str | None = Field(default=None, max_length=500)

@@ -7,6 +7,16 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from backend.pipeline.stages import (
+    FredFetcher,
+    PriceFetcher,
+    run_allocation_engine_stage,
+    run_factor_engine_stage,
+    run_fetch_data_stage,
+    run_instrument_engine_stage,
+    run_regime_filter_stage,
+    run_validate_data_stage,
+)
 from backend.providers import ProviderVerifier, VerificationResult
 from backend.readiness_repository import get_readiness
 from backend.secrets import SecretStore
@@ -89,6 +99,36 @@ def _verification_payload(row: sqlite3.Row | None) -> dict[str, Any] | None:
         "message": row["message"],
         "credential_source": row["credential_source"],
     }
+
+
+def get_engine_mode(connection: sqlite3.Connection) -> dict[str, Any]:
+    row = connection.execute(
+        "SELECT mode, updated_at, updated_reason FROM engine_operating_mode WHERE id = 1"
+    ).fetchone()
+    if row is None:
+        return {"mode": "pilot", "updated_at": None, "updated_reason": None}
+    return {
+        "mode": row["mode"],
+        "updated_at": row["updated_at"],
+        "updated_reason": row["updated_reason"],
+    }
+
+
+def set_engine_mode(
+    connection: sqlite3.Connection, mode: str, changed_at: datetime, reason: str | None = None
+) -> dict[str, Any]:
+    connection.execute(
+        """
+        INSERT INTO engine_operating_mode (id, mode, updated_at, updated_reason)
+        VALUES (1, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            mode = excluded.mode,
+            updated_at = excluded.updated_at,
+            updated_reason = excluded.updated_reason
+        """,
+        (mode, iso_z(changed_at), reason),
+    )
+    return get_engine_mode(connection)
 
 
 def serialize_provider(
@@ -247,6 +287,7 @@ def list_providers(
         "as_of": iso_z(now),
         "providers": providers,
         "roadmap": _provider_roadmap(connection, providers),
+        "engine_mode": get_engine_mode(connection),
     }
 
 
@@ -568,6 +609,42 @@ def verify_provider(
     }
 
 
+def list_staging_symbols(connection: sqlite3.Connection) -> dict[str, Any]:
+    rows = connection.execute(
+        """
+        SELECT staging.*, plan.name AS production_provider_name
+        FROM staging_symbols AS staging
+        LEFT JOIN provider_onboarding_plan AS plan
+          ON plan.plan_key = staging.production_provider_key
+        ORDER BY staging.sort_order, staging.symbol
+        """
+    ).fetchall()
+    symbols = [
+        {
+            "symbol": row["symbol"],
+            "name": row["name"],
+            "category": row["category"],
+            "tier": row["tier"],
+            "production_provider_key": row["production_provider_key"],
+            "production_provider_name": row["production_provider_name"],
+            "notes": row["notes"],
+            "active": bool(row["active"]),
+        }
+        for row in rows
+    ]
+    by_category: dict[str, int] = {}
+    for symbol in symbols:
+        by_category[symbol["category"]] = by_category.get(symbol["category"], 0) + 1
+    return {
+        "summary": {
+            "total": len(symbols),
+            "active": sum(symbol["active"] for symbol in symbols),
+            "by_category": by_category,
+        },
+        "symbols": symbols,
+    }
+
+
 def get_data_inventory(
     connection: sqlite3.Connection, now: datetime
 ) -> dict[str, Any]:
@@ -837,6 +914,8 @@ def run_pipeline(
     *,
     dry_run: bool,
     runtime_id: str,
+    fred_observation_fetcher: FredFetcher,
+    price_fetcher: PriceFetcher,
     pipeline_key: str = "daily_desk",
 ) -> dict[str, Any]:
     pipeline = get_pipeline(connection, pipeline_key)["definition"]
@@ -845,6 +924,7 @@ def run_pipeline(
 
     timestamp = iso_z(now)
     run_id = f"run-{uuid.uuid4()}"
+    engine_mode = get_engine_mode(connection)["mode"]
     provider_rows = {
         row["provider_key"]: row
         for row in connection.execute("SELECT * FROM operator_providers").fetchall()
@@ -890,11 +970,19 @@ def run_pipeline(
             "expired": [],
             "invalid_clock": [],
             "unhealthy": [],
+            "pilot_mode_restricted": [],
         }
         for key in stage["required_provider_keys"]:
             state = provider_states.get(key, "missing")
             if state != "healthy":
                 issues[state].append(key)
+            # Pilot mode blocks a paid-tier provider even if it happens to be
+            # configured and healthy — the gate is about the operating mode
+            # choice, not credential health. No current stage requires a paid
+            # provider yet, so this has no visible effect until one does.
+            provider = provider_rows.get(key)
+            if engine_mode == "pilot" and provider is not None and provider["tier"] == "paid":
+                issues["pilot_mode_restricted"].append(key)
         stage_provider_issues[stage["key"]] = issues
 
     stage_results: list[tuple[Any, ...]] = []
@@ -922,6 +1010,10 @@ def run_pipeline(
             labels.append(f"invalid clock {', '.join(issues['invalid_clock'])}")
         if issues["unhealthy"]:
             labels.append(f"unhealthy {', '.join(issues['unhealthy'])}")
+        if issues["pilot_mode_restricted"]:
+            labels.append(
+                f"pilot mode restricts paid provider {', '.join(issues['pilot_mode_restricted'])}"
+            )
         if labels:
             preflight_parts.append(f"{stage['key']}: {', '.join(labels)}")
     if invalid_data:
@@ -940,6 +1032,8 @@ def run_pipeline(
     )
 
     remaining = [stage for stage in pipeline["stages"] if stage["key"] != "preflight"]
+    dataset_snapshot_id: str | None = None
+    desk_snapshot_id: str | None = None
     if dry_run:
         for stage in remaining:
             stage_results.append(
@@ -949,7 +1043,13 @@ def run_pipeline(
         summary = "Preflight completed; dry run made no data or decision changes."
     else:
         blocked = False
+        stage_statuses: list[str] = []
         for stage in remaining:
+            if blocked:
+                stage_results.append(
+                    (run_id, stage["key"], stage["order"], "pending", None, None, None, None, "Not started because an earlier required stage was blocked.", None)
+                )
+                continue
             issues = stage_provider_issues[stage["key"]]
             stage_has_provider_issue = any(values for values in issues.values())
             # Fetch is allowed to refresh bad existing inventory. Timestamp
@@ -957,7 +1057,7 @@ def run_pipeline(
             invalid_blocks_stage = bool(
                 invalid_data and stage["key"] != "fetch_data"
             )
-            if not blocked and (invalid_blocks_stage or stage_has_provider_issue):
+            if invalid_blocks_stage or stage_has_provider_issue:
                 error_code = "preflight_not_ready"
                 message = (
                     "Cannot continue until this stage's provider requirements and data timestamps pass preflight."
@@ -965,18 +1065,90 @@ def run_pipeline(
                 stage_results.append(
                     (run_id, stage["key"], stage["order"], "blocked", timestamp, timestamp, 0, 0, message, error_code)
                 )
+                stage_statuses.append("blocked")
                 blocked = True
-            elif not blocked:
+                continue
+            if stage["implementation_status"] != "ready":
                 stage_results.append(
                     (run_id, stage["key"], stage["order"], "blocked", timestamp, timestamp, 0, 0, "This stage is scaffolded but its implementation is not connected.", "stage_not_implemented")
                 )
+                stage_statuses.append("blocked")
                 blocked = True
-            else:
-                stage_results.append(
-                    (run_id, stage["key"], stage["order"], "pending", None, None, None, None, "Not started because an earlier required stage was blocked.", None)
+                continue
+
+            if stage["key"] == "fetch_data":
+                outcome = run_fetch_data_stage(
+                    connection, secret_store, fred_observation_fetcher, price_fetcher, now, engine_mode
                 )
-        run_status = "blocked"
-        summary = "Manual run stopped safely before publishing a snapshot."
+            elif stage["key"] == "validate_data":
+                outcome = run_validate_data_stage(connection, now, dataset_snapshot_id)
+            elif stage["key"] == "regime_filter":
+                outcome = run_regime_filter_stage(connection, now, dataset_snapshot_id, engine_mode)
+            elif stage["key"] == "factor_engine":
+                outcome = run_factor_engine_stage(
+                    connection, now, dataset_snapshot_id, desk_snapshot_id, engine_mode
+                )
+            elif stage["key"] == "allocation_engine":
+                outcome = run_allocation_engine_stage(connection, now, dataset_snapshot_id, desk_snapshot_id)
+            elif stage["key"] == "instrument_engine":
+                outcome = run_instrument_engine_stage(connection, now, dataset_snapshot_id, desk_snapshot_id)
+            else:
+                # Defensive: no other stage's implementation_status should be
+                # 'ready' yet. factor_engine/allocation_engine/instrument_engine/
+                # publish_snapshot stay 'scaffolded' until their own iteration.
+                outcome = None
+
+            if outcome is None:
+                stage_results.append(
+                    (run_id, stage["key"], stage["order"], "blocked", timestamp, timestamp, 0, 0, "This stage is marked ready but has no registered executor.", "stage_executor_missing")
+                )
+                stage_statuses.append("blocked")
+                blocked = True
+                continue
+
+            dataset_snapshot_id = outcome.dataset_snapshot_id or dataset_snapshot_id
+            desk_snapshot_id = outcome.desk_snapshot_id or desk_snapshot_id
+            stage_results.append(
+                (
+                    run_id, stage["key"], stage["order"], outcome.status, timestamp, timestamp,
+                    outcome.records_read, outcome.records_written, outcome.message, outcome.error_code,
+                )
+            )
+            stage_statuses.append(outcome.status)
+            if outcome.status in {"blocked", "failed"}:
+                blocked = True
+
+        if any(status == "failed" for status in stage_statuses):
+            run_status = "failed"
+        elif any(status == "blocked" for status in stage_statuses):
+            run_status = "blocked"
+        elif any(status == "completed_with_warnings" for status in stage_statuses):
+            run_status = "partial"
+        else:
+            run_status = "completed"
+        summary = (
+            "Manual run stopped safely before publishing a full downstream snapshot."
+            if run_status in {"blocked", "failed"}
+            else "Manual run completed."
+        )
+        # Stages publish into one open dataset/desk snapshot pair (created by
+        # fetch_data/regime_filter) rather than each sealing independently, so
+        # a later 'ready' stage — factor_engine today, allocation/instrument
+        # engines later — can still attach to the same decision (factor_engine
+        # writes dataset-scoped symbol_events, the backtest trade log, which a
+        # sealed dataset would reject). Seal once, here, dataset before desk
+        # (the desk-publish trigger requires an already-sealed matching
+        # dataset), after every stage that will run this pass has run.
+        if dataset_snapshot_id:
+            connection.execute(
+                "UPDATE dataset_snapshots SET immutable = 1 WHERE id = ? AND immutable = 0",
+                (dataset_snapshot_id,),
+            )
+        if desk_snapshot_id:
+            connection.execute(
+                "UPDATE desk_snapshots SET immutable = 1 WHERE id = ? AND immutable = 0",
+                (desk_snapshot_id,),
+            )
 
     connection.execute(
         """
@@ -1008,10 +1180,10 @@ def run_pipeline(
     connection.execute(
         """
         UPDATE pipeline_runs
-        SET finished_at = ?, status = ?, summary = ?
+        SET finished_at = ?, status = ?, summary = ?, dataset_snapshot_id = ?, desk_snapshot_id = ?
         WHERE run_id = ?
         """,
-        (timestamp, run_status, summary, run_id),
+        (timestamp, run_status, summary, dataset_snapshot_id, desk_snapshot_id, run_id),
     )
     row = connection.execute(
         "SELECT * FROM pipeline_runs WHERE run_id = ?", (run_id,)
