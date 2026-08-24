@@ -1100,6 +1100,40 @@ INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurre
      'Promoted naive-v1 -> naive-v2: per-factor scoring reframed from a fixed hand-picked target to a real surprise against the series'' own trailing statistical average, motivated by the macro-announcement-surprise literature (see strategy_versions.thesis for citations). Still naive by design -- Milestone 4''s statistical validation gate has not run against this version yet.',
      'naive-v2');
 
+-- naive-v2: cross_sectional_momentum's horizon blend weights (v1: fixed
+-- 0.2/0.3/0.5) are replaced by a real per-horizon Pearson-correlation
+-- significance test (pooled horizon-return vs. 21-trading-day-forward-return
+-- across the staging universe, Benjamini-Hochberg corrected -- the same
+-- method already proven in engine/research/factor_symbol_correlation.py,
+-- Milestone 4 step 1), run fresh every pipeline run against whatever price
+-- history was actually fetched. Weight is proportional to |r| among
+-- horizons that clear correction; if none clear it, every horizon falls
+-- back to equal weight -- a real, honestly-labeled result, never a blocked
+-- or hidden score. v1's code (engine/factors/momentum.py) stays untouched
+-- and importable so any dataset snapshot already sealed under naive-v1
+-- stays honestly reproducible; this is a NEW version row, not a rewrite.
+INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
+    ('cross_sectional_momentum', 'naive-v2', '2026-08-25T00:00:00Z',
+     'If a momentum horizon''s historical value actually correlates with real forward returns across the staging universe, it should be weighted by that measured relationship instead of a hand-picked constant; a horizon with no measurable relationship should not be weighted as if it does.',
+     'None claimed. The per-horizon test is real (Pearson r + Benjamini-Hochberg correction, same method as the macro factor-significance research), but it is one narrow test, not the full Milestone 4 gate -- no decorrelation across the three horizons and no fitted (vs. |r|-proportional or equal) weight has run yet.',
+     'naive-v2: replaced v1''s fixed 0.2/0.3/0.5 horizon blend with weights computed fresh every run from a real significance test over that run''s own fetched price history. Same 1m/3m/6m horizons, same cross-sectional z-score ranking -- only the horizon-weighting mechanism changed, per the project''s "one strategy, one step improve" rule.',
+     '{"horizons_days":{"1m":21,"3m":63,"6m":126},"forward_horizon_trading_days":21,"min_samples":24,"stride_days":5,"correction_method":"benjamini_hochberg","alpha":0.05,"weight_rule":"proportional_to_abs_correlation_among_significant_horizons_else_equal_weight"}',
+     'backend/engine/factors/momentum_v2.py', '2026-08-25T00:00:00Z', '2027-02-25');
+
+UPDATE strategies SET current_version = 'naive-v2', updated_at = '2026-08-25T00:00:00Z'
+WHERE strategy_key = 'cross_sectional_momentum';
+
+INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, label, value, unit, status, window_label, as_of, description, sort_order) VALUES
+    ('cross_sectional_momentum', 'naive-v2', 'decay_rate', 'Signal decay rate', NULL, 'fraction_per_period', 'not_computed', NULL, NULL,
+     'Not yet measured. Requires Milestone 4: decorrelation across horizons and decay estimation over real forward returns.', 1),
+    ('cross_sectional_momentum', 'naive-v2', 'estimated_capacity_usd', 'Estimated capacity', NULL, 'usd', 'not_computed', NULL, NULL,
+     'Not yet measured. Requires liquidity/market-impact modeling not yet built.', 2);
+
+INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
+    ('naive-v2-cross_sectional_momentum-promoted', 'cross_sectional_momentum', '2026-08-25T00:00:00Z', 'active', 'active',
+     'Promoted naive-v1 -> naive-v2: horizon blend weights reframed from hand-picked constants to a real, per-run Pearson/Benjamini-Hochberg significance test against pooled forward returns (see strategy_versions.thesis). Still naive by design -- full Milestone 4 rigor (decorrelation, fitted weights, decay) has not run against this version yet.',
+     'naive-v2');
+
 -- Research results remain DB-indexed. Files are optional, reproducible output
 -- artifacts identified by repository-relative path and checksum; Markdown is
 -- never an engine input or the canonical result store.

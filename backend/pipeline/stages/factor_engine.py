@@ -5,7 +5,8 @@ import sqlite3
 from datetime import date, datetime
 from typing import Any
 
-from backend.engine.factors import Bar, InsufficientPriceDataError, compute_cross_section, suggested_weight
+from backend.engine.factors import Bar, InsufficientPriceDataError, compute_cross_section_v2, suggested_weight
+from backend.engine.factors.momentum_v2 import MIN_SAMPLES as MOMENTUM_MIN_SAMPLES
 from backend.engine.instruments import conviction_from_composite
 from backend.engine.timing import (
     BacktestBar,
@@ -36,7 +37,7 @@ def run_factor_engine_stage(
     desk_snapshot_id: str | None,
     engine_mode: str,
 ) -> StageOutcome:
-    """Rank the staging universe by naive cross-sectional momentum AND run a
+    """Rank the staging universe by naive-v2 IC-weighted cross-sectional momentum AND run a
     naive per-symbol MACD/RSI backtest, attaching both to the still-open
     desk/dataset snapshots regime_filter and fetch_data created.
     """
@@ -76,7 +77,7 @@ def run_factor_engine_stage(
             bars_by_symbol[row["symbol"]] = [Bar(time=bar["time"], close=bar["close"]) for bar in bar_rows]
 
     try:
-        ranked = compute_cross_section(bars_by_symbol)
+        ranked, horizon_weights = compute_cross_section_v2(bars_by_symbol)
     except InsufficientPriceDataError as error:
         return StageOutcome(
             status="failed",
@@ -93,9 +94,32 @@ def run_factor_engine_stage(
     base_weight = 1.0 / sum(1 for row in staging_rows if row["category"] != "crypto_reference")
 
     factor_dimension_rows = [
-        (desk_snapshot_id, "momentum_1m", "1-month momentum", "return_fraction", "Trailing ~21 trading day return.", 0.2, 1),
-        (desk_snapshot_id, "momentum_3m", "3-month momentum", "return_fraction", "Trailing ~63 trading day return.", 0.3, 2),
-        (desk_snapshot_id, "momentum_6m", "6-month momentum", "return_fraction", "Trailing ~126 trading day return.", 0.5, 3),
+        (
+            desk_snapshot_id,
+            f"momentum_{item.horizon}",
+            f"{item.horizon.upper()} momentum",
+            "return_fraction",
+            (
+                f"Trailing ~{item.lookback_days} trading day return. naive-v2: weight is real, computed this run "
+                f"from a pooled Pearson IC test against {item.sample_size} paired (horizon-return, 21d-forward-return) "
+                "samples across the staging universe, Benjamini-Hochberg corrected. "
+                + (
+                    f"r={item.correlation:+.3f}, adjusted p={item.adjusted_p_value:.3f} "
+                    f"({'significant' if item.significant else 'not significant'} at alpha=0.05); "
+                    "weight is proportional to |r| among significant horizons."
+                    if item.status == "ok"
+                    else f"Only {item.sample_size} samples (need {MOMENTUM_MIN_SAMPLES}); naive equal-weight fallback."
+                )
+                + (
+                    " No horizon cleared correction this run, so every horizon falls back to equal weight."
+                    if item.status == "ok" and not item.significant and not any(w.significant for w in horizon_weights)
+                    else ""
+                )
+            ),
+            item.weight,
+            {"1m": 1, "3m": 2, "6m": 3}[item.horizon],
+        )
+        for item in horizon_weights
     ]
     connection.executemany(
         """
@@ -132,7 +156,7 @@ def run_factor_engine_stage(
                 None,
                 "USD",
                 "ranked",
-                f"Rank {item.rank} of {universe_size} in the naive cross-sectional momentum ranking; composite score {item.composite_score:+.2f}.",
+                f"Rank {item.rank} of {universe_size} in the naive-v2 IC-weighted cross-sectional momentum ranking; composite score {item.composite_score:+.2f}.",
                 item.last_close,
                 f"{item.last_date}T00:00:00Z",
                 item.composite_score,
@@ -150,7 +174,7 @@ def run_factor_engine_stage(
                 conviction_from_composite(item.composite_score),
                 item.rank,
                 "ranked",
-                f"Blended 1M/3M/6M momentum {item.blended_return:+.2%}, cross-sectional z-score composite {item.composite_score:+.2f}.",
+                f"IC-weighted 1M/3M/6M momentum blend {item.blended_return:+.2%} (naive-v2: horizon weights from this run's own significance test, not hand-picked), cross-sectional z-score composite {item.composite_score:+.2f}.",
             )
         )
         horizon_by_key = {ret.horizon: ret for ret in item.returns}
@@ -180,7 +204,7 @@ def run_factor_engine_stage(
                 item.direction,
                 item.strength,
                 f"{item.direction.capitalize()} - rank {item.rank} of {universe_size}",
-                f"Naive blended 1M/3M/6M momentum of {item.blended_return:+.2%} ranks {item.rank} of {universe_size} peers "
+                f"Naive-v2 IC-weighted 1M/3M/6M momentum of {item.blended_return:+.2%} ranks {item.rank} of {universe_size} peers "
                 f"(cross-sectional composite {item.composite_score:+.2f}). Not the same as the MACD/RSI single-name timing "
                 "backtest below — this is cross-sectional standing, that is historical entry/exit timing.",
                 None,
@@ -198,7 +222,7 @@ def run_factor_engine_stage(
                     symbol,
                     "not_available" if item.direction == "neutral" else f"Naive {item.direction} tilt vs. equal-weight baseline",
                     f"Equal-weight baseline is {base_weight:.2%} (1 / {universe_size - 1} non-reference staging symbols); "
-                    f"naive momentum tilt suggests {target:.2%} ({(target - base_weight):+.2%} vs. baseline). "
+                    f"naive-v2 IC-weighted momentum tilt suggests {target:.2%} ({(target - base_weight):+.2%} vs. baseline). "
                     "No real position is tracked yet — this is a research signal, not an executed or held position.",
                     confidence,
                     base_weight,
@@ -493,7 +517,7 @@ def run_factor_engine_stage(
     return StageOutcome(
         status="completed",
         message=(
-            f"Ranked {universe_size} staging symbols by naive cross-sectional momentum "
+            f"Ranked {universe_size} staging symbols by naive-v2 IC-weighted cross-sectional momentum "
             f"and ran a real MACD/RSI backtest for {backtests_run} of them "
             f"({sum(1 for row in event_rows if row[4] == 'backtest_entry_fill')} entries logged). "
             + (
