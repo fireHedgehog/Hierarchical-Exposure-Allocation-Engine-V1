@@ -55,7 +55,7 @@ Each stage follows the same contract proven since `regime_filter`: a real functi
 - [Edition V1](editions/edition-v1.md): archived initial product thesis, hierarchy, and operating principles.
 - [Roadmap](roadmap.md): durable demo-to-real sequence, completion evidence, and the UI surface unlocked by each phase.
 - [Engine milestones](engine-milestones.md): living working doc for the current free-data-first engine build sequence; edited in place, versioned by a table at its top, not archived per change.
-- Methodology (Operations → Methodology, in-app, not a Markdown file): a box-and-arrow reference for the actual computation chain per engine layer — real equations, real APA7 citations where a technique comes from published literature, honest "no citation, naive" labels where it doesn't. Updated in the app on request at milestones, not automatically.
+- Methodology (Operations → Methodology, in-app, not a Markdown file): every named desk, real or explicitly null, one card each — top-level parameter, code reference, and real APA7 citations where a technique comes from published literature. Deep structural detail (versions, sub-components, diagnostics) is deliberately not duplicated here; it lives on each desk's Strategy registry record. Updated in the app on request at milestones, not automatically.
 - [Architecture](architecture.md): boundaries and data flow.
 - [Operations](operations.md): credentials, manual runs, testing, and scheduling gate.
 - [Strategy lifecycle](strategy-lifecycle.md): evidence, promotion, monitoring, and retirement.
