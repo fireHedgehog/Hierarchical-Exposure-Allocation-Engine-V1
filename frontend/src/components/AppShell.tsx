@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import {
   Activity,
   BarChart3,
+  BookMarked,
   BookOpenCheck,
   ChevronRight,
   Database,
+  FlaskConical,
   KeyRound,
   Menu,
   Network,
@@ -118,6 +120,16 @@ export function AppShell() {
           <NavLink to="/operations/strategies">
             <BookOpenCheck aria-hidden="true" />
             <span>Strategy registry</span>
+            <ChevronRight className="nav-chevron" aria-hidden="true" />
+          </NavLink>
+          <NavLink to="/operations/research">
+            <FlaskConical aria-hidden="true" />
+            <span>Research</span>
+            <ChevronRight className="nav-chevron" aria-hidden="true" />
+          </NavLink>
+          <NavLink to="/operations/methodology">
+            <BookMarked aria-hidden="true" />
+            <span>Methodology</span>
             <ChevronRight className="nav-chevron" aria-hidden="true" />
           </NavLink>
         </nav>
