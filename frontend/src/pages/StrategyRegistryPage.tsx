@@ -60,14 +60,19 @@ function StrategyCard({ strategy }: { strategy: StrategySummary }) {
       <div className="strategy-card-header">
         <span className="operator-icon"><BookOpenCheck aria-hidden="true" size={16} /></span>
         <div><span>{strategy.family || NOT_AVAILABLE}</span><h3>{strategy.name}</h3><code>{strategy.key}</code></div>
-        <StatusPill value={strategy.status} />
+        <div className="strategy-card-header-pills">
+          <StatusPill value={strategy.status} />
+          <StatusPill value={strategy.verification_status || "registered_only"} />
+        </div>
       </div>
       <p>{strategy.summary || "No database summary is available."}</p>
       <dl className="strategy-card-metrics">
         <div><dt>Version</dt><dd>{strategy.version || NOT_AVAILABLE}</dd></div>
+        <div><dt>Function</dt><dd><code>{strategy.code_reference || NOT_AVAILABLE}</code></dd></div>
+        <div><dt>Last checked</dt><dd>{formatTimestamp(strategy.last_checked_at)}</dd></div>
+        <div><dt>Next review</dt><dd>{formatTimestamp(strategy.next_review_at)}</dd></div>
         <div><dt>Decay</dt><dd>{strategy.decay ? formatScalar(strategy.decay.value, strategy.decay.unit) : NOT_AVAILABLE}</dd></div>
         <div><dt>Decay status</dt><dd><StatusPill value={strategy.decay?.status} /></dd></div>
-        <div><dt>Decay as of</dt><dd>{formatTimestamp(strategy.decay?.as_of)}</dd></div>
         <div><dt>Added</dt><dd>{formatTimestamp(strategy.added_at)}</dd></div>
         <div><dt>Retired</dt><dd>{formatTimestamp(strategy.retired_at)}</dd></div>
       </dl>

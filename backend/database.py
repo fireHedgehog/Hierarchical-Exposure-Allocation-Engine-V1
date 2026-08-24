@@ -134,7 +134,9 @@ def _catalog_compatibility_prelude(connection: sqlite3.Connection) -> str:
             statements.append(
                 "ALTER TABLE strategy_versions ADD COLUMN verification_status TEXT "
                 "NOT NULL DEFAULT 'registered_only' "
-                "CHECK (verification_status IN ('registered_only', 'verified'));"
+                "CHECK (verification_status IN ("
+                "'registered_only', 'verified', 'not_significant', "
+                "'collinear', 'decayed', 'outdated'));"
             )
 
     return "\n".join(statements)

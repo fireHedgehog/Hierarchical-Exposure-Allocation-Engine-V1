@@ -1206,6 +1206,40 @@ def _decay_for_strategy(
     return dict(row) if row else None
 
 
+def _current_version_record(
+    connection: sqlite3.Connection, strategy_key: str, version: str | None
+) -> dict[str, Any] | None:
+    if version is None:
+        return None
+    row = connection.execute(
+        """
+        SELECT code_reference, verification_status, next_review_at
+        FROM strategy_versions WHERE strategy_key = ? AND version = ?
+        """,
+        (strategy_key, version),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def _last_checked_at(
+    connection: sqlite3.Connection, strategy_key: str, version: str | None
+) -> str | None:
+    """The most recent as_of across this version's diagnostics -- the real
+    'when was this last checked' fact, not a guess. NULL means genuinely
+    never checked, not 'unknown'."""
+
+    if version is None:
+        return None
+    row = connection.execute(
+        """
+        SELECT MAX(as_of) AS last_checked FROM strategy_diagnostics
+        WHERE strategy_key = ? AND version = ? AND as_of IS NOT NULL
+        """,
+        (strategy_key, version),
+    ).fetchone()
+    return row["last_checked"] if row else None
+
+
 def list_strategies(connection: sqlite3.Connection) -> dict[str, Any]:
     rows = connection.execute(
         "SELECT * FROM strategies ORDER BY family, name, strategy_key"
@@ -1214,6 +1248,7 @@ def list_strategies(connection: sqlite3.Connection) -> dict[str, Any]:
     strategies = []
     for row in rows:
         summary[row["status"]] += 1
+        version_record = _current_version_record(connection, row["strategy_key"], row["current_version"])
         strategies.append(
             {
                 "key": row["strategy_key"],
@@ -1222,6 +1257,10 @@ def list_strategies(connection: sqlite3.Connection) -> dict[str, Any]:
                 "summary": row["summary"],
                 "status": row["status"],
                 "version": row["current_version"],
+                "verification_status": (version_record or {}).get("verification_status"),
+                "code_reference": (version_record or {}).get("code_reference"),
+                "next_review_at": (version_record or {}).get("next_review_at"),
+                "last_checked_at": _last_checked_at(connection, row["strategy_key"], row["current_version"]),
                 "decay": _decay_for_strategy(connection, row["strategy_key"], row["current_version"]),
                 "added_at": row["added_at"],
                 "retired_at": row["retired_at"],

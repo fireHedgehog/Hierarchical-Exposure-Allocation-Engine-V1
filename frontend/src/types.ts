@@ -786,6 +786,10 @@ export interface StrategySummary {
   summary?: Nullable<string>;
   status?: Nullable<string>;
   version?: Nullable<string>;
+  verification_status?: Nullable<string>;
+  code_reference?: Nullable<string>;
+  next_review_at?: Nullable<string>;
+  last_checked_at?: Nullable<string>;
   decay?: Nullable<StrategyDecay>;
   added_at?: Nullable<string>;
   retired_at?: Nullable<string>;

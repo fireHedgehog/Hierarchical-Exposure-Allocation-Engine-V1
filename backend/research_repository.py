@@ -6,7 +6,12 @@ from datetime import datetime
 
 from backend.engine.factors.types import Bar
 from backend.engine.regime.types import SeriesObservation
-from backend.engine.research import FORWARD_HORIZON_TRADING_DAYS, MIN_SAMPLES, compute_factor_symbol_significance
+from backend.engine.research import (
+    FORWARD_HORIZON_TRADING_DAYS,
+    MIN_SAMPLES,
+    FactorSignificanceRun,
+    compute_factor_symbol_significance,
+)
 from backend.pipeline.stages.common import SERIES_METADATA, _iso_z, _security_id_for
 
 # Milestone 4, step 1 (docs/engine-milestones.md): real macro-factor x
@@ -105,6 +110,8 @@ def run_factor_significance_research(
             run.significant_count, summary, timestamp, timestamp,
         ),
     )
+    _write_macro_regime_diagnostic(connection, run, summary, timestamp)
+
     connection.executemany(
         """
         INSERT INTO factor_significance_results (
@@ -152,6 +159,52 @@ def run_factor_significance_research(
             for result in run.results
         ],
     }
+
+
+def _write_macro_regime_diagnostic(
+    connection: sqlite3.Connection,
+    run: FactorSignificanceRun,
+    summary: str,
+    timestamp: str,
+) -> None:
+    """Real, auto-updating link from this research run onto the strategy
+    registry: 'last checked' becomes a real fact (MAX(as_of) across
+    diagnostics), not a guess. Deliberately does NOT touch verification_status
+    -- this run tests each macro factor against each symbol individually, not
+    the regime composite as one unit, so flipping macro_regime_composite to
+    'verified' or 'not_significant' from this alone would overclaim. The
+    honest move is a diagnostic fact, not a status the test doesn't support.
+    """
+
+    strategy = connection.execute(
+        "SELECT current_version FROM strategies WHERE strategy_key = 'macro_regime_composite'"
+    ).fetchone()
+    if strategy is None or strategy["current_version"] is None:
+        return
+    connection.execute(
+        """
+        INSERT INTO strategy_diagnostics (
+            strategy_key, version, metric_key, label, value, unit,
+            status, window_label, as_of, description, sort_order
+        ) VALUES ('macro_regime_composite', ?, 'factor_significance_summary',
+            'Macro factor significance (vs. staging symbols)', ?, 'count_significant_of_tested',
+            'ok', ?, ?, ?, 3)
+        ON CONFLICT(strategy_key, version, metric_key) DO UPDATE SET
+            value = excluded.value, status = excluded.status, window_label = excluded.window_label,
+            as_of = excluded.as_of, description = excluded.description
+        """,
+        (
+            strategy["current_version"],
+            float(run.significant_count),
+            f"{run.test_count} pairs tested",
+            timestamp,
+            (
+                f"{summary} Tests each of the 8 macro factors against each staging symbol individually, "
+                "not the regime composite as a single unit -- this does not itself verify or invalidate "
+                "macro_regime_composite; see Operations -> Research for the full pair-by-pair breakdown."
+            ),
+        ),
+    )
 
 
 def get_latest_factor_significance_run(connection: sqlite3.Connection) -> dict[str, object] | None:

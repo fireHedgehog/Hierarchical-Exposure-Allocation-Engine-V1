@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
     value TEXT NOT NULL
 );
 
-INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '13')
+INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '14')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 INSERT OR IGNORE INTO schema_metadata (key, value) VALUES
@@ -943,13 +943,23 @@ CREATE TABLE IF NOT EXISTS strategy_versions (
     next_review_at TEXT,
     -- Distinct from strategies.status (which is lifecycle: draft/active/
     -- watching/retired). This is a separate fact: has this specific version
-    -- actually passed Milestone 4's statistical gate (real significance,
-    -- decorrelation, decay measured) or is it still just "a real function
-    -- registered here, naive and unvalidated." A version can be 'active' in
-    -- the live pipeline while still 'registered_only' here -- that is this
-    -- project's current, honest, expected state for every naive-v1 row.
+    -- actually passed Milestone 4's statistical gate, and if not, why not.
+    -- Never a kill switch -- a version stays 'active' in the live pipeline
+    -- (strategies.status) no matter what this says. Deleting or disabling a
+    -- naive-but-real function because it failed validation would break a
+    -- working page in exchange for a correctness claim staging never made;
+    -- the honest fix is always a label here, never removing the function.
+    --   registered_only -- real function, not yet tested at all (default)
+    --   verified        -- passed significance + decorrelation + decay
+    --   not_significant -- tested; p-value indicates noise, not a real edge
+    --   collinear       -- tested; redundant with another registered factor
+    --   decayed         -- was verified; a later re-test shows it faded
+    --   outdated        -- superseded by a newer approach, kept for reference
     verification_status TEXT NOT NULL DEFAULT 'registered_only' CHECK (
-        verification_status IN ('registered_only', 'verified')
+        verification_status IN (
+            'registered_only', 'verified', 'not_significant',
+            'collinear', 'decayed', 'outdated'
+        )
     ),
     PRIMARY KEY (strategy_key, version)
 );

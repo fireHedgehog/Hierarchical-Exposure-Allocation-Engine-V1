@@ -2215,6 +2215,7 @@ summary:focus-visible,
 .strategy-card-header span:not(.status-pill) { color: var(--faint); font-size: 7px; text-transform: uppercase; }
 .strategy-card-header h3 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 19px; font-weight: 500; }
 .strategy-card-header code { color: var(--muted); font-size: 8px; }
+.strategy-card-header-pills { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
 .strategy-card > p { min-height: 39px; margin: 14px 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
 .strategy-card-metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; margin: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 7px; background: var(--line); }
 .strategy-card-metrics > div { padding: 9px; background: var(--surface); }
