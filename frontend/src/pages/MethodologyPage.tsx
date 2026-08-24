@@ -22,19 +22,26 @@ interface Layer {
 const LAYERS: Layer[] = [
   {
     key: "macro_regime",
-    name: "Macro regime composite",
-    codeReference: "backend/engine/regime/scoring.py",
+    name: "Macro regime composite (naive-v2)",
+    codeReference: "backend/engine/regime/scoring_v2.py",
     strategyKey: "macro_regime_composite",
-    summary: "8 real FRED series -> a single regime label and confidence.",
+    summary: "8 real FRED series -> a single regime label and confidence. naive-v2 scores each factor's real surprise against its own trailing statistical expectation, not a fixed hand-picked target -- markets price the beat/miss, not the level.",
     steps: [
-      { label: "Real observations", formula: "INDPRO, CPIAUCSL, PPIACO, PCEPILFE,\nPAYEMS, NFCI, VIXCLS, DGS10" },
-      { label: "Per-factor score", formula: "YoY or level vs. a threshold,\nclamp(sign * (x - target) / scale, -1, 1)" },
+      { label: "Real observations", formula: "INDPRO, CPIAUCSL, PPIACO, PCEPILFE,\nPAYEMS, NFCI, VIXCLS, DGS10\n(full real history, not just latest)" },
+      { label: "Trailing expectation", formula: "expected = trailing mean of the series'\nown last N real points\n(N: 6 monthly, 12 weekly, 60 daily)" },
+      { label: "Surprise", formula: "surprise = latest - expected\n(YoY surprise for monthly series,\nlevel surprise for NFCI/VIXCLS/DGS10)" },
+      { label: "Per-factor score", formula: "clamp(sign * surprise / scale, -1, 1)" },
       { label: "Weighted sum", formula: "composite = sum(w_i * contribution_i)\nw: growth .15, inflation .15, ppi .10,\npce .15, employment .10, liquidity .15,\nvolatility .10, rates .10" },
       { label: "Confidence", formula: "clamp(0.5 + composite / 2, 0.05, 0.95)" },
       { label: "Label", formula: "risk-on >= +0.15, risk-off <= -0.15,\nelse mixed" },
     ],
-    literature: null,
-    naiveParameters: "All 8 weights and every per-factor scale/target/center are hand-picked, not fit. Milestone 4 tests each factor's real significance (see Operations -> Research) before any weight is trusted.",
+    literature: [
+      "Andersen, T. G., Bollerslev, T., Diebold, F. X., & Vega, C. (2003). Micro effects of macro announcements: Real-time price discovery in foreign exchange. American Economic Review, 93(1), 38-62.",
+      "Balduzzi, P., Elton, E. J., & Green, T. C. (2001). Economic news and bond prices: Evidence from the U.S. Treasury market. Journal of Financial and Quantitative Analysis, 36(4), 523-543.",
+      "Krueger, J. T., & Kuttner, K. N. (1996). The Fed funds futures rate as a predictor of Federal Reserve policy. Journal of Futures Markets, 16(8), 865-879.",
+      "Muth, J. F. (1961). Rational expectations and the theory of price movements. Econometrica, 29(3), 315-335.",
+    ],
+    naiveParameters: "All 8 weights are unchanged from naive-v1 and still hand-picked, not fit. The expectation windows (6/12/60 periods) and surprise scales are also hand-picked. Critically: the 'expectation' is a trailing statistical mean, not a real market consensus -- no free consensus/survey feed exists yet (Trading Economics is the planned paid source). Milestone 4 tests each factor's real significance (see Operations -> Research) before any weight is trusted. naive-v1 (level-vs-fixed-target) stays in the codebase, untouched, for reproducing any snapshot already sealed under it.",
   },
   {
     key: "cross_sectional_momentum",

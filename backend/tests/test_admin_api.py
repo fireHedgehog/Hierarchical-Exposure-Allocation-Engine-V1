@@ -98,12 +98,39 @@ def make_fred_fetcher(
     ) -> list[FredObservation]:
         calls.append((secret, series_id, observation_start, observation_end))
         year_ago_value, latest_value = series_values[series_id]
+        start = date.fromisoformat(observation_start)
         end = date.fromisoformat(observation_end)
+        total_days = (end - start).days or 1
+        # A real, if synthetic, linear trend across the whole requested window
+        # (not just two points): naive-v2's surprise scoring needs several
+        # trailing observations per series to compute a real trailing-mean
+        # expectation, not a fixed target. The slope is fixed so the point
+        # exactly one year before `end` lands on `year_ago_value` and the
+        # last point lands on `latest_value`, preserving every existing
+        # test's YoY-based scenario configuration.
+        slope_per_day = (latest_value - year_ago_value) / 365.0
+        point_count = max(65, min(140, total_days // 25))
+        step_days = total_days / (point_count - 1) if point_count > 1 else total_days
+        observations = []
+        for index in range(point_count):
+            offset_days = round(index * step_days)
+            observation_date = (start + timedelta(days=offset_days)).isoformat()
+            days_before_end = total_days - offset_days
+            value = latest_value - slope_per_day * days_before_end
+            observations.append(
+                FredObservation(series_id, observation_date, value, realtime_start, realtime_end, "lin")
+            )
+        # Guarantee the exact configured endpoints are present regardless of
+        # step-size rounding, since several tests assert on them directly.
         year_ago_date = (end - timedelta(days=365)).isoformat()
-        return [
-            FredObservation(series_id, year_ago_date, year_ago_value, realtime_start, realtime_end, "lin"),
-            FredObservation(series_id, observation_end, latest_value, realtime_start, realtime_end, "lin"),
-        ]
+        observations.append(
+            FredObservation(series_id, year_ago_date, year_ago_value, realtime_start, realtime_end, "lin")
+        )
+        observations.append(
+            FredObservation(series_id, observation_end, latest_value, realtime_start, realtime_end, "lin")
+        )
+        deduped = {observation.observation_date: observation for observation in observations}
+        return [deduped[key] for key in sorted(deduped)]
 
     fetcher.calls = calls  # type: ignore[attr-defined]
     return fetcher
@@ -177,7 +204,7 @@ def test_empty_v6_database_has_operator_and_readiness_catalog_but_no_decision_sn
         base_url="http://127.0.0.1:8000",
         client=("127.0.0.1", 52000),
     ) as client:
-        assert client.get("/api/health").json()["schema_version"] == "15"
+        assert client.get("/api/health").json()["schema_version"] == "16"
         assert client.get("/api/v1/desk/latest").status_code == 404
         payload = client.get("/api/v1/admin/providers").json()
         providers = payload["providers"]
@@ -405,13 +432,19 @@ def test_seeded_admin_inventory_strategies_signals_and_chart_annotations(
         "/api/v1/admin/strategies/macro_regime_composite"
     ).json()["strategy"]
     assert real_strategy["status"] == "active"
-    real_version = real_strategy["versions"][0]
-    assert real_version["version"] == "naive-v1"
+    assert real_strategy["version"] == "naive-v2"
+    versions_by_number = {version["version"]: version for version in real_strategy["versions"]}
+    assert set(versions_by_number) == {"naive-v1", "naive-v2"}
+    real_version = versions_by_number["naive-v2"]
     assert real_version["verification_status"] == "registered_only"
-    assert real_version["next_review_at"] == "2027-02-24"
-    assert real_version["code_reference"] == "backend/engine/regime/scoring.py"
+    assert real_version["next_review_at"] == "2027-02-25"
+    assert real_version["code_reference"] == "backend/engine/regime/scoring_v2.py"
     decay_diagnostic = next(d for d in real_version["diagnostics"] if d["metric_key"] == "decay_rate")
     assert decay_diagnostic["value"] is None
+    # naive-v1 stays present, unedited, for historical reproducibility of any
+    # dataset snapshot already sealed under it.
+    v1_version = versions_by_number["naive-v1"]
+    assert v1_version["code_reference"] == "backend/engine/regime/scoring.py"
     assert decay_diagnostic["status"] == "not_computed"
 
     tlt = client.get("/api/v1/symbols/TLT").json()
@@ -1864,11 +1897,12 @@ def test_legacy_demo_gets_complete_versioned_v3_fixture_on_reseed(tmp_path: Path
     assert created is True
     with connect(database, read_only=True) as connection:
         assert connection.execute("SELECT COUNT(*) FROM data_assets").fetchone()[0] == 6
-        # 2 synthetic demo fixtures + 5 real engine algorithms registered in schema.sql.
+        # 2 synthetic demo fixtures + 5 real engine algorithms registered in schema.sql
+        # (macro_regime_composite carries 2 versions: naive-v1 and naive-v2).
         assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 7
-        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 7
-        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 16
-        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 7
+        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 8
+        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 18
+        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 8
         synthetic_assets = connection.execute(
             """
             SELECT asset_key, dataset_snapshot_id, row_count

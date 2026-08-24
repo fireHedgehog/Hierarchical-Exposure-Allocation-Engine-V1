@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
     value TEXT NOT NULL
 );
 
-INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '15')
+INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '16')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 INSERT OR IGNORE INTO schema_metadata (key, value) VALUES
@@ -1070,6 +1070,35 @@ INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurre
     ('naive-v1-macd_rsi_single_name_timing-active', 'macd_rsi_single_name_timing', '2026-08-24T00:00:00Z', NULL, 'active', 'Registered directly as active: real function over real data, proven end-to-end in the live pipeline (Milestone 3). Naive/unvalidated by design -- Milestone 4 is the statistical validation gate.', 'naive-v1'),
     ('naive-v1-risk_envelope_allocation-active', 'risk_envelope_allocation', '2026-08-24T00:00:00Z', NULL, 'active', 'Registered directly as active: real function over real data, proven end-to-end in the live pipeline (Milestone 3). Naive/unvalidated by design -- Milestone 4 is the statistical validation gate.', 'naive-v1'),
     ('naive-v1-conviction_instrument_selection-active', 'conviction_instrument_selection', '2026-08-24T00:00:00Z', NULL, 'active', 'Registered directly as active: real function over real data, proven end-to-end in the live pipeline (Milestone 3). Naive/unvalidated by design -- Milestone 4 is the statistical validation gate.', 'naive-v1');
+
+-- naive-v2: macro_regime_composite's per-factor scoring moved from a fixed
+-- hand-picked target (v1) to a real surprise against the series' own
+-- trailing statistical average -- the "beat vs. miss" framing real macro
+-- markets actually price, not a level check against an arbitrary number.
+-- v1's code (engine/regime/scoring.py) stays untouched and importable so
+-- any dataset snapshot already sealed under naive-v1 stays honestly
+-- reproducible; this is a NEW version row, not a rewrite of the old one.
+INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
+    ('macro_regime_composite', 'naive-v2', '2026-08-25T00:00:00Z',
+     'Markets price the SURPRISE in a macro release relative to an expectation already priced in, not its raw level or its distance from an arbitrary fixed target (Andersen, Bollerslev, Diebold & Vega, 2003; Balduzzi, Elton & Green, 2001) -- the same logic CME FedWatch-style tools apply to policy-rate expectations (Krueger & Kuttner, 1996).',
+     'None claimed. No free real-time consensus/survey-expectations feed exists for this project (Trading Economics is the planned paid source; not purchased). The "expectation" is a disclosed, naive trailing statistical mean -- an adaptive-expectations proxy (Muth, 1961), not a market consensus. Milestone 4 still has to test this version''s real significance before any weight is trusted.',
+     'naive-v2: replaced fixed-target per-factor scoring with real surprise-vs-trailing-mean scoring for all 8 factors. Same weights, same aggregation, same confidence/label thresholds as naive-v1 -- only the per-factor contribution formula changed, per the project''s "one strategy, one step improve" rule.',
+     '{"expectation_windows":{"growth":6,"inflation":6,"ppi":6,"pce":6,"employment":6,"liquidity":12,"volatility":60,"rates":60},"surprise_scales":{"growth":0.015,"inflation":0.01,"ppi":0.02,"pce":0.008,"employment":0.005,"liquidity":0.1,"volatility":5.0,"rates":0.2}}',
+     'backend/engine/regime/scoring_v2.py', '2026-08-25T00:00:00Z', '2027-02-25');
+
+UPDATE strategies SET current_version = 'naive-v2', updated_at = '2026-08-25T00:00:00Z'
+WHERE strategy_key = 'macro_regime_composite';
+
+INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, label, value, unit, status, window_label, as_of, description, sort_order) VALUES
+    ('macro_regime_composite', 'naive-v2', 'decay_rate', 'Signal decay rate', NULL, 'fraction_per_period', 'not_computed', NULL, NULL,
+     'Not yet measured. Requires Milestone 4: statistical significance testing and decay estimation over real forward returns.', 1),
+    ('macro_regime_composite', 'naive-v2', 'estimated_capacity_usd', 'Estimated capacity', NULL, 'usd', 'not_computed', NULL, NULL,
+     'Not yet measured. Requires liquidity/market-impact modeling not yet built.', 2);
+
+INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
+    ('naive-v2-macro_regime_composite-promoted', 'macro_regime_composite', '2026-08-25T00:00:00Z', 'active', 'active',
+     'Promoted naive-v1 -> naive-v2: per-factor scoring reframed from a fixed hand-picked target to a real surprise against the series'' own trailing statistical average, motivated by the macro-announcement-surprise literature (see strategy_versions.thesis for citations). Still naive by design -- Milestone 4''s statistical validation gate has not run against this version yet.',
+     'naive-v2');
 
 -- Research results remain DB-indexed. Files are optional, reproducible output
 -- artifacts identified by repository-relative path and checksum; Markdown is

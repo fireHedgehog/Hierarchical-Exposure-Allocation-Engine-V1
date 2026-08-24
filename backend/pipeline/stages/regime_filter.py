@@ -4,7 +4,7 @@ import sqlite3
 import uuid
 from datetime import datetime
 
-from backend.engine.regime import InsufficientSeriesDataError, SeriesObservation, compute_regime
+from backend.engine.regime import InsufficientSeriesDataError, SeriesObservation, compute_regime_v2
 from backend.pipeline.stages.common import StageOutcome, _iso_z, _json
 
 
@@ -64,7 +64,7 @@ def run_regime_filter_stage(
         )
 
     try:
-        regime = compute_regime(series, now.date())
+        regime = compute_regime_v2(series, now.date())
     except InsufficientSeriesDataError as error:
         return StageOutcome(
             status="failed",
@@ -98,7 +98,7 @@ def run_regime_filter_stage(
             0,
             "engine_in_progress",
             0,
-            "regime-engine-v1",
+            "regime-engine-v2",
             "Hierarchical desk decision snapshot",
             "Real regime + cross-sectional state computed from free data; allocation/instrument stages not yet implemented.",
             "REAL DATA, NAIVE FIRST-PASS FORMULAS. Downstream allocation and instrument stages are not implemented. "
