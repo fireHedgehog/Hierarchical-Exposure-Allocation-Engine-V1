@@ -1,4 +1,4 @@
-import { BookOpenCheck, Database, FlaskConical, KeyRound, PlayCircle } from "lucide-react";
+import { BookMarked, BookOpenCheck, Database, FlaskConical, KeyRound, PlayCircle } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 const links = [
@@ -7,6 +7,7 @@ const links = [
   { to: "/operations/credentials", end: false, label: "Credentials", icon: KeyRound },
   { to: "/operations/strategies", end: false, label: "Strategies", icon: BookOpenCheck },
   { to: "/operations/research", end: false, label: "Research", icon: FlaskConical },
+  { to: "/operations/methodology", end: false, label: "Methodology", icon: BookMarked },
 ];
 
 export function OperationsNav() {
