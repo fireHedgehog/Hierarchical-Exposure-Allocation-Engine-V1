@@ -2252,6 +2252,7 @@ summary:focus-visible,
 .strategy-version-list small { color: var(--faint); font-size: 7px; }
 .strategy-version-list a { text-decoration: none; }
 .strategy-code-reference { max-width: 230px; overflow: hidden; padding: 7px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.strategy-code-reference--compact { display: inline-block; max-width: none; padding: 4px 8px; border-color: rgba(101,218,181,.24); background: var(--mint-soft); color: var(--mint); font-size: 9px; white-space: normal; word-break: break-all; }
 .strategy-lifecycle-list { display: grid; gap: 6px; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--line); }
 .strategy-lifecycle-list article { display: flex; gap: 9px; padding: 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.015); }
 .strategy-lifecycle-list article > svg { flex: 0 0 auto; color: var(--blue); }

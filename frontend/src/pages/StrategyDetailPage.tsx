@@ -38,6 +38,9 @@ export function StrategyDetailPage() {
             </div>
             <p>{strategy.summary || NOT_AVAILABLE}</p>
             <dl className="strategy-identity-grid">
+              <div><dt>Verification status</dt><dd><StatusPill value={currentVersion?.verification_status || "registered_only"} /></dd></div>
+              <div><dt>Source function</dt><dd><CodeReference value={currentVersion?.code_reference} compact /></dd></div>
+              <div><dt>Next review</dt><dd>{formatTimestamp(currentVersion?.next_review_at)}</dd></div>
               <div><dt>Added to universe</dt><dd>{formatTimestamp(strategy.added_at)}</dd></div>
               <div><dt>Retired</dt><dd>{formatTimestamp(strategy.retired_at)}</dd></div>
               <div><dt>Retirement reason</dt><dd>{strategy.retirement_reason || NOT_AVAILABLE}</dd></div>
@@ -135,10 +138,10 @@ function PublicSpec({ url, compact = false }: { url?: string | null; compact?: b
   return <a className={compact ? "button button--quiet" : "strategy-public-spec strategy-public-spec--linked"} href={safe} target="_blank" rel="noopener noreferrer"><span>Public specification</span><strong>Open versioned source <ExternalLink aria-hidden="true" size={13} /></strong></a>;
 }
 
-function CodeReference({ value }: { value?: string | null }) {
+function CodeReference({ value, compact = false }: { value?: string | null; compact?: boolean }) {
   const safe = safeHttpsUrl(value);
   if (safe) return <a className="button button--quiet" href={safe} target="_blank" rel="noopener noreferrer">Code reference <ExternalLink aria-hidden="true" size={13} /></a>;
-  return <code className="strategy-code-reference">{value || NOT_AVAILABLE}</code>;
+  return <code className={compact ? "strategy-code-reference strategy-code-reference--compact" : "strategy-code-reference"}>{value || NOT_AVAILABLE}</code>;
 }
 
 function ArtifactList({ artifacts }: { artifacts?: ResearchArtifact[] | null }) {
