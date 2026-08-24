@@ -418,8 +418,9 @@ def test_seeded_admin_inventory_strategies_signals_and_chart_annotations(
     # 2 synthetic demo fixtures (seed.py) + 5 real engine algorithms
     # registered in schema.sql (macro_regime_composite, cross_sectional_momentum,
     # macd_rsi_single_name_timing, risk_envelope_allocation,
-    # conviction_instrument_selection).
-    assert strategies["summary"]["total"] == 7
+    # conviction_instrument_selection) + 2 honest draft placeholders with no
+    # implementation yet (sentiment_text_mining, fundamental_analysis).
+    assert strategies["summary"]["total"] == 9
     assert strategies["strategies"][0]["decay"]["value"] is None
     detail = client.get(
         "/api/v1/admin/strategies/state_conditioned_exposure"
@@ -1897,13 +1898,15 @@ def test_legacy_demo_gets_complete_versioned_v3_fixture_on_reseed(tmp_path: Path
     assert created is True
     with connect(database, read_only=True) as connection:
         assert connection.execute("SELECT COUNT(*) FROM data_assets").fetchone()[0] == 6
-        # 2 synthetic demo fixtures + 5 real engine algorithms registered in schema.sql
-        # (macro_regime_composite, cross_sectional_momentum, and
+        # 2 synthetic demo fixtures + 5 real engine algorithms + 2 honest
+        # draft placeholders with no implementation yet (sentiment_text_mining,
+        # fundamental_analysis), all registered in schema.sql. Of the 5 real
+        # ones, macro_regime_composite, cross_sectional_momentum, and
         # macd_rsi_single_name_timing each carry 2 versions: naive-v1 and
         # naive-v2; each version has 2 diagnostics rows; macd_rsi's naive-v2
         # additionally registers 2 strategy_components: macd_crossover and
-        # rsi_overbought_exit).
-        assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 7
+        # rsi_overbought_exit.
+        assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 9
         assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 10
         assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 22
         assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 10

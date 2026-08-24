@@ -1078,6 +1078,18 @@ INSERT OR IGNORE INTO strategies (strategy_key, name, family, summary, status, c
     ('risk_envelope_allocation', 'Risk envelope allocation', 'portfolio_construction', 'Regime confidence scales a gross-exposure multiplier (0.5x-1.5x) against the equal-weight baseline; sleeve targets aggregate factor_engine''s per-symbol tilts.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
     ('conviction_instrument_selection', 'Conviction-scaled instrument selection', 'instrument_expression', '-5..+5 conviction scale maps to equity tilt / credit spread / debit spread / LEAPS, priced with real Black-Scholes (real spot, real realized volatility, real 10Y Treasury rate).', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z');
 
+-- Honest placeholders, not fabricated implementations: these two named
+-- desks have no strategy_versions row because no real function exists yet
+-- ('unknown data stays null'). status='draft' and current_version=NULL are
+-- the actual, queryable "not started" facts -- shown on the Strategy
+-- registry list/detail pages and the Methodology page's not-implemented
+-- cards. Registering the placeholder itself (rather than omitting it
+-- entirely) is what lets a future maintainer see the full 6-desk shape at
+-- a glance instead of having to know it exists from memory or a comment.
+INSERT OR IGNORE INTO strategies (strategy_key, name, family, summary, status, current_version, added_at, retired_at, retirement_reason, public_spec_url, created_at, updated_at) VALUES
+    ('sentiment_text_mining', 'Sentiment / text mining', 'sentiment_analysis', 'Social/news-derived sentiment. Not started -- no free or paid text/social data source is connected (see roadmap.md).', 'draft', NULL, NULL, NULL, NULL, NULL, '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z'),
+    ('fundamental_analysis', 'Fundamental analysis (EPS / earnings)', 'fundamental_analysis', 'Company fundamentals -- EPS, earnings surprises, estimate revisions. Not started -- Intrinio/Benzinga are planned providers, not yet registered or adapted (see roadmap.md).', 'draft', NULL, NULL, NULL, NULL, NULL, '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z');
+
 INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
     ('macro_regime_composite', 'naive-v1', '2026-08-24T00:00:00Z',
      'Each macro series'' deviation from a naive target/center, weighted and summed, proxies the market''s risk-on/risk-off regime; regime confidence should correlate with forward risk-asset performance.',

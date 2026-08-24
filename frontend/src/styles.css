@@ -2300,6 +2300,7 @@ summary:focus-visible,
 .methodology-card__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .methodology-card__header h3 { margin: 0 0 4px; font-family: Georgia, "Times New Roman", serif; font-size: 15px; font-weight: 500; }
 .methodology-card__header code { color: var(--faint); font-size: 7px; }
+.methodology-card__header-right { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .methodology-card__summary { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
 .methodology-flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
 .methodology-flow__step { display: flex; align-items: center; gap: 6px; }
@@ -2310,6 +2311,8 @@ summary:focus-visible,
 .methodology-card__note { display: flex; align-items: flex-start; gap: 8px; padding: 10px; border: 1px solid rgba(229,177,93,.22); border-radius: 8px; background: var(--amber-soft); color: #e9bf78; font-size: 8px; line-height: 1.5; }
 .methodology-card__note svg { flex: 0 0 auto; margin-top: 1px; }
 .methodology-card__note strong { color: inherit; }
+.methodology-card__note code { color: inherit; font-size: 8px; line-height: 1.5; }
+.methodology-card__note--null { border-color: var(--line); background: var(--surface-quiet); color: var(--faint); }
 .methodology-card__literature { display: flex; align-items: flex-start; gap: 8px; padding-top: 9px; border-top: 1px solid var(--line); color: var(--faint); font-size: 7.5px; line-height: 1.6; }
 .methodology-card__literature svg { flex: 0 0 auto; margin-top: 2px; color: var(--blue); }
 .methodology-card__literature ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
