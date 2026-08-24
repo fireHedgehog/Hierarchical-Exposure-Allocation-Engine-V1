@@ -8,7 +8,7 @@ import {
   humanize,
   NOT_AVAILABLE,
 } from "../utils/format";
-import { ProvenanceStrip, StatusPill, Unavailable } from "./Ui";
+import { ConvictionBadge, ProvenanceStrip, StatusPill, Unavailable } from "./Ui";
 
 export function PositionCandidates({
   positions,
@@ -61,6 +61,7 @@ function PositionCard({ position }: { position: PositionCandidate }) {
           <span>{position.name || NOT_AVAILABLE}</span>
         </div>
         <div className="position-card__pills">
+          <ConvictionBadge value={position.conviction} />
           <StatusPill value={position.side} />
           <StatusPill value={position.structure_type} />
           <StatusPill value={position.actionability || position.status} />

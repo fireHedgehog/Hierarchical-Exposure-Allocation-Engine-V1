@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
     value TEXT NOT NULL
 );
 
-INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '14')
+INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '15')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 INSERT OR IGNORE INTO schema_metadata (key, value) VALUES
@@ -469,6 +469,10 @@ CREATE TABLE IF NOT EXISTS position_candidates (
     name TEXT NOT NULL,
     side TEXT NOT NULL,
     structure_type TEXT NOT NULL,
+    -- conviction_from_composite(composite_score), the -5..+5 scale that
+    -- actually selected this structure_type/side -- persisted so it's
+    -- visible, not just used internally and discarded.
+    conviction REAL,
     target_weight REAL,
     current_weight REAL,
     delta_weight REAL,
@@ -606,6 +610,11 @@ CREATE TABLE IF NOT EXISTS cross_section_rows (
     snapshot_id TEXT NOT NULL,
     symbol TEXT NOT NULL,
     composite_score REAL,
+    -- conviction_from_composite(composite_score): the same -5..+5 scale
+    -- instrument_engine uses to pick a structure, computed for every ranked
+    -- symbol here (not just the ones that clear the |1.0| equity threshold),
+    -- so the desk-wide bullish/bearish picture is visible in one place.
+    conviction REAL,
     rank INTEGER,
     status TEXT NOT NULL,
     summary TEXT NOT NULL,

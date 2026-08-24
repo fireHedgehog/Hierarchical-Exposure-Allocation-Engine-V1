@@ -225,6 +225,7 @@ export interface PositionCandidate extends Provenance {
   name?: Nullable<string>;
   side?: Nullable<string>;
   structure_type?: Nullable<string>;
+  conviction?: Nullable<number>;
   action?: Nullable<string>;
   current_weight?: Nullable<number>;
   target_weight?: Nullable<number>;
@@ -294,6 +295,7 @@ export interface MatrixRow {
   sector?: Nullable<string>;
   values: Record<string, Nullable<number>>;
   composite_score?: Nullable<number>;
+  conviction?: Nullable<number>;
   rank?: Nullable<number>;
   status?: Nullable<string>;
   summary?: Nullable<string>;

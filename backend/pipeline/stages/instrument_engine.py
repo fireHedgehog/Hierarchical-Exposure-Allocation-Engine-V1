@@ -142,6 +142,7 @@ def run_instrument_engine_stage(
             candidate_rows.append(
                 (
                     desk_snapshot_id, candidate_id, symbol, f"{symbol} equity tilt", side, "equity",
+                    conviction,
                     target_weight, recommendation["current_weight"], recommendation["delta_weight"],
                     "portfolio_weight", recommendation["confidence"], target_weight * notional_budget, None,
                     None, None, None, shares * row["last_price"], "usd", "ongoing", "proposed",
@@ -198,7 +199,7 @@ def run_instrument_engine_stage(
         candidate_rows.append(
             (
                 desk_snapshot_id, candidate_id, symbol, f"{symbol} {proposal.structure_type.replace('_', ' ')}",
-                proposal.side, proposal.structure_type, target_weight, 0.0, target_weight, "risk_budget",
+                proposal.side, proposal.structure_type, conviction, target_weight, 0.0, target_weight, "risk_budget",
                 max(0.1, min(0.95, 0.5 + abs(conviction) / 10.0)), total_max_loss, total_max_profit,
                 proposal.breakeven, proposal.breakeven, total_net_debit_credit, abs(total_net_debit_credit),
                 "usd", f"{max(leg.days_to_expiry for leg in proposal.legs)}d", "proposed",
@@ -246,12 +247,12 @@ def run_instrument_engine_stage(
     connection.executemany(
         """
         INSERT INTO position_candidates (
-            snapshot_id, candidate_id, symbol, name, side, structure_type, target_weight,
+            snapshot_id, candidate_id, symbol, name, side, structure_type, conviction, target_weight,
             current_weight, delta_weight, allocation_basis, confidence, max_loss, max_profit,
             breakeven_low, breakeven_high, net_debit_credit, cost_estimate, cost_unit, horizon,
             status, actionability, market_data_complete, input_completeness_scope, source_key,
             observed_at, available_at, ingested_at, sort_order
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         candidate_rows,
     )

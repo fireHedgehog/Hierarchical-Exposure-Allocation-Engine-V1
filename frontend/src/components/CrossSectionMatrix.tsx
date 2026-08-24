@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { CrossSectionResponse, MatrixColumn } from "../types";
 import { formatScalar, formatTimestamp, NOT_AVAILABLE } from "../utils/format";
 import { columnExtent, heatCell } from "../utils/matrix";
-import { ProvenanceStrip, StatusPill, Unavailable } from "./Ui";
+import { ConvictionBadge, ProvenanceStrip, StatusPill, Unavailable } from "./Ui";
 
 export function CrossSectionMatrix({ data }: { data: CrossSectionResponse }) {
   const rows = data.rows ?? [];
@@ -61,6 +61,7 @@ export function CrossSectionMatrix({ data }: { data: CrossSectionResponse }) {
                 </th>
               ))}
               <th scope="col">Composite</th>
+              <th scope="col" title="-5 (max bearish) to +5 (max bullish)">Conviction</th>
               <th scope="col">Rank</th>
               <th scope="col">State</th>
             </tr>
@@ -88,6 +89,7 @@ export function CrossSectionMatrix({ data }: { data: CrossSectionResponse }) {
                   />
                 ))}
                 <td className="matrix-composite">{formatScalar(row.composite_score)}</td>
+                <td><ConvictionBadge value={row.conviction} /></td>
                 <td>{formatScalar(row.rank)}</td>
                 <td><StatusPill value={row.status} /></td>
               </tr>

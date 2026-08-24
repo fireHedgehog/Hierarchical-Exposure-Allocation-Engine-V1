@@ -9,6 +9,21 @@ export function StatusPill({ value, tone }: { value?: string | null; tone?: Tone
   return <span className={`status-pill status-pill--${tone ?? toneForStatus(value)}`}>{label}</span>;
 }
 
+/** The -5..+5 conviction scale (conviction_from_composite): equity tilt at
+ * |1.0-2.4|, credit spread at |2.5-3.4|, debit spread at |3.5-4.4|, LEAPS at
+ * |4.5-5.0|. Shown as a real number, not just its consequence. */
+export function ConvictionBadge({ value }: { value?: number | null }) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return <span className="conviction-badge conviction-badge--neutral">{NOT_AVAILABLE}</span>;
+  }
+  const tone = value > 0.05 ? "positive" : value < -0.05 ? "negative" : "neutral";
+  return (
+    <span className={`conviction-badge conviction-badge--${tone}`} title="Conviction, -5 (max bearish) to +5 (max bullish)">
+      {value > 0 ? "+" : ""}{value.toFixed(1)}
+    </span>
+  );
+}
+
 export function SectionHeading({
   eyebrow,
   title,

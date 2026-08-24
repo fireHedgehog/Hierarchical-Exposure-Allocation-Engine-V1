@@ -213,6 +213,7 @@ def _position_candidates(
                 "name": candidate["name"],
                 "side": candidate["side"],
                 "structure_type": candidate["structure_type"],
+                "conviction": candidate["conviction"],
                 "legs": [dict(row) for row in legs],
                 "target_weight": candidate["target_weight"],
                 "current_weight": candidate["current_weight"],
@@ -521,7 +522,7 @@ def get_latest_cross_section(connection: sqlite3.Connection) -> dict[str, Any]:
     row_records = connection.execute(
         """
         SELECT csr.symbol, s.security_id, s.name, s.sector, csr.composite_score,
-               csr.rank, csr.status, csr.summary
+               csr.conviction, csr.rank, csr.status, csr.summary
         FROM cross_section_rows csr
         JOIN symbols s ON s.snapshot_id = csr.snapshot_id AND s.symbol = csr.symbol
         WHERE csr.snapshot_id = ?
@@ -571,6 +572,7 @@ def get_latest_cross_section(connection: sqlite3.Connection) -> dict[str, Any]:
                     for key in factor_keys
                 },
                 "composite_score": record["composite_score"],
+                "conviction": record["conviction"],
                 "rank": record["rank"],
                 "status": record["status"],
                 "summary": record["summary"],

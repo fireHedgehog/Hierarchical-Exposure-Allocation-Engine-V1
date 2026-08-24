@@ -177,7 +177,7 @@ def test_empty_v6_database_has_operator_and_readiness_catalog_but_no_decision_sn
         base_url="http://127.0.0.1:8000",
         client=("127.0.0.1", 52000),
     ) as client:
-        assert client.get("/api/health").json()["schema_version"] == "14"
+        assert client.get("/api/health").json()["schema_version"] == "15"
         assert client.get("/api/v1/desk/latest").status_code == 404
         payload = client.get("/api/v1/admin/providers").json()
         providers = payload["providers"]

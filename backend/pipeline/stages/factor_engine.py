@@ -6,6 +6,7 @@ from datetime import date, datetime
 from typing import Any
 
 from backend.engine.factors import Bar, InsufficientPriceDataError, compute_cross_section, suggested_weight
+from backend.engine.instruments import conviction_from_composite
 from backend.engine.timing import (
     BacktestBar,
     BacktestResult,
@@ -146,6 +147,7 @@ def run_factor_engine_stage(
                 desk_snapshot_id,
                 symbol,
                 item.composite_score,
+                conviction_from_composite(item.composite_score),
                 item.rank,
                 "ranked",
                 f"Blended 1M/3M/6M momentum {item.blended_return:+.2%}, cross-sectional z-score composite {item.composite_score:+.2f}.",
@@ -412,8 +414,8 @@ def run_factor_engine_stage(
     )
     connection.executemany(
         """
-        INSERT INTO cross_section_rows (snapshot_id, symbol, composite_score, rank, status, summary)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO cross_section_rows (snapshot_id, symbol, composite_score, conviction, rank, status, summary)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         cross_section_row_values,
     )

@@ -155,12 +155,23 @@ def _install_compatible_columns(connection: sqlite3.Connection) -> None:
             "CHECK (allocation_basis IN ('portfolio_weight', 'premium_budget', "
             "'notional_weight', 'risk_budget'))"
         )
+    if "conviction" not in columns:
+        connection.execute(
+            "ALTER TABLE position_candidates ADD COLUMN conviction REAL"
+        )
     if "input_completeness_scope" not in columns:
         connection.execute(
             "ALTER TABLE position_candidates ADD COLUMN input_completeness_scope TEXT "
             "CHECK (input_completeness_scope IN ('live_market_data', "
             "'synthetic_simulation_inputs', 'other'))"
         )
+
+    cross_section_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(cross_section_rows)").fetchall()
+    }
+    if "conviction" not in cross_section_columns:
+        connection.execute("ALTER TABLE cross_section_rows ADD COLUMN conviction REAL")
 
     dataset_columns = {
         row["name"]
