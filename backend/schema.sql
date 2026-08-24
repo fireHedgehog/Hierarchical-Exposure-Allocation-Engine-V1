@@ -1000,6 +1000,67 @@ CREATE TABLE IF NOT EXISTS strategy_lifecycle_events (
     strategy_version TEXT
 );
 
+-- Sub-strategy granularity: a strategy_versions row (e.g.
+-- macd_rsi_single_name_timing naive-v2) is itself an ensemble of named,
+-- independently versioned, independently retireable components -- e.g.
+-- MACD crossover and RSI overbought-exit are two separate components, not
+-- one fused function. This is the missing layer identified 2026-08-25: the
+-- top-level strategy stays a stable caller regardless of internal change;
+-- retiring one component is a DB flag flip (status), never a code deploy or
+-- a break in the pipeline. See docs/engine-milestones.md.
+--
+-- component_type distinguishes two real shapes:
+--   'computed'        a real function over real fetched data (e.g. MACD
+--                      crossover detection). value comes from the engine
+--                      function each run; this row is metadata only
+--                      (active/weight/verification), never a stored number.
+--   'manual_override'  a human-set standing value with no data source (e.g.
+--                      a geopolitical/war-risk override, normally neutral
+--                      at 0, settable to an extreme like -100 to force the
+--                      ensemble's hand on something no feed captures).
+--                      override_value IS this component's current value
+--                      until an operator changes it again; full audit trail
+--                      required, same discretion as a credential write.
+--
+-- roles_json tags what an ensemble can use this component FOR, since not
+-- every family combines components the same way: macro/momentum are a
+-- null-tolerant WEIGHTED SUM of ['contribution']-tagged components; timing
+-- is a role-tagged SIGNAL ENSEMBLE where ['entry','exit']-tagged components
+-- are combined by a rule, not a weighted average -- see
+-- engine/timing/backtest_v2.py's module docstring for why these need
+-- different aggregation shapes, not one forced abstraction.
+CREATE TABLE IF NOT EXISTS strategy_components (
+    strategy_key TEXT NOT NULL,
+    version TEXT NOT NULL,
+    component_key TEXT NOT NULL,
+    name TEXT NOT NULL,
+    component_type TEXT NOT NULL CHECK (component_type IN ('computed', 'manual_override')),
+    roles_json TEXT NOT NULL DEFAULT '["contribution"]',
+    code_reference TEXT,
+    base_weight REAL,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (
+        status IN ('draft', 'active', 'watching', 'retired')
+    ),
+    verification_status TEXT NOT NULL DEFAULT 'registered_only' CHECK (
+        verification_status IN (
+            'registered_only', 'verified', 'not_significant',
+            'collinear', 'decayed', 'outdated'
+        )
+    ),
+    decay_rate REAL,
+    override_value REAL,
+    override_set_by TEXT,
+    override_set_at TEXT,
+    override_reason TEXT,
+    next_review_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (strategy_key, version, component_key),
+    FOREIGN KEY (strategy_key, version) REFERENCES strategy_versions(strategy_key, version),
+    CHECK (component_type != 'manual_override' OR code_reference IS NULL),
+    CHECK (component_type = 'manual_override' OR override_value IS NULL)
+);
+
 -- Real engine algorithm registry. Every function in backend/engine/ that
 -- makes a real, standalone decision-relevant claim gets a row here the same
 -- day it ships, not as documentation prose — a maturity/verification/review
@@ -1132,6 +1193,44 @@ INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, l
 INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
     ('naive-v2-cross_sectional_momentum-promoted', 'cross_sectional_momentum', '2026-08-25T00:00:00Z', 'active', 'active',
      'Promoted naive-v1 -> naive-v2: horizon blend weights reframed from hand-picked constants to a real, per-run Pearson/Benjamini-Hochberg significance test against pooled forward returns (see strategy_versions.thesis). Still naive by design -- full Milestone 4 rigor (decorrelation, fitted weights, decay) has not run against this version yet.',
+     'naive-v2');
+
+-- naive-v2: macd_rsi_single_name_timing split into two independently
+-- registered, independently retireable strategy_components (macd_crossover,
+-- rsi_overbought_exit) instead of one fused function -- the granularity
+-- gap identified 2026-08-25. Retiring rsi_overbought_exit (status='retired')
+-- degrades gracefully: MACD alone still forms a complete entry+exit rule.
+-- Retiring macd_crossover is a real structural constraint, not a bug: it is
+-- the only registered entry trigger today, so removing it leaves the
+-- strategy with an honest 'no_entry_signal_active' status and zero trades,
+-- never a crash or a fabricated rule (see engine/timing/backtest_v2.py).
+-- v1's fused function (engine/timing/backtest.py) stays untouched and
+-- importable so any dataset snapshot already sealed under it stays
+-- honestly reproducible; this is a NEW version row, not a rewrite.
+INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
+    ('macd_rsi_single_name_timing', 'naive-v2', '2026-08-25T00:00:00Z',
+     'A trading rule built from named, independently retireable components is safer to iterate on than one fused function: a desk that decides MACD or RSI individually deserves review, decay-tracking, or retirement should be able to do that with a DB flag, not a code change that risks breaking the whole strategy.',
+     'None claimed. This version changes the strategy''s internal structure (component granularity), not its trading logic when both components are active -- the entry/exit rule is identical to naive-v1 in the default (both-active) configuration.',
+     'naive-v2: split into 2 registered strategy_components (macd_crossover: entry+exit; rsi_overbought_exit: exit only), combined by a role-tagged signal ensemble instead of one fused function. Same MACD(12,26,9)/RSI(14)/70-overbought parameters as naive-v1.',
+     '{"macd_fast":12,"macd_slow":26,"macd_signal":9,"rsi_period":14,"rsi_overbought":70.0,"min_bars":60,"components":["macd_crossover","rsi_overbought_exit"]}',
+     'backend/engine/timing/backtest_v2.py', '2026-08-25T00:00:00Z', '2027-02-25');
+
+UPDATE strategies SET current_version = 'naive-v2', updated_at = '2026-08-25T00:00:00Z'
+WHERE strategy_key = 'macd_rsi_single_name_timing';
+
+INSERT OR IGNORE INTO strategy_components (strategy_key, version, component_key, name, component_type, roles_json, code_reference, base_weight, status, verification_status, decay_rate, next_review_at, created_at, updated_at) VALUES
+    ('macd_rsi_single_name_timing', 'naive-v2', 'macd_crossover', 'MACD bullish/bearish crossover', 'computed', '["entry","exit"]', 'backend/engine/indicators/macd.py', NULL, 'active', 'registered_only', NULL, '2027-02-25', '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z'),
+    ('macd_rsi_single_name_timing', 'naive-v2', 'rsi_overbought_exit', 'RSI(14) >= 70 overbought exit', 'computed', '["exit"]', 'backend/engine/indicators/rsi.py', NULL, 'active', 'registered_only', NULL, '2027-02-25', '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z');
+
+INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, label, value, unit, status, window_label, as_of, description, sort_order) VALUES
+    ('macd_rsi_single_name_timing', 'naive-v2', 'decay_rate', 'Signal decay rate', NULL, 'fraction_per_period', 'not_computed', NULL, NULL,
+     'Not yet measured at the strategy level. Component-level decay (per macd_crossover / rsi_overbought_exit) also not yet measured -- see strategy_components.decay_rate.', 1),
+    ('macd_rsi_single_name_timing', 'naive-v2', 'estimated_capacity_usd', 'Estimated capacity', NULL, 'usd', 'not_computed', NULL, NULL,
+     'Not yet measured. Requires liquidity/market-impact modeling not yet built.', 2);
+
+INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
+    ('naive-v2-macd_rsi_single_name_timing-promoted', 'macd_rsi_single_name_timing', '2026-08-25T00:00:00Z', 'active', 'active',
+     'Promoted naive-v1 -> naive-v2: split into 2 independently registered, independently retireable strategy_components (macd_crossover, rsi_overbought_exit) instead of one fused function -- proves an engine algorithm can be revised and isolation-tested standalone, then swapped in as a small diff, without breaking the pipeline or existing tests. Trading logic unchanged when both components are active.',
      'naive-v2');
 
 -- Research results remain DB-indexed. Files are optional, reproducible output

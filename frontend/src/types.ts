@@ -808,6 +808,23 @@ export interface StrategyDiagnostic extends Provenance {
   description?: Nullable<string>;
 }
 
+export interface StrategyComponent {
+  component_key: string;
+  name?: Nullable<string>;
+  component_type?: Nullable<string>; // 'computed' | 'manual_override'
+  roles?: Nullable<string[]>;
+  code_reference?: Nullable<string>;
+  base_weight?: Nullable<Scalar>;
+  status?: Nullable<string>;
+  verification_status?: Nullable<string>;
+  decay_rate?: Nullable<Scalar>;
+  override_value?: Nullable<Scalar>;
+  override_set_by?: Nullable<string>;
+  override_set_at?: Nullable<string>;
+  override_reason?: Nullable<string>;
+  next_review_at?: Nullable<string>;
+}
+
 export interface StrategyVersion {
   version: string;
   created_at?: Nullable<string>;
@@ -820,6 +837,7 @@ export interface StrategyVersion {
   next_review_at?: Nullable<string>;
   verification_status?: Nullable<string>;
   diagnostics?: Nullable<StrategyDiagnostic[]>;
+  components?: Nullable<StrategyComponent[]>;
 }
 
 export interface StrategyLifecycleEvent {

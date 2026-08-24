@@ -10,10 +10,10 @@ from backend.engine.factors.momentum_v2 import MIN_SAMPLES as MOMENTUM_MIN_SAMPL
 from backend.engine.instruments import conviction_from_composite
 from backend.engine.timing import (
     BacktestBar,
-    BacktestResult,
+    BacktestResultV2,
     InsufficientBacktestDataError,
     aggregate_backtests,
-    run_macd_rsi_backtest,
+    run_macd_rsi_backtest_v2,
 )
 from backend.pipeline.stages.common import (
     PRICE_SOFT_MAX_AGE_DAYS,
@@ -76,6 +76,20 @@ def run_factor_engine_stage(
         if bar_rows:
             bars_by_symbol[row["symbol"]] = [Bar(time=bar["time"], close=bar["close"]) for bar in bar_rows]
 
+    # Single-name timing components are DB-driven and independently
+    # retireable (schema.sql strategy_components) -- a real per-run read,
+    # never a hand-typed set. 'watching' still counts as active for
+    # computation (that verification_status/lifecycle state is about review
+    # attention, not a kill switch); only 'retired'/'draft' are excluded.
+    timing_component_rows = connection.execute(
+        """
+        SELECT component_key FROM strategy_components
+        WHERE strategy_key = 'macd_rsi_single_name_timing' AND version = 'naive-v2'
+          AND status IN ('active', 'watching')
+        """
+    ).fetchall()
+    active_timing_components = frozenset(row["component_key"] for row in timing_component_rows)
+
     try:
         ranked, horizon_weights = compute_cross_section_v2(bars_by_symbol)
     except InsufficientPriceDataError as error:
@@ -136,7 +150,7 @@ def run_factor_engine_stage(
     recommendation_rows: list[tuple[Any, ...]] = []
     event_rows: list[tuple[Any, ...]] = []
     metric_rows: list[tuple[Any, ...]] = []
-    backtest_results: list[BacktestResult] = []
+    backtest_results: list[BacktestResultV2] = []
     backtests_run = 0
 
     for item in ranked:
@@ -238,7 +252,7 @@ def run_factor_engine_stage(
         # score above.
         backtest_bars = [BacktestBar(time=bar.time, close=bar.close) for bar in bars_by_symbol.get(symbol, [])]
         try:
-            backtest = run_macd_rsi_backtest(symbol, backtest_bars)
+            backtest = run_macd_rsi_backtest_v2(symbol, backtest_bars, active_components=active_timing_components)
         except InsufficientBacktestDataError:
             continue
         backtests_run += 1
@@ -417,7 +431,7 @@ def run_factor_engine_stage(
                 0,
                 f"No staging symbol had at least the required minimum bars to run a backtest this run "
                 f"(0 of {universe_size} symbols scored).",
-                "Reserved for the naive MACD/RSI single-name backtest (backend/engine/timing/backtest.py); "
+                "Reserved for the naive MACD/RSI single-name backtest (backend/engine/timing/backtest_v2.py); "
                 "requires at least 60 daily bars of real fetched price history per symbol.",
                 None,
                 None,

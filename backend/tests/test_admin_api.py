@@ -1898,12 +1898,16 @@ def test_legacy_demo_gets_complete_versioned_v3_fixture_on_reseed(tmp_path: Path
     with connect(database, read_only=True) as connection:
         assert connection.execute("SELECT COUNT(*) FROM data_assets").fetchone()[0] == 6
         # 2 synthetic demo fixtures + 5 real engine algorithms registered in schema.sql
-        # (macro_regime_composite and cross_sectional_momentum each carry 2
-        # versions: naive-v1 and naive-v2; each version has 2 diagnostics rows).
+        # (macro_regime_composite, cross_sectional_momentum, and
+        # macd_rsi_single_name_timing each carry 2 versions: naive-v1 and
+        # naive-v2; each version has 2 diagnostics rows; macd_rsi's naive-v2
+        # additionally registers 2 strategy_components: macd_crossover and
+        # rsi_overbought_exit).
         assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 7
-        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 9
-        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 20
-        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 9
+        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 10
+        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 22
+        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 10
+        assert connection.execute("SELECT COUNT(*) FROM strategy_components").fetchone()[0] == 2
         synthetic_assets = connection.execute(
             """
             SELECT asset_key, dataset_snapshot_id, row_count

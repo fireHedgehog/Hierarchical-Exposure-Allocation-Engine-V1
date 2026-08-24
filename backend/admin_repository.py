@@ -1294,6 +1294,36 @@ def get_strategy(connection: sqlite3.Connection, strategy_key: str) -> dict[str,
             """,
             (strategy_key, version["version"]),
         ).fetchall()
+        component_rows = connection.execute(
+            """
+            SELECT component_key, name, component_type, roles_json, code_reference, base_weight,
+                   status, verification_status, decay_rate, override_value, override_set_by,
+                   override_set_at, override_reason, next_review_at
+            FROM strategy_components
+            WHERE strategy_key = ? AND version = ?
+            ORDER BY component_key
+            """,
+            (strategy_key, version["version"]),
+        ).fetchall()
+        components = [
+            {
+                "component_key": component["component_key"],
+                "name": component["name"],
+                "component_type": component["component_type"],
+                "roles": _json(component["roles_json"]),
+                "code_reference": component["code_reference"],
+                "base_weight": component["base_weight"],
+                "status": component["status"],
+                "verification_status": component["verification_status"],
+                "decay_rate": component["decay_rate"],
+                "override_value": component["override_value"],
+                "override_set_by": component["override_set_by"],
+                "override_set_at": component["override_set_at"],
+                "override_reason": component["override_reason"],
+                "next_review_at": component["next_review_at"],
+            }
+            for component in component_rows
+        ]
         version_payloads.append(
             {
                 "version": version["version"],
@@ -1307,6 +1337,7 @@ def get_strategy(connection: sqlite3.Connection, strategy_key: str) -> dict[str,
                 "next_review_at": version["next_review_at"],
                 "verification_status": version["verification_status"],
                 "diagnostics": [dict(metric) for metric in diagnostics],
+                "components": components,
             }
         )
     lifecycle = connection.execute(

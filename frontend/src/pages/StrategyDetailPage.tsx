@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { endpoints, useApi } from "../api/client";
 import { OperatorPageHeader } from "../components/OperatorPageHeader";
 import { Panel, ResourceState, SectionHeading, StatusPill, Unavailable } from "../components/Ui";
-import type { ResearchArtifact, StrategyDetail, StrategyDetailResponse, StrategyVersion } from "../types";
+import type { ResearchArtifact, StrategyComponent, StrategyDetail, StrategyDetailResponse, StrategyVersion } from "../types";
 import { formatScalar, formatTimestamp, NOT_AVAILABLE } from "../utils/format";
 
 export function StrategyDetailPage() {
@@ -50,6 +50,8 @@ export function StrategyDetailPage() {
           </Panel>
 
           <CurrentStrategyDiagnostics version={currentVersion} />
+
+          <CurrentStrategyComponents version={currentVersion} />
 
           <Panel>
             <SectionHeading eyebrow="Change control" title="Version and lifecycle history" description="Keep the record compact: what changed, why it changed, and when it became active or retired." />
@@ -129,6 +131,49 @@ export function CurrentStrategyDiagnostics({ version }: { version?: StrategyVers
         </div>
       ) : <Unavailable title="Diagnostics not available" detail="No calculated diagnostics are attached to the explicitly selected current strategy version." />}
     </Panel>
+  );
+}
+
+export function CurrentStrategyComponents({ version }: { version?: StrategyVersion }) {
+  return (
+    <Panel>
+      <SectionHeading
+        eyebrow="Modular granularity"
+        title="Ensemble components"
+        description="A strategy can be an ensemble of independently versioned, independently retireable sub-signals — retiring one is a status flip here, not a code change, and the strategy keeps running on whatever remains active."
+      />
+      {version?.components?.length ? (
+        <div className="strategy-diagnostic-grid">
+          {version.components.map((component) => (
+            <StrategyComponentCard key={component.component_key} component={component} />
+          ))}
+        </div>
+      ) : <Unavailable compact title="No sub-components registered" detail="This version runs as one fused function; it has not been split into independently retireable components yet." />}
+    </Panel>
+  );
+}
+
+function StrategyComponentCard({ component }: { component: StrategyComponent }) {
+  const isOverride = component.component_type === "manual_override";
+  return (
+    <article>
+      <div><span>{component.name || component.component_key}</span><StatusPill value={component.status} /></div>
+      <small>{(component.roles || []).join(" + ") || "role unspecified"} · <StatusPill value={component.verification_status || "registered_only"} /></small>
+      {isOverride ? (
+        <>
+          <strong>{formatScalar(component.override_value, null)}</strong>
+          <p>Manual override — human-settable, no data source. {component.override_reason || "No reason recorded for the current value."}</p>
+          <small>Set by {component.override_set_by || NOT_AVAILABLE} · {formatTimestamp(component.override_set_at)}</small>
+        </>
+      ) : (
+        <>
+          <strong>{component.base_weight != null ? formatScalar(component.base_weight, "weight") : "weight computed per run"}</strong>
+          <p>Computed — real function over real data each run.</p>
+          <CodeReference value={component.code_reference} compact />
+        </>
+      )}
+      <small>Decay {formatScalar(component.decay_rate, "fraction_per_period")} · Next review {formatTimestamp(component.next_review_at)}</small>
+    </article>
   );
 }
 
