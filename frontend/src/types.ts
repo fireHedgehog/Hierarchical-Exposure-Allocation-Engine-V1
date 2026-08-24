@@ -510,6 +510,70 @@ export interface PipelineResponse {
   latest_run?: Nullable<PipelineRun>;
 }
 
+export type ProductReadinessStatus =
+  | "passed"
+  | "action_required"
+  | "blocked"
+  | "failed"
+  | "deferred";
+
+export type ProductReadinessEvidenceStatus =
+  | "qualifying"
+  | "non_qualifying"
+  | "missing";
+
+export interface ProductReadinessEvidence {
+  kind: string;
+  record_id?: Nullable<string>;
+  status: ProductReadinessEvidenceStatus;
+  observed_at?: Nullable<string>;
+  summary: string;
+}
+
+export interface ProductReadinessGate {
+  key: string;
+  milestone_key: string;
+  name: string;
+  layer: string;
+  description: string;
+  status: ProductReadinessStatus;
+  acceptance_criterion: string;
+  evaluator_key: string;
+  next_action: string;
+  target_route: string;
+  sort_order: number;
+  dependencies: string[];
+  blocked_by: string[];
+  evidence: ProductReadinessEvidence[];
+}
+
+export interface ProductReadinessMilestone {
+  key: string;
+  name: string;
+  description: string;
+  status: ProductReadinessStatus;
+  sort_order: number;
+  gates_total: number;
+  gates_passed: number;
+  current_gate_key?: Nullable<string>;
+}
+
+export interface ProductReadinessSummary {
+  milestones_total: number;
+  milestones_passed: number;
+  gates_total: number;
+  gates_passed: number;
+  current_gate_key?: Nullable<string>;
+  current_action?: Nullable<string>;
+  target_route?: Nullable<string>;
+}
+
+export interface ProductReadiness {
+  summary: ProductReadinessSummary;
+  milestones?: Nullable<ProductReadinessMilestone[]>;
+  gates?: Nullable<ProductReadinessGate[]>;
+}
+
 export interface AdminOverviewResponse {
   as_of?: Nullable<string>;
   manual_only: boolean;
@@ -517,6 +581,7 @@ export interface AdminOverviewResponse {
   data: AdminDataCounts;
   pipeline: PipelineResponse;
   strategies: AdminStrategyCounts;
+  readiness?: Nullable<ProductReadiness>;
 }
 
 export interface CredentialStatus {
@@ -532,6 +597,7 @@ export interface CredentialStatus {
   cooldown_seconds?: Nullable<number>;
   cooldown_remaining_seconds?: Nullable<number>;
   verification_ttl_seconds?: Nullable<number>;
+  verification_policy_refresh_required?: Nullable<boolean>;
 }
 
 export interface ProviderVerification extends Provenance {
@@ -574,8 +640,68 @@ export interface AdminProvider {
   last_verification?: Nullable<ProviderLastVerification>;
 }
 
+export interface ProviderRoadmapSummary {
+  planned_accounts: number;
+  supported_accounts: number;
+  verified_accounts: number;
+  registrations_needed_now: number;
+  verifications_needed_now: number;
+  future_accounts_planned: number;
+  capabilities_total: number;
+  capabilities_ingestion_ready: number;
+}
+
+export interface ProviderRoadmapCoverage {
+  key: string;
+  name?: Nullable<string>;
+  role?: Nullable<string>;
+  integration_status?: Nullable<string>;
+  note?: Nullable<string>;
+}
+
+export interface ProviderRoadmapAccount {
+  key: string;
+  operator_provider_key?: Nullable<string>;
+  name: string;
+  category?: Nullable<string>;
+  role?: Nullable<string>;
+  integration_status?: Nullable<string>;
+  access_status?: Nullable<string>;
+  required_for_first_slice: boolean;
+  registration_available: boolean;
+  verification_policy_refresh_required?: Nullable<boolean>;
+  documentation_url?: Nullable<string>;
+  signup_url?: Nullable<string>;
+  pricing_url?: Nullable<string>;
+  terms_url?: Nullable<string>;
+  guidance?: Nullable<string>;
+  licensing_note?: Nullable<string>;
+  capabilities?: Nullable<ProviderRoadmapCoverage[]>;
+}
+
+export interface DataCapabilityRoadmap {
+  key: string;
+  name: string;
+  category?: Nullable<string>;
+  description?: Nullable<string>;
+  requirement_level?: Nullable<string>;
+  unlocks?: Nullable<string[]>;
+  integration_status?: Nullable<string>;
+  ingestion_ready: boolean;
+  providers?: Nullable<ProviderRoadmapCoverage[]>;
+}
+
+export interface ProviderRoadmap {
+  summary: ProviderRoadmapSummary;
+  next_action?: Nullable<string>;
+  accounts?: Nullable<ProviderRoadmapAccount[]>;
+  capabilities?: Nullable<DataCapabilityRoadmap[]>;
+}
+
 export interface ProvidersResponse {
+  as_of?: Nullable<string>;
   providers?: Nullable<AdminProvider[]>;
+  roadmap?: Nullable<ProviderRoadmap>;
 }
 
 export interface AdminDataAsset {

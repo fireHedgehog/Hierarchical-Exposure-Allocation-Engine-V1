@@ -9,8 +9,10 @@ This is the authoritative catch-up page for maintainers and coding agents. Keep 
 - Product: a database-driven hierarchical exposure allocation and research application.
 - Available: Today desk, decision graph, cross-sectional matrix, data health, symbol signal/chart/event/metric views, and position candidates backed by SQLite snapshots.
 - Operating mode: local, manual-first, and read-only with respect to brokers. The included demonstration dataset is synthetic and explicitly seeded.
-- Operations: a loopback-only, lower-frequency control plane provides credential readiness and smoke tests, source freshness, dry/full manual run records, and strategy/research lifecycle views below the decision surfaces.
-- Not available yet: production provider ingestion, real strategy computation, scheduled runs, broker connectivity, or order placement.
+- The six seeded ETF symbols are a presentation fixture, not a production universe or candidate-selection policy.
+- Operations: a loopback-only, lower-frequency control plane provides an evidence-derived demo-to-real readiness map, a database-driven provider/capability onboarding roadmap, credential smoke tests, source freshness, dry/full manual run records, and strategy/research lifecycle views below the decision surfaces.
+- Provider plan: FRED/ALFRED is the only actionable account and is sufficient for the next regime slice. Three researched full-desk accounts remain planned, but their adapters and entitlement checks are not implemented and no keys are requested yet.
+- Not available yet: production provider ingestion, a production security master and versioned universe, real strategy computation or dynamic candidate discovery, scheduled runs, broker connectivity, or order placement.
 - Initial baseline: the application, schema, versioned documentation, automated checks, and primary browser flows together define the reviewed first substantive application edition.
 
 ## Next product task
@@ -22,7 +24,7 @@ Build the first real business-logic slice from source to decision:
 3. Seal an immutable dataset snapshot only when its required inputs pass validation.
 4. Compute and publish the first manual regime state with inspectable inputs, transformations, weights, uncertainty, and nulls.
 
-Then extend the engine vertically through risk budget, cross-sectional allocation, symbol expression, and portfolio constraints. Scheduling remains out of scope until repeated manual runs are safe and reproducible.
+Then build the point-in-time security master and universe, allocate the risk envelope across broad sleeves, discover securities cross-sectionally, evaluate entry and exit with an independently revisioned time-series layer, construct the target portfolio, and only then select its instrument expression. The complete gap sequence and completion evidence live in the [roadmap](roadmap.md). Scheduling remains out of scope until repeated manual runs are safe and reproducible.
 
 ## Non-negotiable rules
 
@@ -32,7 +34,11 @@ Then extend the engine vertically through risk budget, cross-sectional allocatio
 - Research, simulation readiness, and live execution are separate gates.
 - Credentials enter only the transient write-only browser request that stores or rotates them. They are never embedded in the frontend bundle, retained in frontend state/storage, returned by an API, or written to Git, logs, research artifacts, or the application database.
 - Stable internal security identifiers are independent from ticker and provider identifiers.
+- Universe eligibility is database-driven, effective-dated, and versioned; a frontend or strategy must not define it with hard-coded ticker lists.
+- Research references and execution instruments are distinct, effective-dated identities. An underlying series may inform a target, but an instrument may be simulated or proposed only while that symbol was actually available and eligible.
+- Cross-sectional discovery and single-name time-series timing remain separately revisioned and evaluated layers.
 - Provider ingestion is paced, cached, restartable, point-in-time aware, and replaceable.
+- Provider access, adapter integration, entitlement coverage, stored-data health, and engine readiness remain separate states.
 - The system must explain combined portfolio exposure, not merely rank isolated strategies.
 - No broker order is submitted without a separately designed and reviewed execution boundary.
 
@@ -47,6 +53,7 @@ Then extend the engine vertically through risk budget, cross-sectional allocatio
 
 - [Root README](../README.md): product identity and quick start.
 - [Edition V1](editions/edition-v1.md): archived initial product thesis, hierarchy, and operating principles.
+- [Roadmap](roadmap.md): durable demo-to-real sequence, completion evidence, and the UI surface unlocked by each phase.
 - [Architecture](architecture.md): boundaries and data flow.
 - [Operations](operations.md): credentials, manual runs, testing, and scheduling gate.
 - [Strategy lifecycle](strategy-lifecycle.md): evidence, promotion, monitoring, and retirement.

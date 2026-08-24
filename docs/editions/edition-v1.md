@@ -5,7 +5,6 @@
 | Edition | V1 |
 | Date | 2026-08-24 |
 | Status | Archived product and design baseline, corrected at the first application draft |
-| Source | [Original bilingual design discussion](https://chatgpt.com/share/6a8b94dd-ff30-83ec-b068-3a01b2c9b763) |
 
 This edition records the product thesis at its first durable milestone. It preserves the original ambition while incorporating the architectural corrections established during implementation. It is a historical design reference; the [project checkpoint](../README.md) records the current operating boundary.
 
@@ -35,15 +34,17 @@ Point-in-time market, fundamental, event and options data
                          ↓
  State engine: macro, rates, liquidity, risk and event surprise
                          ↓
- Signal families: momentum, reversal, quality, revisions and themes
+         Risk envelope and broad sleeve allocation
                          ↓
- Exposure map: security, factor, theme, macro and option sensitivities
+              Point-in-time eligible universe
                          ↓
- Risk budget: net/gross, concentration, liquidity, premium and Greeks
+ Cross-sectional discovery: asset, sector, industry and security
                          ↓
-         Correlation, covariance and redundancy controls
+       Independent single-name entry and exit timing
                          ↓
-                    Portfolio optimizer
+ Signal and exposure map: factor, theme, macro and option sensitivities
+                         ↓
+ Portfolio optimizer: overlap, covariance, costs and constraints
                          ↓
                 Target portfolio and deltas
                          ↓
@@ -55,6 +56,14 @@ Point-in-time market, fundamental, event and options data
 The state engine describes the investable environment using probabilities and uncertainty rather than a single categorical label. Event surprise should be normalized against expectations and historical dispersion, then linked through testable economic mechanisms. For example, an inflation surprise may affect real yields; real-yield changes may affect duration-sensitive equities; security-level duration loadings may explain cross-sectional return differences. The system tests these links separately before testing an allocation rule built from them.
 
 Signals are first combined within economic families. Several momentum horizons can inform one momentum composite, but they do not constitute three independent bets. Family construction should use covariance-aware shrinkage, stability and decay estimates; the portfolio layer then compares families and penalizes remaining redundancy across securities and strategies.
+
+## Opportunity discovery and entry timing
+
+Top-down allocation establishes the risk envelope and funds broad asset or strategy sleeves before the desk selects individual securities. Eligibility comes from an effective-dated universe revision linked to the dataset snapshot, not from a ticker list embedded in application code. Each revision records its membership rules, additions, removals and data requirements so delisted or unavailable securities cannot disappear retrospectively.
+
+Cross-sectional discovery and single-name timing answer different questions. The selector asks which eligible sectors, industries and securities are strongest or weakest relative to their peers. The time-series model asks whether and when a selected security is actionable from its own history. It may return `enter`, `wait`, `hold`, `exit` or `none`. The selector and timing model retain separate revisions, evidence, decay estimates and failure states; combining them must not allow one to disguise weakness in the other.
+
+Candidate instruments are configuration, not recommendations. DIA may be evaluated as a configurable US-equity-sleeve vehicle, subject to overlap controls against other broad equity exposures. A point-in-time BTC/USD reference series may support digital-asset research and timing, while IBIT is only a possible listed implementation after its own effective eligibility date. Historical BTC observations must not be relabelled as IBIT returns, quotes, costs or fills. At each decision time the resolver selects only instruments that are actually available, data-ready, liquid and mandate-eligible; if none qualifies, the expression remains unavailable. Neither DIA nor IBIT belongs in hard-coded decision logic, and neither becomes eligible merely because it appears in a design document.
 
 The optimizer evaluates expected contribution at portfolio level, net of covariance risk, crowding, turnover, transaction costs, concentration and liquidity. Its constraints include gross and net exposure, single-name and asset-class limits, factor and theme budgets, and—when options are present—premium, volatility and Greek limits. Its output is a target portfolio, not an order.
 
@@ -89,8 +98,11 @@ Live provider ingestion, real factor or allocation computation, options-chain re
 1. Complete one end-to-end point-in-time macro ingestion slice, beginning with FRED/ALFRED observations and vintage metadata, then validate and seal the resulting dataset.
 2. Compute and display the first probabilistic macro/rates/liquidity state with contributions, uncertainty and freshness visible at every layer.
 3. Add a timestamped expectations source for event-surprise research; historical actuals alone must not be treated as forecasts.
-4. Introduce one cross-sectional signal family and its security exposure map, with decay, covariance and walk-forward evidence.
-5. Allocate that evidence through explicit risk budgets and a constrained portfolio optimizer, first in simulation and then in repeated shadow runs.
-6. Add option-chain history and expression selection only after the underlying target and portfolio-risk accounting are trustworthy.
+4. Build the production security master and versioned broad universe from point-in-time market and reference data.
+5. Allocate the top-down risk envelope among broad sleeves before selecting individual names.
+6. Introduce one cross-sectional discovery family and its security exposure map, with decay, covariance and walk-forward evidence.
+7. Add an independently evaluated single-name time-series model for entry, hold, exit and inactive states.
+8. Allocate actionable evidence through a constrained portfolio optimizer, first in simulation and then in repeated shadow runs.
+9. Add option-chain history and expression selection only after the underlying target and portfolio-risk accounting are trustworthy.
 
-This vertical sequence makes the first real computation visible early. It does not require every future dataset or strategy to exist before business logic begins.
+This broad-first sequence makes the first real computation visible early and narrows from portfolio context to security timing only as its prerequisites become trustworthy. The live implementation gaps and completion evidence are maintained in the [roadmap](../roadmap.md).

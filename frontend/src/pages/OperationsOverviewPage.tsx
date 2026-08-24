@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, Clock3, PlayCircle, RefreshCw, ShieldCheck
 import { useState } from "react";
 import { endpoints, operatorErrorMessage, runPipeline, useApi } from "../api/client";
 import { OperatorPageHeader } from "../components/OperatorPageHeader";
+import { ProductReadinessPanel } from "../components/ProductReadinessPanel";
 import { Panel, ResourceState, SectionHeading, StatusPill, Unavailable } from "../components/Ui";
 import type { AdminOverviewResponse, PipelineResponse, PipelineRun } from "../types";
 import { formatNumber, formatTimestamp, NOT_AVAILABLE } from "../utils/format";
@@ -68,6 +69,8 @@ export function OperationsOverviewPage() {
             <OverviewMetric label="Ready datasets" value={data.data.ready} denominator={data.data.assets} status={statusForOverviewMetric("ready", data.data.ready, data.data.assets)} />
             <OverviewMetric label="Active strategies" value={data.strategies.active} denominator={data.strategies.total} status={statusForOverviewMetric("active", data.strategies.active, data.strategies.total)} />
           </div>
+
+          <ProductReadinessPanel readiness={data.readiness} />
         </>
       ) : null}
 

@@ -4,7 +4,23 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
-No changes have been recorded after the initial edition. The next planned product slice is FRED/ALFRED point-in-time ingestion, dataset validation and sealing, and a manually executed regime state.
+### Product design and privacy
+
+- Removed the external shared-conversation reference from the archived Edition V1; the project-owned edition now stands on its own as the design record.
+- Clarified the broad-first decision path: sleeve allocation, point-in-time universe, cross-sectional discovery, independent single-name timing, portfolio target, and downstream instrument expression.
+- Recorded DIA and IBIT only as configurable universe candidates with distinct sleeve and overlap controls, not as recommendations or hard-coded seed additions.
+- Separated underlying research references from effective-dated execution instruments: BTC may inform a digital-asset target, while IBIT can be evaluated only during its actual availability and must never receive fabricated pre-listing history or trades.
+- Added a concise capability roadmap that states each demo-to-real gap, its completion evidence, and the application surface it unlocks.
+- Added an Operations readiness map whose ordered gates, dependencies, acceptance criteria, evidence, and next action come from the database; current state is derived from canonical records, and synthetic fixtures cannot qualify.
+
+### Operations and data readiness
+
+- Added a database-driven onboarding roadmap that distinguishes four planned provider accounts from five data-capability groups and shows the registration timing, official links, licensing cautions, and next action in the Credentials UI.
+- Established the current provider plan: FRED/ALFRED for the first regime slice, followed later by Intrinio, Benzinga, and Trading Economics for the complete desk. Planned providers cannot accept credentials before their adapters exist.
+- Changed FRED smoke-test health validity from seven days to 365 days while retaining the separate 15-minute repeat-call cooldown and immutable historical verification records.
+- Kept provider access distinct from adapter integration and operational data: a healthy FRED key does not imply that ingestion is implemented or a dataset is ready.
+
+The next planned product slice remains FRED/ALFRED point-in-time ingestion, dataset validation and sealing, and a manually executed regime state.
 
 ## 0.1.0 — Initial edition — 2026-08-24
 

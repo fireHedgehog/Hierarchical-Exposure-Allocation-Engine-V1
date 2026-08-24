@@ -12,13 +12,19 @@ make serve
 
 The application binds to `127.0.0.1` by default. Operations reads require a direct loopback connection; mutations additionally require an approved local browser origin and an action-specific confirmation header. This is a local operator boundary, not multi-user authentication. Do not expose the Operations API remotely without designing real authentication and authorization.
 
+Operations → Pipeline includes the evidence-backed path from the synthetic demonstration to a real research desk. Acceptance criteria and dependencies are application-owned records, while each current state is derived from credential, dataset, snapshot, research, and run evidence. Synthetic rows and manually checked completion flags cannot pass a real-data gate. Pipeline implementation status remains separate because installed code is not proof of a valid desk output.
+
 ## Credential management
 
-The Operations surface shows each provider's purpose, expected secret source, configured and verified states, last verification time, official help links, and smoke-test action. Its write-only form submits a new secret to the backend once; no read endpoint or later render returns it.
+The Operations surface separates the provider roadmap from actionable credentials. The roadmap shows the four-account full-desk plan, five distinct data-capability groups, registration timing, official links, licensing cautions, and the next action. Only a provider with an implemented credential verifier receives a write-only key form and smoke-test action.
+
+FRED/ALFRED is the only account requested for the first regime slice. Once it is healthy, no additional registration is needed for that slice. Intrinio, Benzinga, and Trading Economics are planned for later full-desk capabilities; do not purchase or submit those credentials until their adapters and entitlement checks are implemented.
 
 During development, resolve secrets from the operating-system keychain or injected environment variables. A local ignored `.env` may be exported by the shell for convenience; commit only the commented, value-free `.env.example`. Store only non-secret metadata in SQLite, such as the credential alias, revision, verification result, and timestamps.
 
-A successful smoke test is cached. Routine page loads and pipeline runs use the latest acceptable verification instead of repeatedly calling a provider. FRED currently has a 15-minute repeat-call cooldown and a separate seven-day health-validity window; both are application-owned provider policies. Reverify when requested, health validity expires, an API rejects the credential, or configuration changes.
+A successful smoke test is cached. Routine page loads and pipeline runs use the latest acceptable verification instead of repeatedly calling a provider. FRED currently has a 15-minute repeat-call cooldown and a separate 365-day health-validity window; both are application-owned provider policies. Existing seven-day verification history remains immutable, so run one fresh smoke test after the cooldown to establish the one-year window. Reverify when requested, health validity expires, an API rejects the credential, or configuration changes.
+
+The one-year window is an operator convenience, not a claim that a provider cannot revoke a key or change an entitlement. Future ingestion adapters must immediately invalidate current health when an ordinary fetch returns an authentication or authorization failure, and must show last verification separately from last successful data fetch.
 
 Environment-backed verification fails closed after a service restart, because the process cannot prove that the injected value is unchanged. Verify it again after restarting. A verification timestamp more than five minutes ahead of the server clock is invalid; correct the clock and run a new smoke test. Credential writes, deletes, and smoke tests are serialized per provider only inside one application process in this local draft; keep a single API worker until a shared coordination mechanism is implemented.
 

@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from backend.providers import ProviderVerifier, VerificationResult
+from backend.readiness_repository import get_readiness
 from backend.secrets import SecretStore
 
 
@@ -152,6 +153,12 @@ def serialize_provider(
     verification_expired = bool(
         matches_current_credential and expires_at and expires_at <= now
     )
+    verification_policy_refresh_required = bool(
+        matches_current_credential
+        and stored_expires_at
+        and policy_expires_at
+        and stored_expires_at < policy_expires_at
+    )
     cooldown_until = (
         checked_at + timedelta(seconds=cooldown_seconds) if checked_at else None
     )
@@ -214,6 +221,7 @@ def serialize_provider(
             "cooldown_seconds": cooldown_seconds,
             "cooldown_remaining_seconds": cooldown_remaining,
             "verification_ttl_seconds": verification_ttl_seconds,
+            "verification_policy_refresh_required": verification_policy_refresh_required,
         },
         # Historical rows remain in SQLite for audit, but a result for a rotated
         # or deleted credential is never presented as the current verification.
@@ -231,12 +239,182 @@ def list_providers(
     rows = connection.execute(
         "SELECT * FROM operator_providers ORDER BY sort_order, provider_key"
     ).fetchall()
+    providers = [
+        serialize_provider(connection, row, secret_store, now, runtime_id)
+        for row in rows
+    ]
     return {
-        "providers": [
-            serialize_provider(connection, row, secret_store, now, runtime_id)
-            for row in rows
-        ]
+        "as_of": iso_z(now),
+        "providers": providers,
+        "roadmap": _provider_roadmap(connection, providers),
     }
+
+
+def _provider_roadmap(
+    connection: sqlite3.Connection, providers: list[dict[str, Any]]
+) -> dict[str, Any]:
+    provider_by_key = {provider["key"]: provider for provider in providers}
+    plan_rows = connection.execute(
+        "SELECT * FROM provider_onboarding_plan ORDER BY sort_order, plan_key"
+    ).fetchall()
+    capability_rows = connection.execute(
+        "SELECT * FROM data_capabilities ORDER BY sort_order, capability_key"
+    ).fetchall()
+    coverage_rows = connection.execute(
+        """
+        SELECT mapping.*, plan.name AS provider_name,
+               plan.integration_status AS provider_integration_status
+        FROM provider_plan_capabilities AS mapping
+        JOIN provider_onboarding_plan AS plan USING (plan_key)
+        ORDER BY plan.sort_order, mapping.plan_key
+        """
+    ).fetchall()
+
+    coverage_by_plan: dict[str, list[dict[str, Any]]] = {}
+    coverage_by_capability: dict[str, list[dict[str, Any]]] = {}
+    for row in coverage_rows:
+        coverage = {
+            "key": row["capability_key"],
+            "role": row["coverage_role"],
+            "note": row["coverage_note"],
+        }
+        coverage_by_plan.setdefault(row["plan_key"], []).append(coverage)
+        coverage_by_capability.setdefault(row["capability_key"], []).append(
+            {
+                "key": row["plan_key"],
+                "name": row["provider_name"],
+                "role": row["coverage_role"],
+                "integration_status": row["provider_integration_status"],
+                "note": row["coverage_note"],
+            }
+        )
+
+    accounts: list[dict[str, Any]] = []
+    for row in plan_rows:
+        operator = (
+            provider_by_key.get(row["operator_provider_key"])
+            if row["operator_provider_key"]
+            else None
+        )
+        access_status = _roadmap_access_status(operator)
+        accounts.append(
+            {
+                "key": row["plan_key"],
+                "operator_provider_key": row["operator_provider_key"],
+                "name": row["name"],
+                "category": row["category"],
+                "role": row["role"],
+                "integration_status": row["integration_status"],
+                "access_status": access_status,
+                "required_for_first_slice": bool(row["required_for_first_slice"]),
+                "registration_available": bool(operator),
+                "verification_policy_refresh_required": bool(
+                    operator
+                    and operator["credential"].get(
+                        "verification_policy_refresh_required"
+                    )
+                ),
+                "documentation_url": row["documentation_url"],
+                "signup_url": row["signup_url"],
+                "pricing_url": row["pricing_url"],
+                "terms_url": row["terms_url"],
+                "guidance": row["guidance"],
+                "licensing_note": row["licensing_note"],
+                "capabilities": coverage_by_plan.get(row["plan_key"], []),
+            }
+        )
+
+    capabilities: list[dict[str, Any]] = []
+    for row in capability_rows:
+        sources = coverage_by_capability.get(row["capability_key"], [])
+        integration_status = _best_integration_status(
+            [source["integration_status"] for source in sources]
+        )
+        capabilities.append(
+            {
+                "key": row["capability_key"],
+                "name": row["name"],
+                "category": row["category"],
+                "description": row["description"],
+                "requirement_level": row["requirement_level"],
+                "unlocks": _json(row["unlocks_json"]),
+                "integration_status": integration_status,
+                "ingestion_ready": integration_status == "ingestion_ready",
+                "providers": sources,
+            }
+        )
+
+    first_slice_accounts = [
+        account for account in accounts if account["required_for_first_slice"]
+    ]
+    registrations_needed_now = sum(
+        account["access_status"] == "not_configured"
+        for account in first_slice_accounts
+    )
+    verifications_needed_now = sum(
+        account["access_status"] not in {"healthy", "not_configured"}
+        or account["verification_policy_refresh_required"]
+        for account in first_slice_accounts
+    )
+    verified_accounts = sum(account["access_status"] == "healthy" for account in accounts)
+    supported_accounts = sum(account["registration_available"] for account in accounts)
+    future_accounts = sum(not account["required_for_first_slice"] for account in accounts)
+
+    return {
+        "summary": {
+            "planned_accounts": len(accounts),
+            "supported_accounts": supported_accounts,
+            "verified_accounts": verified_accounts,
+            "registrations_needed_now": registrations_needed_now,
+            "verifications_needed_now": verifications_needed_now,
+            "future_accounts_planned": future_accounts,
+            "capabilities_total": len(capabilities),
+            "capabilities_ingestion_ready": sum(
+                capability["ingestion_ready"] for capability in capabilities
+            ),
+        },
+        "next_action": _provider_next_action(first_slice_accounts),
+        "accounts": accounts,
+        "capabilities": capabilities,
+    }
+
+
+def _roadmap_access_status(provider: dict[str, Any] | None) -> str:
+    if provider is None:
+        return "not_available"
+    credential = provider["credential"]
+    if (
+        credential["status"] == "verified"
+        and credential["verification_status"] == "healthy"
+    ):
+        return "healthy"
+    if not credential["configured"]:
+        return "not_configured"
+    return credential["status"] or "unverified"
+
+
+def _best_integration_status(statuses: list[str]) -> str:
+    rank = {"planned": 0, "verification_ready": 1, "ingestion_ready": 2}
+    return max(statuses, key=lambda status: rank.get(status, -1), default="planned")
+
+
+def _provider_next_action(first_slice_accounts: list[dict[str, Any]]) -> str:
+    if not first_slice_accounts:
+        return "No provider is assigned to the first product slice."
+    primary = first_slice_accounts[0]
+    if primary["access_status"] == "not_configured":
+        return f"Register the {primary['name']} key, then run its smoke test."
+    if primary["verification_policy_refresh_required"]:
+        return (
+            f"Run one fresh {primary['name']} smoke test to adopt the one-year "
+            "health policy. No additional registration is requested."
+        )
+    if primary["access_status"] != "healthy":
+        return f"Run or resolve the {primary['name']} smoke test. No other registration is requested yet."
+    return (
+        "No additional registration is needed for the first regime slice. "
+        "Next: implement FRED/ALFRED point-in-time ingestion and validate the stored data."
+    )
 
 
 def get_provider(
@@ -986,9 +1164,9 @@ def get_overview(
     now: datetime,
     runtime_id: str,
 ) -> dict[str, Any]:
-    provider_payload = list_providers(
-        connection, secret_store, now, runtime_id
-    )["providers"]
+    provider_payload = list_providers(connection, secret_store, now, runtime_id)[
+        "providers"
+    ]
     data = get_data_inventory(connection, now)
     pipeline = get_pipeline(connection)
     strategies = list_strategies(connection)
@@ -1006,4 +1184,5 @@ def get_overview(
             "latest_run": pipeline["latest_run"],
         },
         "strategies": strategies["summary"],
+        "readiness": get_readiness(connection, provider_payload),
     }

@@ -71,7 +71,8 @@ def initialize_database(database_path: str | Path | None = None) -> Path:
         try:
             # Keep the additive migration, compatibility columns, and trigger
             # installation in one transaction. A failed upgrade must not leave
-            # schema_metadata claiming v4 over a partially installed schema.
+            # schema_metadata claiming the latest version over a partially
+            # installed schema.
             prelude = _catalog_compatibility_prelude(connection)
             connection.executescript(f"BEGIN IMMEDIATE;\n{prelude}\n{schema}")
             _install_compatible_columns(connection)
@@ -109,7 +110,7 @@ def _catalog_compatibility_prelude(connection: sqlite3.Connection) -> str:
     if "verification_ttl_seconds" not in columns:
         statements.append(
             "ALTER TABLE operator_providers ADD COLUMN verification_ttl_seconds "
-            "INTEGER NOT NULL DEFAULT 604800 CHECK (verification_ttl_seconds > 0);"
+            "INTEGER NOT NULL DEFAULT 31536000 CHECK (verification_ttl_seconds > 0);"
         )
     return "\n".join(statements)
 
@@ -166,8 +167,8 @@ def _install_compatible_columns(connection: sqlite3.Connection) -> None:
             """
         )
 
-    # Schema-v4 operational revisions invalidate cached verification results
-    # without retaining any derivative of the credential itself.
+    # Operational revisions invalidate cached verification results without
+    # retaining any derivative of the credential itself.
     provider_columns = {
         row["name"]
         for row in connection.execute("PRAGMA table_info(operator_providers)").fetchall()
@@ -184,7 +185,7 @@ def _install_compatible_columns(connection: sqlite3.Connection) -> None:
     if "verification_ttl_seconds" not in provider_columns:
         connection.execute(
             "ALTER TABLE operator_providers ADD COLUMN verification_ttl_seconds "
-            "INTEGER NOT NULL DEFAULT 604800 CHECK (verification_ttl_seconds > 0)"
+            "INTEGER NOT NULL DEFAULT 31536000 CHECK (verification_ttl_seconds > 0)"
         )
     connection.execute(
         """

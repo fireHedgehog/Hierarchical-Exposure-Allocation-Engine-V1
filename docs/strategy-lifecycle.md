@@ -20,6 +20,8 @@ Keep three kinds of change distinct:
 
 Code may live in Git and a record may link to a public commit or file. The database remains canonical for which revision ran, with which data and parameters, and what it produced.
 
+Cross-sectional selectors and single-name time-series timing models are separate definitions. A selector revision produces a peer-relative candidate set; a timing revision produces `enter`, `wait`, `hold`, `exit` or `none` for an eligible candidate at a stated effective time. Each must earn promotion on its own evidence. A composed strategy revision references the exact selector and timing revisions, so changing either component cannot silently rewrite the other's history or conceal where performance degraded.
+
 The first draft exposes the registry read-only and has no strategy mutation API. Draft version rows are not yet sealed against direct local SQL. A future promotion workflow must enforce revision immutability at the database boundary before strategy editing is enabled in the app.
 
 ## Evidence for promotion

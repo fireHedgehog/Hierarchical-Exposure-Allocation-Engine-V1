@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
     value TEXT NOT NULL
 );
 
-INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '4')
+INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '6')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 INSERT OR IGNORE INTO schema_metadata (key, value) VALUES
@@ -642,7 +642,7 @@ CREATE TABLE IF NOT EXISTS operator_providers (
     credential_revision INTEGER NOT NULL DEFAULT 0 CHECK (credential_revision >= 0),
     verification_cooldown_seconds INTEGER NOT NULL DEFAULT 900
         CHECK (verification_cooldown_seconds >= 0),
-    verification_ttl_seconds INTEGER NOT NULL DEFAULT 604800
+    verification_ttl_seconds INTEGER NOT NULL DEFAULT 31536000
         CHECK (
             verification_ttl_seconds > 0
             AND verification_ttl_seconds >= verification_cooldown_seconds
@@ -672,6 +672,80 @@ CREATE TABLE IF NOT EXISTS provider_verifications (
     credential_source TEXT CHECK (
         credential_source IN ('keyring', 'environment')
     )
+);
+
+-- The provider roadmap is application configuration, not a credential store.
+-- It keeps future data requirements visible without accepting secrets for an
+-- adapter that does not exist yet.
+CREATE TABLE IF NOT EXISTS data_capabilities (
+    capability_key TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    description TEXT NOT NULL,
+    requirement_level TEXT NOT NULL CHECK (
+        requirement_level IN ('required_now', 'required_later', 'optional')
+    ),
+    unlocks_json TEXT NOT NULL DEFAULT '[]',
+    sort_order INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS provider_onboarding_plan (
+    plan_key TEXT PRIMARY KEY,
+    operator_provider_key TEXT REFERENCES operator_providers(provider_key),
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    role TEXT NOT NULL,
+    integration_status TEXT NOT NULL CHECK (
+        integration_status IN ('planned', 'verification_ready', 'ingestion_ready')
+    ),
+    required_for_first_slice INTEGER NOT NULL CHECK (required_for_first_slice IN (0, 1)),
+    documentation_url TEXT,
+    signup_url TEXT,
+    pricing_url TEXT,
+    terms_url TEXT,
+    guidance TEXT NOT NULL,
+    licensing_note TEXT NOT NULL,
+    sort_order INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS provider_plan_capabilities (
+    plan_key TEXT NOT NULL REFERENCES provider_onboarding_plan(plan_key),
+    capability_key TEXT NOT NULL REFERENCES data_capabilities(capability_key),
+    coverage_role TEXT NOT NULL CHECK (coverage_role IN ('primary', 'supplemental')),
+    coverage_note TEXT NOT NULL,
+    PRIMARY KEY (plan_key, capability_key)
+);
+
+-- Readiness definitions are application configuration. Their current state is
+-- never stored here: the API derives it from provider verification, data,
+-- immutable snapshots, pipeline runs, and research evidence on every read.
+CREATE TABLE IF NOT EXISTS readiness_milestones (
+    milestone_key TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    sort_order INTEGER NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS readiness_gates (
+    gate_key TEXT PRIMARY KEY,
+    milestone_key TEXT NOT NULL REFERENCES readiness_milestones(milestone_key),
+    name TEXT NOT NULL,
+    layer TEXT NOT NULL,
+    description TEXT NOT NULL,
+    acceptance_criterion TEXT NOT NULL,
+    evaluator_key TEXT NOT NULL,
+    next_action TEXT NOT NULL,
+    target_route TEXT NOT NULL CHECK (
+        target_route LIKE '/%' AND target_route NOT LIKE '//%'
+    ),
+    sort_order INTEGER NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS readiness_gate_dependencies (
+    gate_key TEXT NOT NULL REFERENCES readiness_gates(gate_key),
+    dependency_gate_key TEXT NOT NULL REFERENCES readiness_gates(gate_key),
+    PRIMARY KEY (gate_key, dependency_gate_key),
+    CHECK (gate_key != dependency_gate_key)
 );
 
 CREATE TABLE IF NOT EXISTS data_assets (
@@ -1003,7 +1077,7 @@ INSERT INTO operator_providers (
     'This product uses the FRED API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.',
     'Create a distinct key for this application in your FRED account, store it here, then run one smoke verification. The key stays in the OS credential store.',
     '["macro_releases","release_observations","vintage_metadata"]',
-    'fred_v2', 900, 604800, 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    'fred_v2', 900, 31536000, 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 )
 ON CONFLICT(provider_key) DO UPDATE SET
     name = excluded.name,
@@ -1033,6 +1107,304 @@ ON CONFLICT(provider_key) DO UPDATE SET
           OR operator_providers.environment_variable IS NOT excluded.environment_variable
           OR operator_providers.verifier_kind IS NOT excluded.verifier_kind
         THEN CURRENT_TIMESTAMP ELSE operator_providers.updated_at END;
+
+INSERT INTO data_capabilities (
+    capability_key, name, category, description, requirement_level,
+    unlocks_json, sort_order
+) VALUES
+    (
+        'macro_actuals_vintages', 'Macro actuals and vintages', 'macro',
+        'Release observations, revisions, and point-in-time availability needed for the first regime state.',
+        'required_now', '["fetch_data","regime_filter"]', 10
+    ),
+    (
+        'macro_consensus_expectations', 'Macro consensus expectations', 'macro',
+        'Timestamped pre-release forecasts used to research economic surprises without confusing forecasts with actuals.',
+        'required_later', '["regime_filter","event_research"]', 20
+    ),
+    (
+        'equity_reference_events', 'Equity reference and issuer events', 'equity',
+        'Stable identifiers, listings and delistings, corporate actions, fundamentals, earnings, and licensed transcript coverage.',
+        'required_later', '["factor_engine","symbol_research"]', 30
+    ),
+    (
+        'equity_market_history', 'Equity market history', 'equity',
+        'Point-in-time prices and quotes with adjustment lineage for cross-sectional research and backtests.',
+        'required_later', '["factor_engine","symbol_research","backtests"]', 40
+    ),
+    (
+        'options_reference_history', 'Options reference and market history', 'options',
+        'Contract terms, chains, quotes, open interest, volatility, and Greeks for legitimate option expressions.',
+        'required_later', '["instrument_engine","position_research"]', 50
+    )
+ON CONFLICT(capability_key) DO UPDATE SET
+    name = excluded.name,
+    category = excluded.category,
+    description = excluded.description,
+    requirement_level = excluded.requirement_level,
+    unlocks_json = excluded.unlocks_json,
+    sort_order = excluded.sort_order;
+
+INSERT INTO provider_onboarding_plan (
+    plan_key, operator_provider_key, name, category, role, integration_status,
+    required_for_first_slice, documentation_url, signup_url, pricing_url,
+    terms_url, guidance, licensing_note, sort_order
+) VALUES
+    (
+        'fred', 'fred', 'FRED / ALFRED', 'macro',
+        'Macro actuals, release history, and vintages', 'verification_ready', 1,
+        'https://fred.stlouisfed.org/docs/api/fred/v2/',
+        'https://fredaccount.stlouisfed.org/apikeys', NULL,
+        'https://fred.stlouisfed.org/docs/api/terms_of_use.html',
+        'This is the only account requested now. Once its smoke test is healthy, no additional registration is needed for the first regime slice.',
+        'Observe the FRED API terms and source-level restrictions. Store raw responses only in ignored local data.',
+        10
+    ),
+    (
+        'intrinio', NULL, 'Intrinio', 'market and options',
+        'US security master, equity history, corporate actions, and historical options',
+        'planned', 0,
+        'https://docs.intrinio.com/documentation/api_v2/getting_started',
+        'https://intrinio.com/', 'https://intrinio.com/pricing',
+        'https://docs.intrinio.com/terms',
+        'Planned for the full desk. Do not purchase or enter a key until its adapter and entitlement smoke tests are implemented.',
+        'Personal, display, redistribution, commercial, and model-use rights differ by plan; confirm the intended local and public UI use before subscribing.',
+        20
+    ),
+    (
+        'benzinga', NULL, 'Benzinga', 'company events',
+        'Fundamentals, earnings estimates and results, and licensed call transcripts',
+        'planned', 0,
+        'https://docs.benzinga.com/',
+        'https://www.benzinga.com/apis/', NULL,
+        'https://www.benzinga.com/disclaimer',
+        'Planned for the full desk. Request product entitlements only after separate Fundamentals, Earnings, and Transcript checks exist.',
+        'A valid token does not prove every product entitlement. Keep licensed payloads local and confirm display or redistribution rights.',
+        30
+    ),
+    (
+        'trading_economics', NULL, 'Trading Economics', 'macro expectations',
+        'Point-in-time economic calendar and survey consensus',
+        'planned', 0,
+        'https://docs.tradingeconomics.com/economic_calendar/snapshot/',
+        'https://docs.tradingeconomics.com/get_started/',
+        'https://tradingeconomics.com/api/pricing.aspx', NULL,
+        'Planned for surprise research after the first FRED regime slice. Do not register until the point-in-time calendar adapter is ready.',
+        'Single-user, request, and public-distribution rights vary by plan; confirm them before enabling a shared or public surface.',
+        40
+    )
+ON CONFLICT(plan_key) DO UPDATE SET
+    operator_provider_key = excluded.operator_provider_key,
+    name = excluded.name,
+    category = excluded.category,
+    role = excluded.role,
+    integration_status = excluded.integration_status,
+    required_for_first_slice = excluded.required_for_first_slice,
+    documentation_url = excluded.documentation_url,
+    signup_url = excluded.signup_url,
+    pricing_url = excluded.pricing_url,
+    terms_url = excluded.terms_url,
+    guidance = excluded.guidance,
+    licensing_note = excluded.licensing_note,
+    sort_order = excluded.sort_order;
+
+INSERT INTO provider_plan_capabilities (
+    plan_key, capability_key, coverage_role, coverage_note
+) VALUES
+    ('fred', 'macro_actuals_vintages', 'primary', 'Credential verification is implemented; ingestion is the next product slice.'),
+    ('intrinio', 'equity_reference_events', 'primary', 'Security master, delisted coverage, identifiers, and corporate-action adjustments.'),
+    ('intrinio', 'equity_market_history', 'primary', 'Historical US equity pricing and reference coverage.'),
+    ('intrinio', 'options_reference_history', 'primary', 'Historical end-of-day options coverage; intraday depth depends on entitlement.'),
+    ('benzinga', 'equity_reference_events', 'supplemental', 'Fundamentals, earnings estimates and results, plus licensed transcript coverage.'),
+    ('trading_economics', 'macro_consensus_expectations', 'primary', 'Timestamped calendar events, forecasts, consensus, actuals, and revisions.')
+ON CONFLICT(plan_key, capability_key) DO UPDATE SET
+    coverage_role = excluded.coverage_role,
+    coverage_note = excluded.coverage_note;
+
+INSERT INTO readiness_milestones (
+    milestone_key, name, description, sort_order
+) VALUES
+    (
+        'first_real_regime', 'First real regime',
+        'Replace the synthetic state fixture with one inspectable regime decision sourced from point-in-time macro data.',
+        10
+    ),
+    (
+        'real_selection_desk', 'Real selection and allocation desk',
+        'Move from a governed investable universe through relative selection, symbol timing, portfolio risk, and cash expression.',
+        20
+    ),
+    (
+        'full_instrument_desk', 'Full instrument desk',
+        'Add trustworthy option-market inputs and compare defined-risk expressions without making options mandatory for every view.',
+        30
+    ),
+    (
+        'research_shadow', 'Research and shadow readiness',
+        'Require point-in-time portfolio evidence and repeated recoverable manual operation before automation.',
+        40
+    ),
+    (
+        'automation_execution', 'Automation and execution boundary',
+        'Keep scheduling and broker execution visibly deferred until separately reviewed operating controls exist.',
+        50
+    )
+ON CONFLICT(milestone_key) DO UPDATE SET
+    name = excluded.name,
+    description = excluded.description,
+    sort_order = excluded.sort_order;
+
+INSERT INTO readiness_gates (
+    gate_key, milestone_key, name, layer, description,
+    acceptance_criterion, evaluator_key, next_action, target_route, sort_order
+) VALUES
+    (
+        'fred_provider_access', 'first_real_regime', 'FRED provider access', 'provider',
+        'Prove that the credential currently resolved by this process is accepted by FRED.',
+        'The current FRED credential has a non-expired healthy smoke verification that applies to the same credential revision and runtime identity.',
+        'provider_access_fred',
+        'Register or reverify the FRED key on the Credentials page.',
+        '/operations/credentials', 10
+    ),
+    (
+        'macro_pit_ingestion', 'first_real_regime', 'Point-in-time macro ingestion', 'data',
+        'Land selected FRED/ALFRED observations in a non-demo dataset through the manual pipeline.',
+        'A completed non-dry fetch stage and ready real FRED inventory refer to the same non-demo dataset snapshot with stored observations.',
+        'macro_pit_ingestion',
+        'Implement the paced FRED/ALFRED ingestion adapter, then run the fetch stage manually.',
+        '/operations', 20
+    ),
+    (
+        'macro_validation_seal', 'first_real_regime', 'Macro validation and dataset seal', 'validation',
+        'Validate timestamps, source identity, completeness, units, freshness, and revision lineage before sealing inputs.',
+        'A completed non-dry validation stage refers to an immutable, non-demo, real dataset snapshot.',
+        'macro_validation_seal',
+        'Implement validation, resolve every required defect, and seal the accepted macro dataset.',
+        '/operations/data', 30
+    ),
+    (
+        'real_regime_snapshot', 'first_real_regime', 'First real regime snapshot', 'state',
+        'Compute and publish one real regime state with inspectable contributions and evidence.',
+        'A completed regime stage publishes an immutable non-demo real desk snapshot containing at least one regime contribution and its timestamped evidence.',
+        'real_regime_snapshot',
+        'Implement the first regime model and publish its immutable decision snapshot.',
+        '/', 40
+    ),
+    (
+        'versioned_security_universe', 'real_selection_desk', 'Versioned security universe', 'universe',
+        'Replace the hard-coded demo list with governed, point-in-time research universes.',
+        'A sealed universe revision uses stable exposure, research-reference, and security IDs; point-in-time membership; explicit roles or cohorts; and recorded inclusion and exclusion reasons. DIA may be evaluated as a U.S.-equity sleeve candidate. A governed BTC/USD reference may drive digital-asset research, while IBIT is eligible only as a separately classified execution instrument from its actual availability date; BTC history must never be presented as pre-listing IBIT history or trades.',
+        'versioned_security_universe',
+        'Implement versioned universe definitions and membership provenance; do not expand the synthetic fixture as a substitute.',
+        '/operations/data', 50
+    ),
+    (
+        'real_market_history', 'real_selection_desk', 'Real market history and actions', 'data',
+        'Provide bias-controlled price history and adjustment lineage for the governed universe.',
+        'Ready real market-history inventory, stored bars, and corporate-action or adjustment lineage refer to the same immutable non-demo dataset.',
+        'real_market_history',
+        'Connect market/reference ingestion and validate prices, listings, delistings, and corporate actions.',
+        '/operations/data', 60
+    ),
+    (
+        'cross_sectional_selection', 'real_selection_desk', 'Cross-sectional candidate selection', 'selection',
+        'Rank the eligible universe before applying any single-symbol timing decision.',
+        'A completed factor stage publishes an immutable non-demo real snapshot with multiple ranked securities and timestamped factor values.',
+        'cross_sectional_snapshot',
+        'Implement one preregistered cross-sectional family, beginning with broad relative selection rather than symbol-by-symbol searching.',
+        '/', 70
+    ),
+    (
+        'symbol_time_series_confirmation', 'real_selection_desk', 'Single-symbol timing confirmation', 'timing',
+        'Ask whether each selected candidate has a valid entry, exit, watch, or explicit no-signal state.',
+        'Every ranked security in the qualifying real snapshot has a timestamped symbol-signal record; an explicit none state is valid evidence and does not manufacture a trade.',
+        'symbol_timing_snapshot',
+        'Implement the per-symbol time-series confirmation layer downstream of cross-sectional selection.',
+        '/symbols', 80
+    ),
+    (
+        'portfolio_risk_allocation', 'real_selection_desk', 'Portfolio exposure and risk allocation', 'portfolio',
+        'Translate evidence into a coherent target after overlap, concentration, liquidity, and aggregate risk.',
+        'A completed allocation stage publishes an immutable non-demo real snapshot with target net and gross exposure plus an inspectable risk-budget decision node.',
+        'portfolio_allocation_snapshot',
+        'Implement the exposure map, covariance and redundancy controls, risk budgets, and constrained allocation.',
+        '/', 90
+    ),
+    (
+        'cash_long_short_expression', 'real_selection_desk', 'Cash long/short expression', 'instrument',
+        'Express portfolio deltas as legitimate cash long, short, reduce, hold, or no-trade outcomes before adding optional complexity.',
+        'A completed instrument stage publishes an immutable non-demo real snapshot and has no unresolved required blocker on any persisted candidate; an explicit no-trade outcome is acceptable.',
+        'cash_expression_snapshot',
+        'Implement cash-equity expression and persist either eligible candidates or an explicit no-trade result.',
+        '/', 100
+    ),
+    (
+        'options_expression', 'full_instrument_desk', 'Options data and expression comparison', 'instrument',
+        'Compare calls, puts, and defined-risk spreads only after the underlying target and risk budget exist.',
+        'Ready real option-chain inventory and a completed instrument stage refer to non-demo immutable inputs; persisted option candidates have complete market data and no unresolved required blockers.',
+        'options_expression_snapshot',
+        'Connect licensed option history and quotes, then test entitlement, liquidity, Greeks, costs, and maximum-loss accounting.',
+        '/operations/data', 110
+    ),
+    (
+        'walk_forward_evidence', 'research_shadow', 'Walk-forward portfolio evidence', 'research',
+        'Evaluate frozen strategy revisions with point-in-time inputs, costs, baselines, uncertainty, and portfolio-level outcomes.',
+        'A completed research run references an immutable non-demo real dataset and records the required strategy diagnostics; a positive return is not itself the acceptance criterion.',
+        'walk_forward_research',
+        'Run the first version-locked point-in-time portfolio evaluation and persist its diagnostics and provenance.',
+        '/operations/strategies', 120
+    ),
+    (
+        'repeated_shadow_recovery', 'research_shadow', 'Repeated shadow runs and recovery', 'operations',
+        'Prove that manual operation is reproducible, idempotent, restartable, observable, and recoverable.',
+        'Repeated non-demo full runs have normalized input hashes, stage output references, locks, bounded retries, and a tested interrupted-run recovery record.',
+        'shadow_recovery',
+        'Add idempotency, run locking, stage resume, recovery tests, and a reviewed sequence of successful shadow runs.',
+        '/operations', 130
+    ),
+    (
+        'scheduling', 'automation_execution', 'Scheduling', 'automation',
+        'Automation remains a policy decision after repeated manual reproducibility, not a shortcut around it.',
+        'A separately reviewed scheduling gate defines calendars, alert ownership, timeouts, recovery, and safe disablement after shadow readiness passes.',
+        'deferred_policy',
+        'Keep scheduling disabled until the manual-shadow milestone is passed and a scheduling review is accepted.',
+        '/operations', 140
+    ),
+    (
+        'broker_execution_boundary', 'automation_execution', 'Broker execution boundary', 'execution',
+        'Order placement is a distinct authorization and safety system, not another pipeline stage.',
+        'A separately reviewed broker boundary covers authentication, account reconciliation, order intent, limits, duplicate prevention, acknowledgements, fills, kill switches, and operator authorization.',
+        'deferred_policy',
+        'Keep broker connectivity and order placement disabled until a separate execution design is explicitly authorized.',
+        '/operations', 150
+    )
+ON CONFLICT(gate_key) DO UPDATE SET
+    milestone_key = excluded.milestone_key,
+    name = excluded.name,
+    layer = excluded.layer,
+    description = excluded.description,
+    acceptance_criterion = excluded.acceptance_criterion,
+    evaluator_key = excluded.evaluator_key,
+    next_action = excluded.next_action,
+    target_route = excluded.target_route,
+    sort_order = excluded.sort_order;
+
+INSERT INTO readiness_gate_dependencies (gate_key, dependency_gate_key) VALUES
+    ('macro_pit_ingestion', 'fred_provider_access'),
+    ('macro_validation_seal', 'macro_pit_ingestion'),
+    ('real_regime_snapshot', 'macro_validation_seal'),
+    ('versioned_security_universe', 'real_regime_snapshot'),
+    ('real_market_history', 'versioned_security_universe'),
+    ('cross_sectional_selection', 'real_market_history'),
+    ('symbol_time_series_confirmation', 'cross_sectional_selection'),
+    ('portfolio_risk_allocation', 'symbol_time_series_confirmation'),
+    ('cash_long_short_expression', 'portfolio_risk_allocation'),
+    ('options_expression', 'portfolio_risk_allocation'),
+    ('walk_forward_evidence', 'cash_long_short_expression'),
+    ('repeated_shadow_recovery', 'walk_forward_evidence'),
+    ('scheduling', 'repeated_shadow_recovery'),
+    ('broker_execution_boundary', 'scheduling')
+ON CONFLICT(gate_key, dependency_gate_key) DO NOTHING;
 
 INSERT INTO pipeline_definitions (
     pipeline_key, name, version, description, enabled, manual_only,

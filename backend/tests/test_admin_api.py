@@ -90,7 +90,7 @@ def operator_headers(action: str, *, origin: str = ORIGIN) -> dict[str, str]:
     return {"Origin": origin, "X-Operator-Action": action}
 
 
-def test_empty_v4_database_has_operator_catalog_but_no_decision_snapshot(
+def test_empty_v6_database_has_operator_and_readiness_catalog_but_no_decision_snapshot(
     tmp_path: Path,
 ) -> None:
     database = initialize_database(tmp_path / "empty.db")
@@ -107,16 +107,108 @@ def test_empty_v4_database_has_operator_catalog_but_no_decision_snapshot(
         base_url="http://127.0.0.1:8000",
         client=("127.0.0.1", 52000),
     ) as client:
-        assert client.get("/api/health").json()["schema_version"] == "4"
+        assert client.get("/api/health").json()["schema_version"] == "6"
         assert client.get("/api/v1/desk/latest").status_code == 404
-        providers = client.get("/api/v1/admin/providers").json()["providers"]
+        payload = client.get("/api/v1/admin/providers").json()
+        providers = payload["providers"]
         assert [provider["key"] for provider in providers] == ["fred"]
         assert providers[0]["credential"]["configured"] is False
         assert providers[0]["credential"]["source"] is None
+        assert providers[0]["credential"]["cooldown_seconds"] == 900
+        assert providers[0]["credential"]["verification_ttl_seconds"] == 31536000
+        roadmap = payload["roadmap"]
+        assert roadmap["summary"] == {
+            "planned_accounts": 4,
+            "supported_accounts": 1,
+            "verified_accounts": 0,
+            "registrations_needed_now": 1,
+            "verifications_needed_now": 0,
+            "future_accounts_planned": 3,
+            "capabilities_total": 5,
+            "capabilities_ingestion_ready": 0,
+        }
+        assert [account["key"] for account in roadmap["accounts"]] == [
+            "fred",
+            "intrinio",
+            "benzinga",
+            "trading_economics",
+        ]
+        assert roadmap["accounts"][0]["access_status"] == "not_configured"
+        assert all(
+            account["registration_available"] is False
+            for account in roadmap["accounts"][1:]
+        )
+        assert [capability["key"] for capability in roadmap["capabilities"]] == [
+            "macro_actuals_vintages",
+            "macro_consensus_expectations",
+            "equity_reference_events",
+            "equity_market_history",
+            "options_reference_history",
+        ]
+        assert "Register the FRED / ALFRED key" in roadmap["next_action"]
         pipeline = client.get("/api/v1/admin/pipeline").json()
         assert pipeline["definition"]["manual_only"] is True
         assert pipeline["definition"]["stages"][0]["implemented"] is True
         assert pipeline["latest_run"] is None
+
+        readiness = client.get("/api/v1/admin/overview").json()["readiness"]
+        assert readiness["summary"] == {
+            "milestones_total": 5,
+            "milestones_passed": 0,
+            "gates_total": 15,
+            "gates_passed": 0,
+            "current_gate_key": "fred_provider_access",
+            "current_action": "Register or reverify the FRED key on the Credentials page.",
+            "target_route": "/operations/credentials",
+        }
+        assert [gate["key"] for gate in readiness["gates"]] == [
+            "fred_provider_access",
+            "macro_pit_ingestion",
+            "macro_validation_seal",
+            "real_regime_snapshot",
+            "versioned_security_universe",
+            "real_market_history",
+            "cross_sectional_selection",
+            "symbol_time_series_confirmation",
+            "portfolio_risk_allocation",
+            "cash_long_short_expression",
+            "options_expression",
+            "walk_forward_evidence",
+            "repeated_shadow_recovery",
+            "scheduling",
+            "broker_execution_boundary",
+        ]
+        gates = {gate["key"]: gate for gate in readiness["gates"]}
+        assert gates["fred_provider_access"]["status"] == "action_required"
+        assert gates["macro_pit_ingestion"]["status"] == "blocked"
+        assert gates["macro_pit_ingestion"]["blocked_by"] == [
+            "fred_provider_access"
+        ]
+        assert gates["scheduling"]["status"] == "deferred"
+        assert gates["broker_execution_boundary"]["status"] == "deferred"
+        universe_criterion = gates["versioned_security_universe"][
+            "acceptance_criterion"
+        ]
+        assert "DIA" in universe_criterion
+        assert "IBIT" in universe_criterion
+        assert "stable exposure, research-reference, and security IDs" in universe_criterion
+        assert "point-in-time membership" in universe_criterion
+        assert "BTC/USD reference" in universe_criterion
+        assert "actual availability date" in universe_criterion
+        assert "pre-listing IBIT history or trades" in universe_criterion
+
+    with connect(database, read_only=True) as connection:
+        readiness_columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(readiness_gates)"
+            ).fetchall()
+        }
+        assert "status" not in readiness_columns
+        assert "completed" not in readiness_columns
+        assert connection.execute(
+            "SELECT COUNT(*) FROM readiness_gate_dependencies"
+        ).fetchone()[0] == 14
 
 
 def test_seeded_admin_inventory_strategies_signals_and_chart_annotations(
@@ -265,9 +357,33 @@ def test_credential_is_keyring_only_and_verification_is_cached_and_invalidated(
     assert second.json()["cached"] is True
     assert verifier.calls == [first_secret]
     assert first_secret not in first.text + second.text
-    provider = client.get("/api/v1/admin/providers").json()["providers"][0]
+    provider_payload = client.get("/api/v1/admin/providers").json()
+    provider = provider_payload["providers"][0]
     assert provider["credential"]["verification_status"] == "healthy"
     assert provider["verification"]["http_status"] == 200
+    roadmap = provider_payload["roadmap"]
+    assert roadmap["summary"]["verified_accounts"] == 1
+    assert roadmap["summary"]["registrations_needed_now"] == 0
+    assert roadmap["summary"]["verifications_needed_now"] == 0
+    assert roadmap["summary"]["future_accounts_planned"] == 3
+    assert roadmap["summary"]["capabilities_ingestion_ready"] == 0
+    assert roadmap["accounts"][0]["integration_status"] == "verification_ready"
+    assert roadmap["accounts"][0]["access_status"] == "healthy"
+    assert roadmap["capabilities"][0]["ingestion_ready"] is False
+    assert roadmap["capabilities"][0]["integration_status"] == "verification_ready"
+    assert "No additional registration is needed" in roadmap["next_action"]
+    readiness = client.get("/api/v1/admin/overview").json()["readiness"]
+    readiness_gates = {gate["key"]: gate for gate in readiness["gates"]}
+    assert readiness["summary"]["gates_passed"] == 1
+    assert readiness["summary"]["current_gate_key"] == "macro_pit_ingestion"
+    assert readiness["summary"]["target_route"] == "/operations"
+    assert readiness_gates["fred_provider_access"]["status"] == "passed"
+    assert readiness_gates["macro_pit_ingestion"]["status"] == "action_required"
+    assert readiness_gates["macro_pit_ingestion"]["blocked_by"] == []
+    assert readiness_gates["macro_validation_seal"]["status"] == "blocked"
+    assert readiness_gates["versioned_security_universe"]["evidence"][0][
+        "status"
+    ] == "non_qualifying"
 
     second_secret = "second-local-test-credential"
     rotated = client.put(
@@ -304,6 +420,171 @@ def test_credential_is_keyring_only_and_verification_is_cached_and_invalidated(
             assert second_secret not in serialized
         assert connection.execute("SELECT COUNT(*) FROM provider_verifications").fetchone()[0] == 2
     assert store.values == {}
+
+
+def test_readiness_uses_latest_matching_real_evidence_and_rejects_demo_fetch(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    database, client, _, _ = admin_context
+    client.put(
+        "/api/v1/admin/providers/fred/credential",
+        json={"secret": "readiness-matching-evidence"},
+        headers=operator_headers("credential.write"),
+    )
+    client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    )
+
+    with connect(database) as connection:
+        connection.execute(
+            """
+            UPDATE pipeline_stage_definitions
+            SET implementation_status = 'ready'
+            WHERE pipeline_key = 'daily_desk' AND stage_key = 'fetch_data'
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO dataset_snapshots (
+                id, as_of, created_at, mode, data_classification, is_live,
+                is_demo, status, immutable, source_manifest_json
+            ) VALUES (
+                'real-macro-readiness', '2026-08-24T11:55:00Z',
+                '2026-08-24T11:56:00Z', 'research', 'real', 0, 0,
+                'staging', 0, '{"source":"fred"}'
+            )
+            """
+        )
+        connection.execute(
+            """
+            UPDATE data_assets
+            SET row_count = 12, period_start = '2026-08-01T00:00:00Z',
+                period_end = '2026-08-24T00:00:00Z',
+                last_observation_at = '2026-08-24T00:00:00Z',
+                last_fetched_at = '2026-08-24T11:56:00Z', status = 'ready',
+                dataset_snapshot_id = 'real-macro-readiness',
+                detail = 'Test point-in-time macro inventory.',
+                updated_at = '2026-08-24T11:56:00Z'
+            WHERE asset_key = 'fred_release_observations'
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO pipeline_runs (
+                run_id, pipeline_key, pipeline_version, trigger_type, dry_run,
+                requested_at, started_at, status, dataset_snapshot_id, summary
+            ) VALUES (
+                'real-fetch-run', 'daily_desk', '0.1.0', 'manual', 0,
+                '2026-08-24T11:56:00Z', '2026-08-24T11:56:00Z', 'running',
+                'real-macro-readiness', 'Real fetch test.'
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO pipeline_stage_runs (
+                run_id, stage_key, stage_order, status, started_at, finished_at,
+                records_read, records_written, message
+            ) VALUES (
+                'real-fetch-run', 'fetch_data', 20, 'completed',
+                '2026-08-24T11:56:00Z', '2026-08-24T11:57:00Z',
+                12, 12, 'Stored real FRED observations.'
+            )
+            """
+        )
+        connection.execute(
+            """
+            UPDATE pipeline_runs
+            SET finished_at = '2026-08-24T11:57:00Z', status = 'partial'
+            WHERE run_id = 'real-fetch-run'
+            """
+        )
+
+    real_readiness = client.get("/api/v1/admin/overview").json()["readiness"]
+    real_gates = {gate["key"]: gate for gate in real_readiness["gates"]}
+    assert real_readiness["summary"]["gates_passed"] == 2
+    assert real_readiness["summary"]["current_gate_key"] == "macro_validation_seal"
+    assert real_gates["macro_pit_ingestion"]["status"] == "passed"
+    assert real_gates["macro_validation_seal"]["status"] == "action_required"
+    assert any(
+        evidence["record_id"] == "real-macro-readiness"
+        and evidence["status"] == "qualifying"
+        for evidence in real_gates["macro_pit_ingestion"]["evidence"]
+    )
+
+    with connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO dataset_snapshots (
+                id, as_of, created_at, mode, data_classification, is_live,
+                is_demo, status, immutable, source_manifest_json
+            ) VALUES (
+                'newer-demo-fetch', '2026-08-24T11:58:00Z',
+                '2026-08-24T11:58:00Z', 'demo', 'synthetic', 0, 1,
+                'demo_not_live', 0, '{}'
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO data_assets (
+                asset_key, provider_key, label, kind, frequency,
+                classification, row_count, period_start, period_end,
+                last_observation_at, last_fetched_at, status,
+                dataset_snapshot_id, detail, updated_at
+            ) VALUES (
+                'fred_demo_attempt', 'fred', 'Synthetic FRED lookalike',
+                'macro_release', 'release', 'synthetic', 12,
+                '2026-08-01T00:00:00Z', '2026-08-24T00:00:00Z',
+                '2026-08-24T00:00:00Z', '2026-08-24T11:58:00Z', 'ready',
+                'newer-demo-fetch', 'Must never satisfy real readiness.',
+                '2026-08-24T11:58:00Z'
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO pipeline_runs (
+                run_id, pipeline_key, pipeline_version, trigger_type, dry_run,
+                requested_at, started_at, status, dataset_snapshot_id, summary
+            ) VALUES (
+                'demo-fetch-run', 'daily_desk', '0.1.0', 'manual', 0,
+                '2026-08-24T11:58:00Z', '2026-08-24T11:58:00Z', 'running',
+                'newer-demo-fetch', 'Synthetic fetch test.'
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO pipeline_stage_runs (
+                run_id, stage_key, stage_order, status, started_at, finished_at,
+                records_read, records_written, message
+            ) VALUES (
+                'demo-fetch-run', 'fetch_data', 20, 'completed',
+                '2026-08-24T11:58:00Z', '2026-08-24T11:59:00Z',
+                12, 12, 'Stored only synthetic rows.'
+            )
+            """
+        )
+        connection.execute(
+            """
+            UPDATE pipeline_runs
+            SET finished_at = '2026-08-24T11:59:00Z', status = 'partial'
+            WHERE run_id = 'demo-fetch-run'
+            """
+        )
+
+    demo_readiness = client.get("/api/v1/admin/overview").json()["readiness"]
+    demo_gates = {gate["key"]: gate for gate in demo_readiness["gates"]}
+    assert demo_readiness["summary"]["gates_passed"] == 1
+    assert demo_readiness["summary"]["current_gate_key"] == "macro_pit_ingestion"
+    assert demo_gates["macro_pit_ingestion"]["status"] == "failed"
+    assert demo_gates["macro_validation_seal"]["status"] == "blocked"
+    assert demo_gates["macro_validation_seal"]["blocked_by"] == [
+        "macro_pit_ingestion"
+    ]
 
 
 def test_environment_managed_credential_cannot_be_overridden_or_deleted(
@@ -434,7 +715,7 @@ def test_verification_cooldown_and_health_ttl_are_separate_fail_closed_boundarie
         assert reverified["cached"] is False
     assert cooldown_verifier.calls == ["expiry-boundary-test"]
 
-    after_ttl = NOW + timedelta(days=8)
+    after_ttl = NOW + timedelta(days=366)
     expired = create_app(
         database,
         frontend_dist=tmp_path / "missing-expired-dist",
@@ -1463,7 +1744,7 @@ def test_application_catalog_upsert_refreshes_definitions_but_preserves_enabled(
             "FRED / ALFRED",
             "fred_api_key",
             6,
-            604800,
+            31536000,
         )
         assert "not endorsed or certified" in provider["attribution_notice"]
         pipeline = connection.execute(
@@ -1540,11 +1821,11 @@ def test_old_provider_catalog_adds_columns_before_application_upsert(
         assert provider["enabled"] == 0
         assert provider["name"] == "FRED / ALFRED"
         assert provider["credential_revision"] == 3
-        assert provider["verification_ttl_seconds"] == 604800
+        assert provider["verification_ttl_seconds"] == 31536000
         assert "not endorsed or certified" in provider["attribution_notice"]
 
 
-def test_shortened_catalog_ttl_caps_existing_verification_immediately(
+def test_extended_catalog_ttl_preserves_recorded_expiry_until_fresh_verification(
     tmp_path: Path,
 ) -> None:
     database = initialize_database(tmp_path / "ttl-policy-upgrade.db")
@@ -1555,7 +1836,7 @@ def test_shortened_catalog_ttl_caps_existing_verification_immediately(
         connection.execute(
             """
             UPDATE operator_providers
-            SET verification_ttl_seconds = 1209600
+            SET verification_ttl_seconds = 604800
             WHERE provider_key = 'fred'
             """
         )
@@ -1565,17 +1846,17 @@ def test_shortened_catalog_ttl_caps_existing_verification_immediately(
                 verification_id, provider_key, checked_at, expires_at, status,
                 message, credential_revision, runtime_id, credential_source
             ) VALUES (
-                'old-long-ttl', 'fred', '2030-01-01T00:00:00.000000Z',
-                '2030-01-15T00:00:00.000000Z', 'healthy',
-                'Healthy under an older longer policy.', ?, 'old-runtime', 'keyring'
+                'old-seven-day-ttl', 'fred', '2030-01-01T00:00:00.000000Z',
+                '2030-01-08T00:00:00.000000Z', 'healthy',
+                'Healthy under the former seven-day policy.', ?, 'old-runtime', 'keyring'
             )
             """,
             (revision,),
         )
 
-    # Application catalog policy returns to seven days. The immutable history
-    # retains its original stored expiry, while serialization caps current
-    # health against the newly installed TTL.
+    # Installing the one-year policy must not rewrite or extend immutable
+    # verification history. The old result remains expired until a real fresh
+    # smoke test establishes validity under the new policy.
     initialize_database(database)
     store = MemorySecretStore(
         values={"fred_api_key": SecretValue("ttl-policy-key", "keyring", True)}
@@ -1591,16 +1872,115 @@ def test_shortened_catalog_ttl_caps_existing_verification_immediately(
         base_url="http://127.0.0.1:8000",
         client=("127.0.0.1", 52000),
     ) as client:
+        before_refresh = client.get("/api/v1/admin/providers").json()
+        provider = before_refresh["providers"][0]
+        assert provider["credential"]["verification_ttl_seconds"] == 31536000
+        assert provider["credential"]["cooldown_seconds"] == 900
+        assert provider["credential"]["status"] == "expired"
+        assert provider["credential"]["verification_policy_refresh_required"] is True
+        assert before_refresh["roadmap"]["summary"]["verifications_needed_now"] == 1
+        assert "adopt the one-year health policy" in before_refresh["roadmap"]["next_action"]
+        assert provider["verification"] is None
+        assert provider["last_verification"]["expires_at"] == (
+            "2030-01-08T00:00:00.000000Z"
+        )
+        assert provider["last_verification"]["effective_expires_at"] == (
+            "2030-01-08T00:00:00.000000Z"
+        )
+
+        fresh = client.post(
+            "/api/v1/admin/providers/fred/verify",
+            json={},
+            headers=operator_headers("provider.verify"),
+        ).json()
+        assert fresh["cached"] is False
+        assert fresh["verification"]["expires_at"] == (
+            "2031-01-09T00:00:00.000000Z"
+        )
+        refreshed = client.get("/api/v1/admin/providers").json()
+        current = refreshed["providers"][0]
+        assert current["credential"]["status"] == "verified"
+        assert current["credential"]["cooldown_remaining_seconds"] == 900
+        assert current["credential"]["verification_policy_refresh_required"] is False
+        assert refreshed["roadmap"]["summary"]["verifications_needed_now"] == 0
+
+    with connect(database, read_only=True) as connection:
+        history = connection.execute(
+            """
+            SELECT verification_id, checked_at, expires_at
+            FROM provider_verifications
+            ORDER BY rowid
+            """
+        ).fetchall()
+    assert len(history) == 2
+    assert tuple(history[0]) == (
+        "old-seven-day-ttl",
+        "2030-01-01T00:00:00.000000Z",
+        "2030-01-08T00:00:00.000000Z",
+    )
+
+
+def test_shortened_current_ttl_caps_health_without_rewriting_history(
+    tmp_path: Path,
+) -> None:
+    database = initialize_database(tmp_path / "ttl-policy-cap.db")
+    with connect(database) as connection:
+        revision = connection.execute(
+            "SELECT credential_revision FROM operator_providers WHERE provider_key = 'fred'"
+        ).fetchone()[0]
+        connection.execute(
+            """
+            INSERT INTO provider_verifications (
+                verification_id, provider_key, checked_at, expires_at, status,
+                message, credential_revision, runtime_id, credential_source
+            ) VALUES (
+                'old-one-year-ttl', 'fred', '2030-01-01T00:00:00.000000Z',
+                '2031-01-01T00:00:00.000000Z', 'healthy',
+                'Healthy under a one-year policy.', ?, 'old-runtime', 'keyring'
+            )
+            """,
+            (revision,),
+        )
+    app = create_app(
+        database,
+        secret_store=MemorySecretStore(
+            values={"fred_api_key": SecretValue("ttl-cap-key", "keyring", True)}
+        ),
+        provider_verifiers={"fred_v2": FakeVerifier()},
+        now=lambda: datetime(2030, 1, 9, tzinfo=timezone.utc),
+    )
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+    ) as client:
+        # App startup refreshes the application-owned catalog. Apply a
+        # hypothetical later shortening after that refresh to exercise the
+        # fail-closed cap.
+        with connect(database) as connection:
+            connection.execute(
+                """
+                UPDATE operator_providers
+                SET verification_ttl_seconds = 604800
+                WHERE provider_key = 'fred'
+                """
+            )
         provider = client.get("/api/v1/admin/providers").json()["providers"][0]
-    assert provider["credential"]["verification_ttl_seconds"] == 604800
     assert provider["credential"]["status"] == "expired"
-    assert provider["verification"] is None
     assert provider["last_verification"]["expires_at"] == (
-        "2030-01-15T00:00:00.000000Z"
+        "2031-01-01T00:00:00.000000Z"
     )
     assert provider["last_verification"]["effective_expires_at"] == (
         "2030-01-08T00:00:00.000000Z"
     )
+    with connect(database, read_only=True) as connection:
+        stored_expiry = connection.execute(
+            """
+            SELECT expires_at FROM provider_verifications
+            WHERE verification_id = 'old-one-year-ttl'
+            """
+        ).fetchone()[0]
+    assert stored_expiry == "2031-01-01T00:00:00.000000Z"
 
 
 def test_terminal_history_and_artifact_manifests_are_immutable(
