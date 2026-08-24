@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from backend.pipeline.stages.common import (
+    FRED_OBSERVATION_WINDOW_DAYS,
     PRICE_FETCH_RANGE,
     PRICE_SOFT_MAX_AGE_DAYS,
     SERIES_METADATA,
@@ -51,7 +52,7 @@ def run_fetch_data_stage(
         )
 
     as_of = now.date()
-    observation_start = (as_of - timedelta(days=400)).isoformat()
+    observation_start = (as_of - timedelta(days=FRED_OBSERVATION_WINDOW_DAYS)).isoformat()
     observation_end = as_of.isoformat()
     realtime = as_of.isoformat()
 

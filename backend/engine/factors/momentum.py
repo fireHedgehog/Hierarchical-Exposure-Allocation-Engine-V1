@@ -9,6 +9,9 @@ from backend.engine.factors.types import Bar, HorizonReturn, InsufficientPriceDa
 # unoptimized (see docs/engine-milestones.md, Milestone 3/4). The one
 # non-negotiable: every number here traces to a fetched close price, never a
 # hand-typed value.
+#
+# Registered in the strategies table as `cross_sectional_momentum` (naive-v1,
+# verification_status='registered_only').
 
 # (lookback in trading days, blend weight)
 HORIZONS: tuple[tuple[str, int, float], ...] = (

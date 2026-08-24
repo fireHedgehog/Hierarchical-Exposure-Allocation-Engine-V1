@@ -811,6 +811,8 @@ export interface StrategyVersion {
   parameters?: Nullable<Record<string, unknown>>;
   code_reference?: Nullable<string>;
   promoted_at?: Nullable<string>;
+  next_review_at?: Nullable<string>;
+  verification_status?: Nullable<string>;
   diagnostics?: Nullable<StrategyDiagnostic[]>;
 }
 
@@ -860,4 +862,38 @@ export interface StrategiesResponse {
 
 export interface StrategyDetailResponse {
   strategy: StrategyDetail;
+}
+
+export interface FactorSignificanceResult {
+  factor_key: string;
+  symbol: string;
+  sample_size: number;
+  correlation?: Nullable<number>;
+  p_value?: Nullable<number>;
+  adjusted_p_value?: Nullable<number>;
+  significant: boolean;
+  direction: "positive" | "negative" | "inconclusive" | string;
+  status: "ok" | "insufficient_data" | string;
+}
+
+export interface FactorSignificanceRun {
+  run_id: string;
+  dataset_snapshot_id?: Nullable<string>;
+  method: string;
+  forward_horizon_days: number;
+  correction_method: string;
+  alpha: number;
+  min_samples: number;
+  factor_count: number;
+  symbol_count: number;
+  test_count: number;
+  significant_count: number;
+  summary: string;
+  started_at?: Nullable<string>;
+  finished_at?: Nullable<string>;
+  results?: Nullable<FactorSignificanceResult[]>;
+}
+
+export interface FactorSignificanceRunResponse {
+  run: FactorSignificanceRun;
 }

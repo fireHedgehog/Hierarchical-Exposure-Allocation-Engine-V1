@@ -117,6 +117,26 @@ def _catalog_compatibility_prelude(connection: sqlite3.Connection) -> str:
             "ALTER TABLE operator_providers ADD COLUMN tier "
             "TEXT NOT NULL DEFAULT 'paid' CHECK (tier IN ('free', 'paid'));"
         )
+
+    strategy_versions_table = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'strategy_versions'"
+    ).fetchone()
+    if strategy_versions_table is not None:
+        strategy_version_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(strategy_versions)").fetchall()
+        }
+        if "next_review_at" not in strategy_version_columns:
+            statements.append(
+                "ALTER TABLE strategy_versions ADD COLUMN next_review_at TEXT;"
+            )
+        if "verification_status" not in strategy_version_columns:
+            statements.append(
+                "ALTER TABLE strategy_versions ADD COLUMN verification_status TEXT "
+                "NOT NULL DEFAULT 'registered_only' "
+                "CHECK (verification_status IN ('registered_only', 'verified'));"
+            )
+
     return "\n".join(statements)
 
 

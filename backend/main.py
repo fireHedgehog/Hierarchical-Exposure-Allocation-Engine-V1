@@ -54,6 +54,11 @@ from backend.repository import (
     get_latest_symbol,
     list_latest_symbols,
 )
+from backend.research_repository import (
+    DatasetNotSealedError,
+    get_latest_factor_significance_run,
+    run_factor_significance_research,
+)
 from backend.secrets import (
     KeyringEnvironmentSecretStore,
     SecretStore,
@@ -525,6 +530,36 @@ def create_app(
                 return get_strategy(connection, strategy_key)
         except StrategyNotFoundError as error:
             raise _not_found("strategy_not_found", f"Strategy {strategy_key} is not registered.") from error
+
+    @application.post(
+        "/api/v1/admin/research/factor-significance/runs",
+        tags=["operator"],
+        dependencies=[Depends(operator_guard("research.run_factor_significance", admin_origins))],
+    )
+    def admin_run_factor_significance_research() -> dict[str, Any]:
+        try:
+            with connect(path) as connection:
+                return {"run": run_factor_significance_research(connection, now_fn())}
+        except DatasetNotSealedError as error:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "dataset_not_sealed", "message": str(error)},
+            ) from error
+
+    @application.get(
+        "/api/v1/admin/research/factor-significance/latest",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_latest_factor_significance_research() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            run = get_latest_factor_significance_run(connection)
+        if run is None:
+            raise _not_found(
+                "factor_significance_run_not_found",
+                "No factor-significance research run has been recorded yet.",
+            )
+        return {"run": run}
 
     @application.get("/{full_path:path}", include_in_schema=False)
     def frontend(full_path: str) -> FileResponse:

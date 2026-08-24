@@ -177,7 +177,7 @@ def test_empty_v6_database_has_operator_and_readiness_catalog_but_no_decision_sn
         base_url="http://127.0.0.1:8000",
         client=("127.0.0.1", 52000),
     ) as client:
-        assert client.get("/api/health").json()["schema_version"] == "11"
+        assert client.get("/api/health").json()["schema_version"] == "13"
         assert client.get("/api/v1/desk/latest").status_code == 404
         payload = client.get("/api/v1/admin/providers").json()
         providers = payload["providers"]
@@ -388,7 +388,11 @@ def test_seeded_admin_inventory_strategies_signals_and_chart_annotations(
     assert spy_data["classification"] == "synthetic"
 
     strategies = client.get("/api/v1/admin/strategies").json()
-    assert strategies["summary"]["total"] == 2
+    # 2 synthetic demo fixtures (seed.py) + 5 real engine algorithms
+    # registered in schema.sql (macro_regime_composite, cross_sectional_momentum,
+    # macd_rsi_single_name_timing, risk_envelope_allocation,
+    # conviction_instrument_selection).
+    assert strategies["summary"]["total"] == 7
     assert strategies["strategies"][0]["decay"]["value"] is None
     detail = client.get(
         "/api/v1/admin/strategies/state_conditioned_exposure"
@@ -396,6 +400,19 @@ def test_seeded_admin_inventory_strategies_signals_and_chart_annotations(
     assert detail["versions"][0]["diagnostics"][0]["value"] is None
     assert detail["research_runs"] == []
     assert detail["public_spec_url"] is None
+
+    real_strategy = client.get(
+        "/api/v1/admin/strategies/macro_regime_composite"
+    ).json()["strategy"]
+    assert real_strategy["status"] == "active"
+    real_version = real_strategy["versions"][0]
+    assert real_version["version"] == "naive-v1"
+    assert real_version["verification_status"] == "registered_only"
+    assert real_version["next_review_at"] == "2027-02-24"
+    assert real_version["code_reference"] == "backend/engine/regime/scoring.py"
+    decay_diagnostic = next(d for d in real_version["diagnostics"] if d["metric_key"] == "decay_rate")
+    assert decay_diagnostic["value"] is None
+    assert decay_diagnostic["status"] == "not_computed"
 
     tlt = client.get("/api/v1/symbols/TLT").json()
     assert tlt["current_signal"]["status"] == "candidate"
@@ -1847,10 +1864,11 @@ def test_legacy_demo_gets_complete_versioned_v3_fixture_on_reseed(tmp_path: Path
     assert created is True
     with connect(database, read_only=True) as connection:
         assert connection.execute("SELECT COUNT(*) FROM data_assets").fetchone()[0] == 6
-        assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 2
-        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 2
-        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 6
-        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 2
+        # 2 synthetic demo fixtures + 5 real engine algorithms registered in schema.sql.
+        assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 7
+        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 7
+        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 16
+        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 7
         synthetic_assets = connection.execute(
             """
             SELECT asset_key, dataset_snapshot_id, row_count

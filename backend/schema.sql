@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
     value TEXT NOT NULL
 );
 
-INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '11')
+INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '13')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 INSERT OR IGNORE INTO schema_metadata (key, value) VALUES
@@ -940,6 +940,17 @@ CREATE TABLE IF NOT EXISTS strategy_versions (
     parameters_json TEXT NOT NULL DEFAULT '{}',
     code_reference TEXT,
     promoted_at TEXT,
+    next_review_at TEXT,
+    -- Distinct from strategies.status (which is lifecycle: draft/active/
+    -- watching/retired). This is a separate fact: has this specific version
+    -- actually passed Milestone 4's statistical gate (real significance,
+    -- decorrelation, decay measured) or is it still just "a real function
+    -- registered here, naive and unvalidated." A version can be 'active' in
+    -- the live pipeline while still 'registered_only' here -- that is this
+    -- project's current, honest, expected state for every naive-v1 row.
+    verification_status TEXT NOT NULL DEFAULT 'registered_only' CHECK (
+        verification_status IN ('registered_only', 'verified')
+    ),
     PRIMARY KEY (strategy_key, version)
 );
 
@@ -969,6 +980,77 @@ CREATE TABLE IF NOT EXISTS strategy_lifecycle_events (
     reason TEXT NOT NULL,
     strategy_version TEXT
 );
+
+-- Real engine algorithm registry. Every function in backend/engine/ that
+-- makes a real, standalone decision-relevant claim gets a row here the same
+-- day it ships, not as documentation prose — a maturity/verification/review
+-- record anyone can query, matching the operator_providers/staging_symbols
+-- pattern rather than living only as a code comment. "naive-v1" means
+-- exactly what docs/engine-milestones.md's Milestone 3 vocabulary says:
+-- real function over real data, hand-picked coefficients accepted,
+-- unvalidated by design. Milestone 4 (statistical significance,
+-- decorrelation, decay, fitted weights) is what promotes a version past
+-- naive-v1; decay_rate/estimated_capacity_usd stay NULL until it does.
+INSERT OR IGNORE INTO strategies (strategy_key, name, family, summary, status, current_version, added_at, retired_at, retirement_reason, public_spec_url, created_at, updated_at) VALUES
+    ('macro_regime_composite', 'Macro regime composite', 'macro_regime', '8-factor macro composite (growth, inflation, PPI, core PCE, employment, liquidity, volatility, rates) mapped to a regime label and confidence.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
+    ('cross_sectional_momentum', 'Cross-sectional momentum ranking', 'cross_sectional_discovery', 'Blended 1M/3M/6M z-score momentum ranking across the staging universe.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
+    ('macd_rsi_single_name_timing', 'MACD/RSI single-name timing', 'single_name_timing', 'Long-only MACD(12,26,9) bullish-crossover entry, MACD bearish-crossover or RSI(14)>=70 exit, per symbol.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
+    ('risk_envelope_allocation', 'Risk envelope allocation', 'portfolio_construction', 'Regime confidence scales a gross-exposure multiplier (0.5x-1.5x) against the equal-weight baseline; sleeve targets aggregate factor_engine''s per-symbol tilts.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
+    ('conviction_instrument_selection', 'Conviction-scaled instrument selection', 'instrument_expression', '-5..+5 conviction scale maps to equity tilt / credit spread / debit spread / LEAPS, priced with real Black-Scholes (real spot, real realized volatility, real 10Y Treasury rate).', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z');
+
+INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
+    ('macro_regime_composite', 'naive-v1', '2026-08-24T00:00:00Z',
+     'Each macro series'' deviation from a naive target/center, weighted and summed, proxies the market''s risk-on/risk-off regime; regime confidence should correlate with forward risk-asset performance.',
+     'None claimed yet. Weights (WEIGHTS dict) are hand-picked, not fit or validated against forward returns. Milestone 4 tests each factor''s real significance before any weight is trusted.',
+     'Initial real implementation: fetch_data/validate_data/regime_filter proven end-to-end against live FRED data.',
+     '{"weights":{"growth":0.15,"inflation":0.15,"ppi":0.10,"pce":0.15,"employment":0.10,"liquidity":0.15,"volatility":0.10,"rates":0.10},"growth_scale":0.03,"inflation_target":0.02,"inflation_scale":0.03,"ppi_target":0.02,"ppi_scale":0.05,"pce_target":0.02,"pce_scale":0.02,"employment_scale":0.02,"liquidity_center":0.0,"liquidity_scale":1.0,"volatility_center":20.0,"volatility_scale":10.0,"rates_center":4.0,"rates_scale":2.0,"composite_risk_on_threshold":0.15,"composite_risk_off_threshold":-0.15}',
+     'backend/engine/regime/scoring.py', '2026-08-24T00:00:00Z', '2027-02-24'),
+    ('cross_sectional_momentum', 'naive-v1', '2026-08-24T00:00:00Z',
+     'Relative momentum (return rank vs. peers) persists over 1-6 month horizons; a symbol scoring well across all three horizons is more likely to continue outperforming its peers near-term.',
+     'None claimed yet. Horizon blend weights (0.2/0.3/0.5) are hand-picked. No IC, decay, or turnover evidence has been measured.',
+     'Initial real implementation: real 10-year Yahoo price history, real cross-sectional z-score ranking.',
+     '{"horizons":[["1m",21,0.2],["3m",63,0.3],["6m",126,0.5]],"z_score_scale_divisor":2.0,"bullish_threshold":0.1,"bearish_threshold":-0.1}',
+     'backend/engine/factors/momentum.py', '2026-08-24T00:00:00Z', '2027-02-24'),
+    ('macd_rsi_single_name_timing', 'naive-v1', '2026-08-24T00:00:00Z',
+     'A MACD bullish crossover signals building upward momentum worth entering; an RSI-overbought reading or MACD bearish crossover signals momentum exhaustion worth exiting.',
+     'None claimed. The desk-level aggregate backtest (see docs/engine-milestones.md Milestone 3) shows this losing to buy-and-hold on average across the staging universe. Real, working, and expected to need work.',
+     'Initial real implementation: full trade log, Sharpe ratio, win rate, max drawdown, desk-level aggregate.',
+     '{"macd_fast":12,"macd_slow":26,"macd_signal":9,"rsi_period":14,"rsi_overbought":70.0,"min_bars":60}',
+     'backend/engine/timing/backtest.py', '2026-08-24T00:00:00Z', '2027-02-24'),
+    ('risk_envelope_allocation', 'naive-v1', '2026-08-24T00:00:00Z',
+     'Higher regime confidence (more risk-supportive macro backdrop) should justify carrying more gross exposure than a neutral baseline, and vice versa.',
+     'None claimed. The 0.5x-1.5x band and the confidence-to-multiplier mapping (confidence*2.0) are hand-picked, not fit. No covariance-aware sizing yet.',
+     'Initial real implementation: real decision graph (desk -> risk envelope -> sleeves).',
+     '{"multiplier_floor":0.5,"multiplier_ceiling":1.5,"confidence_to_multiplier_scale":2.0}',
+     'backend/engine/allocation/envelope.py', '2026-08-24T00:00:00Z', '2027-02-24'),
+    ('conviction_instrument_selection', 'naive-v1', '2026-08-24T00:00:00Z',
+     'Higher-conviction views justify progressively more capital-efficient, defined-risk option structures instead of simply sizing up a plain equity position.',
+     'None claimed for the structure-selection thresholds (2.5/3.5/4.5 breakpoints are hand-picked). Black-Scholes pricing is standard, correct math, but uses realized (not market-implied) volatility -- every candidate is explicitly labeled theoretical-pricing-only.',
+     'Initial real implementation: real Black-Scholes pricing over real spot/volatility/rate inputs.',
+     '{"credit_spread_threshold":2.5,"debit_spread_threshold":3.5,"leaps_threshold":4.5,"credit_spread_dte":35,"debit_spread_dte":60,"leaps_dte":545,"credit_put_spread_short_otm":0.05,"credit_put_spread_long_otm":0.10,"bull_call_spread_short_otm":0.08,"bear_put_spread_short_otm":0.08}',
+     'backend/engine/instruments/structures.py', '2026-08-24T00:00:00Z', '2027-02-24');
+
+INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, label, value, unit, status, window_label, as_of, description, sort_order)
+SELECT strategy_key, 'naive-v1', 'decay_rate', 'Signal decay rate', NULL, 'fraction_per_period', 'not_computed', NULL, NULL,
+       'Not yet measured. Requires Milestone 4: statistical significance testing and decay estimation over real forward returns.', 1
+FROM strategies WHERE strategy_key IN (
+    'macro_regime_composite', 'cross_sectional_momentum', 'macd_rsi_single_name_timing',
+    'risk_envelope_allocation', 'conviction_instrument_selection'
+);
+INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, label, value, unit, status, window_label, as_of, description, sort_order)
+SELECT strategy_key, 'naive-v1', 'estimated_capacity_usd', 'Estimated capacity', NULL, 'usd', 'not_computed', NULL, NULL,
+       'Not yet measured. Requires liquidity/market-impact modeling not yet built.', 2
+FROM strategies WHERE strategy_key IN (
+    'macro_regime_composite', 'cross_sectional_momentum', 'macd_rsi_single_name_timing',
+    'risk_envelope_allocation', 'conviction_instrument_selection'
+);
+
+INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
+    ('naive-v1-macro_regime_composite-active', 'macro_regime_composite', '2026-08-24T00:00:00Z', NULL, 'active', 'Registered directly as active: real function over real data, proven end-to-end in the live pipeline (Milestone 3). Naive/unvalidated by design -- Milestone 4 is the statistical validation gate.', 'naive-v1'),
+    ('naive-v1-cross_sectional_momentum-active', 'cross_sectional_momentum', '2026-08-24T00:00:00Z', NULL, 'active', 'Registered directly as active: real function over real data, proven end-to-end in the live pipeline (Milestone 3). Naive/unvalidated by design -- Milestone 4 is the statistical validation gate.', 'naive-v1'),
+    ('naive-v1-macd_rsi_single_name_timing-active', 'macd_rsi_single_name_timing', '2026-08-24T00:00:00Z', NULL, 'active', 'Registered directly as active: real function over real data, proven end-to-end in the live pipeline (Milestone 3). Naive/unvalidated by design -- Milestone 4 is the statistical validation gate.', 'naive-v1'),
+    ('naive-v1-risk_envelope_allocation-active', 'risk_envelope_allocation', '2026-08-24T00:00:00Z', NULL, 'active', 'Registered directly as active: real function over real data, proven end-to-end in the live pipeline (Milestone 3). Naive/unvalidated by design -- Milestone 4 is the statistical validation gate.', 'naive-v1'),
+    ('naive-v1-conviction_instrument_selection-active', 'conviction_instrument_selection', '2026-08-24T00:00:00Z', NULL, 'active', 'Registered directly as active: real function over real data, proven end-to-end in the live pipeline (Milestone 3). Naive/unvalidated by design -- Milestone 4 is the statistical validation gate.', 'naive-v1');
 
 -- Research results remain DB-indexed. Files are optional, reproducible output
 -- artifacts identified by repository-relative path and checksum; Markdown is
@@ -1037,6 +1119,48 @@ CREATE TABLE IF NOT EXISTS research_artifacts (
     created_at TEXT NOT NULL,
     PRIMARY KEY (research_run_id, artifact_key)
 );
+
+-- Milestone 4, step 1 (docs/engine-milestones.md): real macro-factor x
+-- staging-symbol significance testing (backend/engine/research/). Deliberately
+-- NOT a `strategies`/`research_runs` row -- this is validation research
+-- feeding INTO macro_regime_composite and risk_envelope_allocation, not a
+-- decision-making strategy itself. Deliberately NOT registered in
+-- DATASET_SNAPSHOT_CHILD_TABLES (database.py): a run only makes sense
+-- AFTER its dataset_snapshot_id is already sealed, so it must stay
+-- insertable post-seal, unlike fred_observations/symbol_bars.
+CREATE TABLE IF NOT EXISTS factor_significance_runs (
+    run_id TEXT PRIMARY KEY,
+    dataset_snapshot_id TEXT NOT NULL REFERENCES dataset_snapshots(id),
+    method TEXT NOT NULL,
+    forward_horizon_days INTEGER NOT NULL,
+    correction_method TEXT NOT NULL,
+    alpha REAL NOT NULL,
+    min_samples INTEGER NOT NULL,
+    factor_count INTEGER NOT NULL,
+    symbol_count INTEGER NOT NULL,
+    test_count INTEGER NOT NULL,
+    significant_count INTEGER NOT NULL,
+    summary TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS factor_significance_results (
+    run_id TEXT NOT NULL REFERENCES factor_significance_runs(run_id),
+    factor_key TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    sample_size INTEGER NOT NULL,
+    correlation REAL,
+    p_value REAL,
+    adjusted_p_value REAL,
+    significant INTEGER NOT NULL CHECK (significant IN (0, 1)),
+    direction TEXT NOT NULL CHECK (direction IN ('positive', 'negative', 'inconclusive')),
+    status TEXT NOT NULL CHECK (status IN ('ok', 'insufficient_data')),
+    PRIMARY KEY (run_id, factor_key, symbol)
+);
+
+CREATE INDEX IF NOT EXISTS idx_factor_significance_results_significant
+    ON factor_significance_results(run_id, significant, factor_key);
 
 -- Append-only audit/history boundaries. In-progress runs may advance to a
 -- terminal state; once terminal, their headers and stage records are sealed.

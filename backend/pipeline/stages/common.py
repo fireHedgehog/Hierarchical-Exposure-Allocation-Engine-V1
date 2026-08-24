@@ -41,6 +41,13 @@ PRICE_HARD_MAX_AGE_DAYS = 10
 # fetch per symbol (Yahoo returns the requested range in a single response,
 # so this isn't N times slower than a 1-year fetch, just a bigger payload).
 PRICE_FETCH_RANGE = "10y"
+# Was 400 days (enough for regime_filter's trailing-12-month YoY calc, no
+# more). Too short for engine/research/'s significance testing: a monthly
+# series like CPIAUCSL only yields ~11 observations in 400 days, well below
+# MIN_SAMPLES. 10 years matches PRICE_FETCH_RANGE so factor observations and
+# symbol bars cover the same real window (discovered 2026-08-24, first real
+# significance run; see docs/engine-milestones.md).
+FRED_OBSERVATION_WINDOW_DAYS = 365 * 10
 
 
 def _json(value: Any) -> str:

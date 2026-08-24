@@ -15,6 +15,9 @@ from backend.engine.indicators.rsi import compute_rsi
 # real trade log and real metrics, not a competitive strategy. See
 # docs/engine-milestones.md.
 
+# Registered in the strategies table as `macd_rsi_single_name_timing`
+# (naive-v1, verification_status='registered_only').
+
 MIN_BARS = 60  # real warmup for a 26-period EMA, plus room to actually trade
 
 

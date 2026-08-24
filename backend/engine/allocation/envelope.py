@@ -7,6 +7,10 @@ class InsufficientAllocationDataError(ValueError):
     """No symbol allocation inputs were provided to build an envelope from."""
 
 
+# Registered in the strategies table as `risk_envelope_allocation` (naive-v1,
+# verification_status='registered_only').
+
+
 @dataclass(frozen=True)
 class SymbolAllocationInput:
     symbol: str

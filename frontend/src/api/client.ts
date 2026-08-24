@@ -15,6 +15,7 @@ export const endpoints = {
   adminPipeline: "/api/v1/admin/pipeline",
   adminStrategies: "/api/v1/admin/strategies",
   adminStrategy: (key: string) => `/api/v1/admin/strategies/${safeAdminKey(key)}`,
+  adminFactorSignificanceLatest: "/api/v1/admin/research/factor-significance/latest",
 } as const;
 
 export class ApiError extends Error {
@@ -89,7 +90,8 @@ type OperatorAction =
   | "credential.delete"
   | "provider.verify"
   | "pipeline.run"
-  | "engine_mode.write";
+  | "engine_mode.write"
+  | "research.run_factor_significance";
 type OperatorMethod = "POST" | "PUT" | "DELETE";
 
 interface OperatorRequest {
@@ -156,6 +158,14 @@ export function setEngineMode<T>(mode: "pilot" | "production", reason?: string):
   });
 }
 
+export function runFactorSignificanceResearch<T>(): Promise<T> {
+  return operatorJson<T>("/api/v1/admin/research/factor-significance/runs", {
+    method: "POST",
+    action: "research.run_factor_significance",
+    body: {},
+  });
+}
+
 function safeAdminKey(value: string): string {
   const key = value.trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(key)) {
@@ -172,7 +182,8 @@ function assertOperatorPath(path: string, method: OperatorMethod, action: Operat
     (providerCredential.test(path) && method === "DELETE" && action === "credential.delete") ||
     (providerVerify.test(path) && method === "POST" && action === "provider.verify") ||
     (path === "/api/v1/admin/pipeline/runs" && method === "POST" && action === "pipeline.run") ||
-    (path === "/api/v1/admin/engine-mode" && method === "PUT" && action === "engine_mode.write");
+    (path === "/api/v1/admin/engine-mode" && method === "PUT" && action === "engine_mode.write") ||
+    (path === "/api/v1/admin/research/factor-significance/runs" && method === "POST" && action === "research.run_factor_significance");
   if (!allowed) throw new Error("Blocked unsafe operator request.");
 }
 

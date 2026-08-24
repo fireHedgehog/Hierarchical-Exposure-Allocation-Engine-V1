@@ -16,6 +16,10 @@ from backend.engine.regime.types import (
 # What is NOT accepted: any output value that isn't actually computed from a
 # real fetched observation. Every number this module returns traces back to
 # an entry in the `series` argument passed in by the caller.
+#
+# Registered in the strategies table as `macro_regime_composite` (naive-v1,
+# verification_status='registered_only'), not just documented here — see
+# docs/engine-milestones.md.
 
 WEIGHTS: dict[str, float] = {
     "growth": 0.15,

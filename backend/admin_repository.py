@@ -1265,6 +1265,8 @@ def get_strategy(connection: sqlite3.Connection, strategy_key: str) -> dict[str,
                 "parameters": _json(version["parameters_json"]),
                 "code_reference": version["code_reference"],
                 "promoted_at": version["promoted_at"],
+                "next_review_at": version["next_review_at"],
+                "verification_status": version["verification_status"],
                 "diagnostics": [dict(metric) for metric in diagnostics],
             }
         )

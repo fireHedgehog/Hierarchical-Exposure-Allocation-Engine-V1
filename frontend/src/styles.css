@@ -2103,6 +2103,7 @@ summary:focus-visible,
 .operator-table th { padding: 10px; border-bottom: 1px solid var(--line); background: #101a18; color: var(--faint); font-size: 7px; letter-spacing: .08em; text-align: left; text-transform: uppercase; }
 .operator-table td { padding: 11px 10px; border-bottom: 1px solid var(--line); color: var(--text-soft); font-size: 9px; vertical-align: top; }
 .operator-table tr:last-child td { border-bottom: 0; }
+.factor-significance-row--significant td { background: rgba(101,218,181,.06); }
 .data-asset-name { display: flex; min-width: 270px; gap: 9px; }
 .data-asset-name > div { display: grid; gap: 3px; }
 .data-asset-name strong { font-size: 10px; }

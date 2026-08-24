@@ -56,11 +56,15 @@ export function StrategyDetailPage() {
                   <article key={version.version}>
                     <span className="operator-icon"><History aria-hidden="true" size={15} /></span>
                     <div>
-                      <div><strong>Version {version.version}</strong><StatusPill value={version.version === strategy.version ? "current" : "historical"} /></div>
+                      <div>
+                        <strong>Version {version.version}</strong>
+                        <StatusPill value={version.version === strategy.version ? "current" : "historical"} />
+                        <StatusPill value={version.verification_status || "registered_only"} />
+                      </div>
                       <p>{version.change_summary || "No version change summary is persisted."}</p>
                       {version.thesis ? <small>Thesis: {version.thesis}</small> : null}
                       {version.expected_edge ? <small>Expected edge: {version.expected_edge}</small> : null}
-                      <small>Created {formatTimestamp(version.created_at)} · Promoted {formatTimestamp(version.promoted_at)}</small>
+                      <small>Created {formatTimestamp(version.created_at)} · Promoted {formatTimestamp(version.promoted_at)} · Next review {formatTimestamp(version.next_review_at)}</small>
                     </div>
                     <CodeReference value={version.code_reference} />
                   </article>

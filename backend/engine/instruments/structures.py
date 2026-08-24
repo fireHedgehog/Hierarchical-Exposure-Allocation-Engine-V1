@@ -11,6 +11,9 @@ from backend.engine.pricing.black_scholes import OptionPricingError, OptionQuote
 # real inputs, deliberately unoptimized selection rules (see
 # docs/engine-milestones.md). NET_DEBIT_CREDIT convention: positive = debit
 # paid, negative = credit received.
+#
+# Registered in the strategies table as `conviction_instrument_selection`
+# (naive-v1, verification_status='registered_only').
 
 
 class InsufficientInstrumentDataError(ValueError):
