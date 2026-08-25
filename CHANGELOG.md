@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — low-volatility anomaly run; a real 12-1 check on the reversal finding
+
+- Low-volatility anomaly run against real data: also rejected (r=-0.19, adjusted p<0.0001; calmest third's forward return +0.62% vs. +2.73% for the most volatile third) — likely the same underlying mechanism as time-series momentum's rejection (drawdowns getting bought aggressively in this window's bull market), not an unrelated fluke. Scope caveat recorded: only raw return tested, not the more precise risk-adjusted form of the academic claim.
+- User raised a real methodological point: short-term reversal and medium-term continuation are separately time-windowed effects in the literature (Jegadeesh 1990; Jegadeesh & Titman 1993's 12-1 spec) — tested, not assumed. A proper 12-1 (skip-month) version of time-series momentum still rejected (r=-0.028, adjusted p=0.0066), smaller in magnitude but still real and negative.
+
 ### Research — first full hypothesis cycle; two new literature-backed candidates preregistered
 
 - Two candidates preregistered under `docs/hypotheses/`: time-series momentum (Moskowitz, Ooi & Pedersen 2012) as a timing-layer challenger to MACD; low-volatility anomaly (Ang, Hodrick, Xing & Zhang 2006; Frazzini & Pedersen 2014) as a cross-sectional addition. Added `preregistered` as a real status distinct from `observing`.

@@ -46,8 +46,8 @@ gate before research even reaches the DB.
 | Hypothesis | Type of evidence | Status | Checkpoints so far |
 | --- | --- | --- | --- |
 | [Warsh Fed reaction function](warsh-reaction-function.md) | categorical (hawkish/dovish/neutral/inconclusive) per FOMC/speech event | observing | 1 |
-| [Time-series momentum](time-series-momentum.md) | continuous (IC vs. real forward return) | concluded-rejected | 1 |
-| [Low-volatility anomaly](low-volatility-anomaly.md) | continuous (IC vs. real forward return) | preregistered | 0 |
+| [Time-series momentum](time-series-momentum.md) | continuous (IC vs. real forward return) | concluded-rejected | 2 |
+| [Low-volatility anomaly](low-volatility-anomaly.md) | continuous (IC vs. real forward return) | concluded-rejected (raw return) | 1 |
 
 ## Template for a new hypothesis
 

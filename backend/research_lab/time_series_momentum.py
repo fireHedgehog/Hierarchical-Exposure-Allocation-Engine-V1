@@ -13,7 +13,19 @@ from backend.database import connect, resolve_database_path
 from backend.engine.research.significance import benjamini_hochberg, pearson_significance
 
 FORWARD_DAYS = 21
-LOOKBACKS: tuple[tuple[str, int], ...] = (("1m", 21), ("3m", 63), ("6m", 126), ("12m", 252))
+# (label, lookback_days, skip_days). skip_days > 0 excludes the most recent
+# month from the trailing-return signal, isolating a longer-horizon
+# continuation effect from a separate, documented short-term reversal effect
+# that would otherwise blend into (and can swamp) it -- the same reasoning
+# behind Jegadeesh & Titman's (1993) "12-1" specification, already used for
+# cross_sectional_momentum's 12m_skip1m component (research_repository.py).
+LOOKBACKS: tuple[tuple[str, int, int], ...] = (
+    ("1m", 21, 0),
+    ("3m", 63, 0),
+    ("6m", 126, 0),
+    ("12m", 252, 0),
+    ("12m_skip1m", 252, 21),
+)
 
 
 def _security_id_for(symbol: str, category: str) -> str:
@@ -44,7 +56,7 @@ def main() -> None:
     ).fetchall()
 
     raw = []
-    for horizon, lookback in LOOKBACKS:
+    for horizon, lookback, skip_days in LOOKBACKS:
         x: list[float] = []
         y: list[float] = []
         for row in staging_rows:
@@ -64,11 +76,12 @@ def main() -> None:
             # removes, that overlap.
             for i in range(lookback, n - FORWARD_DAYS, 5):
                 past_close = closes[i - lookback]
+                signal_close = closes[i - skip_days]
                 now_close = closes[i]
                 future_close = closes[i + FORWARD_DAYS]
                 if past_close == 0 or now_close == 0:
                     continue
-                trailing_return = (now_close - past_close) / abs(past_close)
+                trailing_return = (signal_close - past_close) / abs(past_close)
                 forward_return = (future_close - now_close) / abs(now_close)
                 x.append(1.0 if trailing_return > 0 else 0.0)
                 y.append(forward_return)

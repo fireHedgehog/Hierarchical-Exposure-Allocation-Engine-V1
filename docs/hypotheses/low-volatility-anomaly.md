@@ -1,6 +1,6 @@
 # Low-volatility anomaly (H-LOWVOL01)
 
-Status: preregistered
+Status: concluded-rejected (raw-return version, on this universe/window; see Observation log)
 Version: v0.1
 Registered: 2026-08-26
 
@@ -59,3 +59,4 @@ in different clothing.
 
 | Date | Checkpoint | Reading | Note |
 | --- | --- | --- | --- |
+| 2026-08-26 | Real IC test, 63-day trailing realized vol (inverted) vs. 21-day forward return, `research_lab/low_volatility_anomaly.py` against dataset `real-macro-d9a319bd-09e0-443b-93b3-2e6ec70f4170`, stride=5 | **Rejected as stated, for raw return.** r=-0.19 (adjusted p<0.0001, n=10,115); Rank IC=-0.15 (raw p<0.0001). The calmest third of the sample had a mean 21-day forward return of only +0.62%, vs. +2.73% for the most volatile third — the opposite of the predicted direction. | Real, not softened. Notable: this is the *same direction of surprise* as time-series-momentum.md's rejection, not an unrelated fluke — both are consistent with one underlying story about this specific window (2016-2026): a high-realized-vol reading is usually a recent drawdown/selloff, and if sharp drawdowns get bought aggressively in a dominant secular bull market, that alone produces both "down periods reverse up" (time-series momentum) and "volatile periods rebound hard" (this one) as two faces of the same regime characteristic, not two independent anomalies. Real scope caveat, not glossed over: this only tested raw forward return; the academic claim (Ang et al.; Frazzini & Pedersen) is more precisely stated in risk-adjusted (Sharpe/CAPM-alpha) terms — a volatile asset can have a higher raw return and still a worse risk-adjusted one. This result does not test that more precise claim; a real risk-adjusted follow-up would need to divide the forward return by its own realized vol before comparing buckets, not compared here. |
