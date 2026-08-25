@@ -63,9 +63,11 @@ from backend.research_repository import (
     UnsupportedSignalValidationFamilyError,
     UnsupportedStrategyBacktestFamilyError,
     get_latest_factor_significance_run,
+    get_latest_momentum_significance_run,
     get_latest_signal_validation_run,
     get_latest_strategy_backtest_run,
     run_factor_significance_research,
+    run_momentum_significance_research,
     run_signal_validation_research,
     run_strategy_backtest_research,
 )
@@ -603,6 +605,36 @@ def create_app(
             raise _not_found(
                 "signal_validation_run_not_found",
                 f"No signal-validation research run has been recorded yet for {strategy_key}.",
+            )
+        return {"run": run}
+
+    @application.post(
+        "/api/v1/admin/research/momentum-significance/runs",
+        tags=["operator"],
+        dependencies=[Depends(operator_guard("research.run_momentum_significance", admin_origins))],
+    )
+    def admin_run_momentum_significance_research() -> dict[str, Any]:
+        try:
+            with connect(path) as connection:
+                return {"run": run_momentum_significance_research(connection, now_fn())}
+        except DatasetNotSealedError as error:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "dataset_not_sealed", "message": str(error)},
+            ) from error
+
+    @application.get(
+        "/api/v1/admin/research/momentum-significance/latest",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_latest_momentum_significance_research() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            run = get_latest_momentum_significance_run(connection)
+        if run is None:
+            raise _not_found(
+                "momentum_significance_run_not_found",
+                "No momentum-significance research run has been recorded yet.",
             )
         return {"run": run}
 

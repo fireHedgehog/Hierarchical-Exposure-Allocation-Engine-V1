@@ -9,6 +9,7 @@ from backend.engine.factors import (
     InsufficientBacktestHistoryError,
     run_cross_sectional_momentum_backtest,
 )
+from backend.engine.factors.momentum_v2 import _pooled_ic_samples
 from backend.engine.factors.types import Bar
 from backend.engine.regime import InsufficientSeriesDataError, compute_regime_v2
 from backend.engine.regime.types import SeriesObservation
@@ -16,9 +17,12 @@ from backend.engine.research import (
     FORWARD_HORIZON_TRADING_DAYS,
     MIN_SAMPLES,
     FactorSignificanceRun,
+    benjamini_hochberg,
     compute_factor_symbol_significance,
     effective_number_of_bets,
     pairwise_correlation_matrix,
+    pearson_significance,
+    rank_information_coefficient,
     redundancy_pairs,
 )
 from backend.pipeline.stages.common import SERIES_METADATA, _iso_z, _security_id_for
@@ -617,6 +621,204 @@ def _tradable_symbol_bars(connection: sqlite3.Connection, dataset_snapshot_id: s
         if bar_rows:
             bars_by_symbol[row["symbol"]] = [Bar(time=bar["time"], close=bar["close"]) for bar in bar_rows]
     return bars_by_symbol
+
+
+# (horizon key, lookback_days, skip_days) -- 1m/3m/6m match momentum_v2.py's
+# live HORIZON_LOOKBACKS exactly; 12m_skip1m matches _momentum_horizon_series's
+# literature constants above. Kept independent of both: this is a research
+# test, not a change to either the live blend or the ensemble-correlation
+# extraction.
+MOMENTUM_HORIZONS_FOR_SIGNIFICANCE: tuple[tuple[str, int, int], ...] = (
+    ("1m", 21, 0),
+    ("3m", 63, 0),
+    ("6m", 126, 0),
+    ("12m_skip1m", LITERATURE_MOMENTUM_LOOKBACK_DAYS, LITERATURE_MOMENTUM_SKIP_DAYS),
+)
+
+
+def run_momentum_significance_research(
+    connection: sqlite3.Connection,
+    now: datetime,
+    dataset_snapshot_id: str | None = None,
+) -> dict[str, object]:
+    """Real per-horizon forward-return significance test for
+    cross_sectional_momentum's candidate horizons -- the gap 0.16 named and
+    explicitly left open ("IC/Rank-IC against forward returns deliberately
+    not run this pass"). Reuses the exact pooled (horizon-return,
+    forward-return) pairing and Pearson+Benjamini-Hochberg correction already
+    proven in momentum_v2.py's live blend-weight test (compute_horizon_weights),
+    generalized to also cover 12m_skip1m (Jegadeesh & Titman's 12-1
+    specification), plus each horizon's real Rank IC (Spearman) -- the
+    factor_rank_ic catalog metric, never populated before. Deliberately does
+    NOT touch compute_horizon_weights or HORIZON_LOOKBACKS: this is research
+    evidence about a draft component (12m_skip1m, status='draft' in
+    strategy_components), not a change to the live blend -- promotion out of
+    draft stays a separate, deliberate decision.
+    """
+
+    resolved_dataset_id = dataset_snapshot_id or _latest_sealed_dataset_id(connection)
+    if resolved_dataset_id is None:
+        raise DatasetNotSealedError("No sealed dataset snapshot is available to research.")
+    dataset = connection.execute(
+        "SELECT id, immutable FROM dataset_snapshots WHERE id = ?", (resolved_dataset_id,)
+    ).fetchone()
+    if dataset is None or not dataset["immutable"]:
+        raise DatasetNotSealedError(f"Dataset snapshot {resolved_dataset_id!r} does not exist or is not sealed.")
+
+    strategy = connection.execute(
+        "SELECT current_version FROM strategies WHERE strategy_key = 'cross_sectional_momentum'"
+    ).fetchone()
+    if strategy is None or strategy["current_version"] is None:
+        raise UnsupportedSignalValidationFamilyError("cross_sectional_momentum has no current version registered.")
+    strategy_version = strategy["current_version"]
+
+    bars_by_symbol = _tradable_symbol_bars(connection, resolved_dataset_id)
+
+    raw: list[dict[str, object]] = []
+    for horizon, lookback_days, skip_days in MOMENTUM_HORIZONS_FOR_SIGNIFICANCE:
+        x, y = _pooled_ic_samples(bars_by_symbol, lookback_days, skip_days=skip_days)
+        if len(x) < MIN_SAMPLES:
+            raw.append({"horizon": horizon, "sample_size": len(x), "status": "insufficient_data"})
+            continue
+        correlation, p_value = pearson_significance(x, y)
+        rank_correlation, rank_p_value = rank_information_coefficient(x, y)
+        raw.append(
+            {
+                "horizon": horizon,
+                "sample_size": len(x),
+                "correlation": correlation,
+                "p_value": p_value,
+                "rank_correlation": rank_correlation,
+                "rank_p_value": rank_p_value,
+                "status": "ok",
+            }
+        )
+
+    testable = [item for item in raw if item["status"] == "ok"]
+    p_values = [item["p_value"] for item in testable]  # type: ignore[misc]
+    adjusted_p_values, significant_flags = benjamini_hochberg(p_values, alpha=0.05)
+    for item, adjusted_p_value, is_significant in zip(testable, adjusted_p_values, significant_flags):
+        item["adjusted_p_value"] = adjusted_p_value
+        item["significant"] = is_significant
+
+    run_id = f"momentum-significance-{uuid.uuid4()}"
+    timestamp = _iso_z(now)
+    significant_count = sum(1 for item in testable if item.get("significant"))
+    summary = (
+        f"Tested {len(testable)} of {len(MOMENTUM_HORIZONS_FOR_SIGNIFICANCE)} candidate horizons "
+        f"({', '.join(item['horizon'] for item in raw)}) against real forward returns; "
+        f"{significant_count} remained significant after benjamini_hochberg correction at alpha=0.05."
+    )
+
+    connection.execute(
+        """
+        INSERT INTO research_runs (
+            research_run_id, strategy_key, strategy_version, dataset_snapshot_id,
+            parameters_json, status, started_at, finished_at, summary
+        ) VALUES (?, 'cross_sectional_momentum', ?, ?, '{}', 'completed', ?, ?, ?)
+        """,
+        (run_id, strategy_version, resolved_dataset_id, timestamp, timestamp, summary),
+    )
+
+    metric_rows: list[tuple] = []
+    for item in raw:
+        horizon = item["horizon"]
+        if item["status"] == "insufficient_data":
+            metric_rows.append(
+                (
+                    run_id, horizon, "factor_ic", f"{horizon} forward-return IC", None, "correlation",
+                    "insufficient_data",
+                    f"Only {item['sample_size']} paired samples; need at least {MIN_SAMPLES}.",
+                )
+            )
+            continue
+        is_significant = bool(item["significant"])
+        metric_rows.append(
+            (
+                run_id, horizon, "factor_ic", f"{horizon} forward-return IC", item["correlation"], "correlation",
+                "ok",
+                f"Pearson r={item['correlation']:+.3f} over {item['sample_size']} real pooled samples, "
+                f"adjusted p={item['adjusted_p_value']:.4f} "
+                f"({'significant' if is_significant else 'not significant'} after Benjamini-Hochberg correction).",
+            )
+        )
+        metric_rows.append(
+            (
+                run_id, horizon, "factor_rank_ic", f"{horizon} forward-return Rank IC", item["rank_correlation"],
+                "correlation", "ok",
+                f"Spearman rank correlation over {item['sample_size']} real pooled samples "
+                f"(raw p={item['rank_p_value']:.4f}, not itself multiple-comparisons corrected).",
+            )
+        )
+    connection.executemany(
+        """
+        INSERT INTO research_run_metrics (
+            research_run_id, subject_key, metric_key, label, value, unit, status, description
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        metric_rows,
+    )
+
+    return {
+        "run_id": run_id,
+        "strategy_key": "cross_sectional_momentum",
+        "strategy_version": strategy_version,
+        "dataset_snapshot_id": resolved_dataset_id,
+        "summary": summary,
+        "started_at": timestamp,
+        "finished_at": timestamp,
+        "results": [
+            {
+                "horizon": item["horizon"],
+                "sample_size": item["sample_size"],
+                "status": item["status"],
+                "correlation": item.get("correlation"),
+                "p_value": item.get("p_value"),
+                "adjusted_p_value": item.get("adjusted_p_value"),
+                "rank_correlation": item.get("rank_correlation"),
+                "rank_p_value": item.get("rank_p_value"),
+                "significant": bool(item.get("significant", False)),
+            }
+            for item in raw
+        ],
+    }
+
+
+def get_latest_momentum_significance_run(connection: sqlite3.Connection) -> dict[str, object] | None:
+    run_row = connection.execute(
+        """
+        SELECT research_run_id, strategy_key, strategy_version, dataset_snapshot_id, summary, started_at, finished_at
+        FROM research_runs WHERE research_run_id LIKE 'momentum-significance-%'
+        ORDER BY started_at DESC, rowid DESC LIMIT 1
+        """
+    ).fetchone()
+    if run_row is None:
+        return None
+    metric_rows = connection.execute(
+        """
+        SELECT subject_key, metric_key, value, status, description FROM research_run_metrics
+        WHERE research_run_id = ? ORDER BY subject_key, metric_key
+        """,
+        (run_row["research_run_id"],),
+    ).fetchall()
+    by_horizon: dict[str, dict[str, object]] = {}
+    for row in metric_rows:
+        entry = by_horizon.setdefault(row["subject_key"], {"horizon": row["subject_key"]})
+        if row["metric_key"] == "factor_ic":
+            entry["correlation"] = row["value"]
+            entry["status"] = row["status"]
+        elif row["metric_key"] == "factor_rank_ic":
+            entry["rank_correlation"] = row["value"]
+    return {
+        "run_id": run_row["research_run_id"],
+        "strategy_key": run_row["strategy_key"],
+        "strategy_version": run_row["strategy_version"],
+        "dataset_snapshot_id": run_row["dataset_snapshot_id"],
+        "summary": run_row["summary"],
+        "started_at": run_row["started_at"],
+        "finished_at": run_row["finished_at"],
+        "results": list(by_horizon.values()),
+    }
 
 
 def run_strategy_backtest_research(

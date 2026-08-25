@@ -61,13 +61,22 @@ def _pooled_ic_samples(
     lookback_days: int,
     forward_days: int = FORWARD_HORIZON_TRADING_DAYS,
     stride: int = STRIDE_DAYS,
+    skip_days: int = 0,
 ) -> tuple[list[float], list[float]]:
     """Real, pooled (horizon return, forward return) pairs across every
     staging symbol's own real price history -- no interpolation, no
     synthetic fill. Each symbol contributes independently; pooling assumes
     the same horizon->forward-return relationship holds across symbols,
     which is the naive part of this test (a per-symbol test would need far
-    more history per symbol than this staging universe has)."""
+    more history per symbol than this staging universe has).
+
+    skip_days (default 0, unused by 1m/3m/6m) supports a Jegadeesh &
+    Titman-style "12-1" specification: the horizon return is measured up to
+    skip_days before the decision point, not up to it, while the forward
+    return is still measured from the real decision point (now_close)
+    onward -- short-term reversal and medium-term momentum are distinct
+    effects, so the signal window and the entry point deliberately differ.
+    """
 
     x: list[float] = []
     y: list[float] = []
@@ -77,11 +86,12 @@ def _pooled_ic_samples(
         n = len(closes)
         for i in range(lookback_days, n - forward_days, stride):
             past_close = closes[i - lookback_days]
+            signal_close = closes[i - skip_days]
             now_close = closes[i]
             future_close = closes[i + forward_days]
             if past_close == 0 or now_close == 0:
                 continue
-            x.append((now_close - past_close) / abs(past_close))
+            x.append((signal_close - past_close) / abs(past_close))
             y.append((future_close - now_close) / abs(now_close))
     return x, y
 

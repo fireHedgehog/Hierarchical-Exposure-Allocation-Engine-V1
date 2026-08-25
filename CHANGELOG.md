@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — momentum horizon forward-return IC test; a real sign bug found, not yet fixed
+
+- `run_momentum_significance_research()` tests each of cross_sectional_momentum's 4 candidate horizons (1m/3m/6m/12m_skip1m) for real Pearson IC and Rank IC against forward returns — the gap 0.16 explicitly left open. Reuses the exact pooled pairing and Benjamini-Hochberg correction already proven in the live `compute_horizon_weights`; does not touch the live blend itself.
+- Live-verified: 1m and 3m are real, significant short-term **reversal** (negative IC), not momentum; 12m_skip1m is real, significant momentum (positive IC); 6m is not significant — the textbook Jegadeesh & Titman (1993) shape.
+- **Found, not fixed**: the live blend weights each horizon by `abs(correlation)` only, discarding sign — so a positive 1-month return is currently scored bullish by the live ranking when the data says that direction is bearish. Flagged for a deliberate decision rather than silently patched.
+
 ### Research — macro composite's own regime score gets a real forward-return IC test
 
 - `_macro_composite_score_series()` builds the real, point-in-time composite regime score (the same `compute_regime_v2` blend that drives the live regime label) as a real time series, then folds it into the existing 8-factor significance batch as a 9th tested series — no new table, same Pearson/Benjamini-Hochberg correction pool. Closes the gap named in 0.20: every individual macro factor's forward-return correlation had been tested, never the blended composite itself.
