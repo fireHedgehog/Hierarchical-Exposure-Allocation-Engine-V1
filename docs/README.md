@@ -5,7 +5,7 @@ This is the authoritative catch-up page for maintainers and coding agents. Keep 
 ## Current state
 
 - Version: `0.1.0`, the initial manual-first repository edition; no release tag has been created.
-- Design record: [Edition V3](editions/edition-v3.md) is the current design record; [Edition V2](editions/edition-v2.md) and [Edition V1](editions/edition-v1.md) stay archived, unedited, for historical context.
+- Design record: [Edition V2](editions/edition-v2.md) is the current design record; [Edition V1](editions/edition-v1.md) stays archived, unedited, for historical context. Editions mark rare, order-of-magnitude boundaries only — this checkpoint and [engine milestones](engine-milestones.md) carry ordinary progress.
 - Product: a database-driven hierarchical exposure allocation and research application.
 - Available: Today desk, decision graph, cross-sectional matrix, data health, symbol signal/chart/event/metric views, per-symbol and desk-level backtest evaluation, and position candidates backed by SQLite snapshots.
 - Operating mode: local, manual-first, and read-only with respect to brokers. A DB-backed engine operating mode (pilot/production, Operations → Credentials) gates any future stage that requires a paid-tier provider; pilot is the default and requires no paid credentials.
@@ -13,12 +13,12 @@ This is the authoritative catch-up page for maintainers and coding agents. Keep 
 - Operations: a loopback-only, lower-frequency control plane provides an evidence-derived demo-to-real readiness map, a database-driven provider/capability onboarding roadmap, credential smoke tests, source freshness, dry/full manual run records, and strategy/research lifecycle views below the decision surfaces.
 - Provider plan: FRED/ALFRED is the only actionable account. Three researched full-desk accounts remain planned, but their adapters and entitlement checks are not implemented and no keys are requested yet.
 - Real engine: all six compute stages — `fetch_data`, `validate_data`, `regime_filter`, `factor_engine`, `allocation_engine`, `instrument_engine` — are implemented and proven against live FRED and Yahoo data, every value traceable to a fetched observation or a function over one (deliberately naive/overfit scoring throughout; see [engine milestones](engine-milestones.md)). Only `publish_snapshot` remains scaffolded.
-- Sub-strategy granularity (`strategy_components`) and a general research-evidence layer (`research_metric_catalog`, 71 metrics across 6 categories; `research_run_metrics`) are real for two strategies and one research category respectively — Edition V3's boundary. Adding or retiring one candidate factor is proven to cost minimum code, not a redesign; see [engine milestones](engine-milestones.md) 0.13–0.16.
+- Sub-strategy granularity (`strategy_components`) and a general research-evidence layer (`research_metric_catalog`, 71 metrics across 6 categories; `research_run_metrics`) are real for two strategies and one research category respectively. Adding or retiring one candidate factor is proven to cost minimum code, not a redesign; see [engine milestones](engine-milestones.md) 0.13–0.16.
 - Not available yet: a production security master and versioned universe, real options-chain quotes (options are priced with a real Black-Scholes engine off real inputs, not a market quote — honestly labeled theoretical-pricing-only), walk-forward/decay/fitted-weight evidence, covariance-aware portfolio construction, scheduled runs, broker connectivity, or order placement.
 
 ## Next product task
 
-The engine's free-data pilot slice (all six compute stages, through `instrument_engine`) is done, and Edition V3's research infrastructure is proven — see [engine milestones](engine-milestones.md) for status and verified examples. Next:
+The engine's free-data pilot slice (all six compute stages, through `instrument_engine`) is done, and the sub-strategy/research-evidence infrastructure (engine milestones 0.13–0.16) is proven — see [engine milestones](engine-milestones.md) for status and verified examples. Next:
 
 1. Milestone 4: pursue real candidate factors using the now-proven research loop (add via `strategy_components`, run signal-validation research, promote or retire by status flip) — decorrelation has real first evidence (effective number of bets); decay and fitted weights remain undone.
 2. Build the point-in-time security master and versioned universe (roadmap phase 2) — the staging universe remains a free-data fixture with no governed, effective-dated eligibility contract.
@@ -52,8 +52,7 @@ Each stage follows the same contract proven since `regime_filter`: a real functi
 ## Document map
 
 - [Root README](../README.md): product identity and quick start.
-- [Edition V3](editions/edition-v3.md): current design record — sub-strategy granularity, the research-evidence layer, and the proven minimum-code factor-add loop.
-- [Edition V2](editions/edition-v2.md): archived — the six compute stages made real over free-tier data.
+- [Edition V2](editions/edition-v2.md): current design record — the six compute stages made real over free-tier data.
 - [Edition V1](editions/edition-v1.md): archived initial product thesis, hierarchy, and operating principles.
 - [Roadmap](roadmap.md): durable demo-to-real sequence, completion evidence, and the UI surface unlocked by each phase.
 - [Engine milestones](engine-milestones.md): living working doc for the current free-data-first engine build sequence; edited in place, versioned by a table at its top, not archived per change.

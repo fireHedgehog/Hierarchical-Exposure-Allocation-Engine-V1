@@ -1,6 +1,6 @@
 # Capability sequence from demonstration to real decisions
 
-[Edition V2](editions/edition-v2.md) preserves the durable design; this page defines the implementation sequence and the evidence required before a surface can represent real rather than synthetic decisions. Operations → Pipeline is the live, database-backed readiness view. Each phase should ship as a narrow, visible vertical slice; later gaps do not prevent useful earlier work. Completion means persisted, inspectable behavior in the application, not a persuasive document or one successful backtest.
+The [project checkpoint](README.md) carries the current design record and live status; this page defines the durable implementation sequence and the evidence required before a surface can represent real rather than synthetic decisions. Operations → Pipeline is the live, database-backed readiness view. Each phase should ship as a narrow, visible vertical slice; later gaps do not prevent useful earlier work. Completion means persisted, inspectable behavior in the application, not a persuasive document or one successful backtest.
 
 | Phase | Current gap | Completion evidence | UI surface unlocked |
 | --- | --- | --- | --- |
