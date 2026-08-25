@@ -1234,6 +1234,22 @@ INSERT OR IGNORE INTO strategy_components (strategy_key, version, component_key,
     ('macd_rsi_single_name_timing', 'naive-v2', 'macd_crossover', 'MACD bullish/bearish crossover', 'computed', '["entry","exit"]', 'backend/engine/indicators/macd.py', NULL, 'active', 'registered_only', NULL, '2027-02-25', '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z'),
     ('macd_rsi_single_name_timing', 'naive-v2', 'rsi_overbought_exit', 'RSI(14) >= 70 overbought exit', 'computed', '["exit"]', 'backend/engine/indicators/rsi.py', NULL, 'active', 'registered_only', NULL, '2027-02-25', '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z');
 
+-- First research-loop smoke test (2026-08-25): a genuine literature-classic
+-- candidate factor -- Jegadeesh & Titman's (1993) original "12-1" momentum
+-- (trailing 12-month return, most recent month skipped; short-term
+-- reversal is a real, separately documented effect this specification
+-- deliberately excludes) -- added to cross_sectional_momentum's extraction
+-- (backend/research_repository.py's _momentum_horizon_series) alongside
+-- the existing naive 1M/3M/6M blend. status='draft': a real, registered,
+-- grey-testable candidate, not yet promoted into the live momentum blend
+-- (momentum_v2.py is unchanged). First live signal-validation run found it
+-- genuinely diversifying, not redundant: correlates 0.68 with 6M, 0.44
+-- with 3M, only 0.08 with 1M (consistent with the literature's short-term-
+-- reversal-vs-momentum distinction) -- effective number of bets rose from
+-- 1.74 (3 factors) to 2.11 (4 factors) once it was included.
+INSERT OR IGNORE INTO strategy_components (strategy_key, version, component_key, name, component_type, roles_json, code_reference, base_weight, status, verification_status, decay_rate, next_review_at, created_at, updated_at) VALUES
+    ('cross_sectional_momentum', 'naive-v2', '12m_skip1m', 'Jegadeesh & Titman (1993) 12-1 momentum', 'computed', '["contribution"]', 'backend/research_repository.py', NULL, 'draft', 'registered_only', NULL, '2027-02-25', '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z');
+
 INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, label, value, unit, status, window_label, as_of, description, sort_order) VALUES
     ('macd_rsi_single_name_timing', 'naive-v2', 'decay_rate', 'Signal decay rate', NULL, 'fraction_per_period', 'not_computed', NULL, NULL,
      'Not yet measured at the strategy level. Component-level decay (per macd_crossover / rsi_overbought_exit) also not yet measured -- see strategy_components.decay_rate.', 1),

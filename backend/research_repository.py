@@ -311,19 +311,35 @@ def _macro_factor_series(
     return series_by_key
 
 
+LITERATURE_MOMENTUM_LOOKBACK_DAYS = 252  # ~12 months of trading days
+LITERATURE_MOMENTUM_SKIP_DAYS = 21  # ~1 month, skipped -- short-term reversal is a distinct effect
+
+
 def _momentum_horizon_series(
     connection: sqlite3.Connection, dataset_snapshot_id: str
 ) -> dict[str, list[float]]:
-    """Real, contemporaneous 1M/3M/6M horizon-return samples pooled across
-    every staging symbol's own real price history: at each sampled bar
-    index, all three horizon returns are computed from the SAME (symbol,
-    date) point, so the three resulting series are aligned by construction,
-    same pooling convention as momentum_v2.py's significance test."""
+    """Real, contemporaneous horizon-return samples pooled across every
+    staging symbol's own real price history: at each sampled bar index,
+    every horizon return is computed from the SAME (symbol, date) point, so
+    the resulting series are aligned by construction, same pooling
+    convention as momentum_v2.py's significance test.
+
+    Includes this project's existing naive 1M/3M/6M blend AND, as one
+    literature-classic addition proving how little new code a new candidate
+    factor actually costs, Jegadeesh & Titman's (1993) original "12-1"
+    specification: the trailing 12-month return with the most recent month
+    skipped (short-term reversal is a real, distinct, separately documented
+    effect from medium-term momentum -- conflating them would misrepresent
+    both). Adding this required extending the lookback and one extra
+    per-index computation; the correlation/ENB math, the DB write, and the
+    UI below were already generic and needed no changes at all.
+    """
 
     horizons = (("1m", 21), ("3m", 63), ("6m", 126))
     stride = 5
-    max_lookback = max(lookback for _, lookback in horizons)
+    max_lookback = max(LITERATURE_MOMENTUM_LOOKBACK_DAYS, *(lookback for _, lookback in horizons))
     series_by_key: dict[str, list[float]] = {horizon: [] for horizon, _ in horizons}
+    series_by_key["12m_skip1m"] = []
 
     staging_rows = connection.execute(
         "SELECT symbol, category FROM staging_symbols WHERE active = 1 AND category != 'macro_series'"
@@ -344,6 +360,13 @@ def _momentum_horizon_series(
                     row_values = {}
                     break
                 row_values[horizon] = (closes[i] - past_close) / abs(past_close)
+            if row_values:
+                twelve_month_ago = closes[i - LITERATURE_MOMENTUM_LOOKBACK_DAYS]
+                one_month_ago = closes[i - LITERATURE_MOMENTUM_SKIP_DAYS]
+                if twelve_month_ago == 0:
+                    row_values = {}
+                else:
+                    row_values["12m_skip1m"] = (one_month_ago - twelve_month_ago) / abs(twelve_month_ago)
             if not row_values:
                 continue
             for horizon, value in row_values.items():
