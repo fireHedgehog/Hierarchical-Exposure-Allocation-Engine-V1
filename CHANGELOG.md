@@ -4,6 +4,10 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Frontend — "Run pipeline" button was buried below a full-page report
+
+- `OperationsOverviewPage.tsx` reordered: the pipeline run panel (`Dry preflight`/`Run available stages`) and latest-run record now render right after the top stat grid; the evidence-gated roadmap (`ProductReadinessPanel`, a long five-milestone report) moved to the bottom. A page titled "Run pipeline" now leads with the ability to run it. User-caught by trying to actually use the page, not by reading the code.
+
 ### Engine — real per-symbol current timing signal (regime + cross-sectional + timing, connected)
 
 - New `symbol_events` row per symbol per snapshot (`event_type='timing_signal'`, `event_status='signal_state'`), derived from the MACD/RSI backtest's own trade log — no new table, no new backend field. One of three honest states: holding (open, no exit trigger since entry), flat (closed, no new entry trigger since), or no signal yet.

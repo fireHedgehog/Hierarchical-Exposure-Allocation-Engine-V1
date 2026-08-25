@@ -69,8 +69,6 @@ export function OperationsOverviewPage() {
             <OverviewMetric label="Ready datasets" value={data.data.ready} denominator={data.data.assets} status={statusForOverviewMetric("ready", data.data.ready, data.data.assets)} />
             <OverviewMetric label="Active strategies" value={data.strategies.active} denominator={data.strategies.total} status={statusForOverviewMetric("active", data.strategies.active, data.strategies.total)} />
           </div>
-
-          <ProductReadinessPanel readiness={data.readiness} />
         </>
       ) : null}
 
@@ -121,6 +119,8 @@ export function OperationsOverviewPage() {
         />
         {run ? <PipelineRunCard run={run} /> : <Unavailable title="No pipeline run recorded" detail="Start a dry run when you are ready to verify the staged workflow." />}
       </Panel>
+
+      {data ? <ProductReadinessPanel readiness={data.readiness} /> : null}
     </div>
   );
 }
