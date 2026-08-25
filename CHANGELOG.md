@@ -4,6 +4,10 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Frontend — display-name correction, `macd_rsi_single_name_timing`
+
+- Renamed the user-facing name from "MACD/RSI single-name timing" to "Single-name timing" — a name tied to today's specific components reads as wrong the moment one is retired or a new one registered. `strategy_key` stays untouched (same separation already applied to `security_id` vs. ticker); only the display label changed, via an `UPDATE` alongside the seed row so existing databases pick it up too, not just fresh clones.
+
 ### Engine — strategy-level backtest, the "strategy" granularity tier's first real content
 
 - New `backend/engine/factors/cross_sectional_backtest.py`: a real, naive-v1 walk-forward backtest for `cross_sectional_momentum` — at each rebalance date, rank the universe with the real production ranking function (point-in-time, recomputed from only history available then), buy the top N equal-weighted, hold, chain into a real equity curve against a real equal-weight benchmark. `POST /api/v1/admin/research/strategy-backtest/runs`, live-verified: 85 real rebalance periods, naive momentum beats its benchmark (+338.0% vs. +196.0%, CAGR +23.2%, Sharpe 1.22) — an honest, unvalidated result (no costs, no out-of-sample split, hand-picked parameters), not a claim of a working strategy. `STRATEGY_BACKTEST_FAMILIES` explicitly excludes `macro_regime_composite` — a classifier isn't traded, so there's no "strategy" tier for it, matching the desk's own reasoning.

@@ -1074,7 +1074,7 @@ CREATE TABLE IF NOT EXISTS strategy_components (
 INSERT OR IGNORE INTO strategies (strategy_key, name, family, summary, status, current_version, added_at, retired_at, retirement_reason, public_spec_url, created_at, updated_at) VALUES
     ('macro_regime_composite', 'Macro regime composite', 'macro_regime', '8-factor macro composite (growth, inflation, PPI, core PCE, employment, liquidity, volatility, rates) mapped to a regime label and confidence.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
     ('cross_sectional_momentum', 'Cross-sectional momentum ranking', 'cross_sectional_discovery', 'Blended 1M/3M/6M z-score momentum ranking across the staging universe.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
-    ('macd_rsi_single_name_timing', 'MACD/RSI single-name timing', 'single_name_timing', 'Long-only MACD(12,26,9) bullish-crossover entry, MACD bearish-crossover or RSI(14)>=70 exit, per symbol.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
+    ('macd_rsi_single_name_timing', 'Single-name timing', 'single_name_timing', 'Long-only MACD(12,26,9) bullish-crossover entry, MACD bearish-crossover or RSI(14)>=70 exit, per symbol -- an ensemble of independently retireable components (see Registry record), not one fixed formula.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
     ('risk_envelope_allocation', 'Risk envelope allocation', 'portfolio_construction', 'Regime confidence scales a gross-exposure multiplier (0.5x-1.5x) against the equal-weight baseline; sleeve targets aggregate factor_engine''s per-symbol tilts.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
     ('conviction_instrument_selection', 'Conviction-scaled instrument selection', 'instrument_expression', '-5..+5 conviction scale maps to equity tilt / credit spread / debit spread / LEAPS, priced with real Black-Scholes (real spot, real realized volatility, real 10Y Treasury rate).', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z');
 
@@ -1089,6 +1089,20 @@ INSERT OR IGNORE INTO strategies (strategy_key, name, family, summary, status, c
 INSERT OR IGNORE INTO strategies (strategy_key, name, family, summary, status, current_version, added_at, retired_at, retirement_reason, public_spec_url, created_at, updated_at) VALUES
     ('sentiment_text_mining', 'Sentiment / text mining', 'sentiment_analysis', 'Social/news-derived sentiment. Not started -- no free or paid text/social data source is connected (see roadmap.md).', 'draft', NULL, NULL, NULL, NULL, NULL, '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z'),
     ('fundamental_analysis', 'Fundamental analysis (EPS / earnings)', 'fundamental_analysis', 'Company fundamentals -- EPS, earnings surprises, estimate revisions. Not started -- Intrinio/Benzinga are planned providers, not yet registered or adapted (see roadmap.md).', 'draft', NULL, NULL, NULL, NULL, NULL, '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z');
+
+-- Display-label correction (2026-08-25): the strategy_key (the stable,
+-- permanent identifier -- same separation this project already applies to
+-- security_id vs. ticker) stays macd_rsi_single_name_timing untouched, but
+-- "MACD/RSI single-name timing" as the user-facing NAME was a mistake once
+-- the strategy became a swappable ensemble of components -- a name tied to
+-- today's specific components reads as wrong the moment one gets retired or
+-- a new one is registered (exactly the "user confusion" this correction
+-- exists to prevent). "Single-name timing" is deliberately stable across
+-- future component changes. UPDATE, not a fresh INSERT OR IGNORE row,
+-- because this corrects an already-seeded value on existing databases, not
+-- just fresh clones.
+UPDATE strategies SET name = 'Single-name timing', updated_at = '2026-08-25T00:00:00Z'
+WHERE strategy_key = 'macd_rsi_single_name_timing' AND name != 'Single-name timing';
 
 INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
     ('macro_regime_composite', 'naive-v1', '2026-08-24T00:00:00Z',

@@ -52,7 +52,7 @@ const LAYERS: Layer[] = [
   },
   {
     key: "single_name_timing",
-    name: "Single-name timing (MACD / RSI)",
+    name: "Single-name timing",
     implemented: true,
     codeReference: "backend/engine/timing/backtest_v2.py",
     strategyKey: "macd_rsi_single_name_timing",
