@@ -610,8 +610,8 @@ def create_app(
         with connect(path, read_only=True) as connection:
             rows = connection.execute(
                 """
-                SELECT c.metric_key, c.category, c.label, c.unit, c.description, c.applicable_families_json,
-                       c.sort_order,
+                SELECT c.metric_key, c.category, c.granularity, c.label, c.unit, c.description,
+                       c.applicable_families_json, c.sort_order,
                        EXISTS(SELECT 1 FROM research_run_metrics m WHERE m.metric_key = c.metric_key) AS has_data
                 FROM research_metric_catalog c ORDER BY c.sort_order
                 """
@@ -621,6 +621,7 @@ def create_app(
                 {
                     "metric_key": row["metric_key"],
                     "category": row["category"],
+                    "granularity": row["granularity"],
                     "label": row["label"],
                     "unit": row["unit"],
                     "description": row["description"],

@@ -949,6 +949,7 @@ export interface SignalValidationRunResponse {
 export interface ResearchCatalogMetric {
   metric_key: string;
   category: string;
+  granularity: "component" | "ensemble" | "strategy" | "desk" | string;
   label: string;
   unit?: Nullable<string>;
   description: string;

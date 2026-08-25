@@ -113,7 +113,7 @@ function SignalValidationSection({
   return (
     <Panel>
       <SectionHeading
-        eyebrow="Signal validation — effective number of bets"
+        eyebrow="Ensemble level — relationships among this strategy's own factors"
         title={title}
         description={description}
         action={(
@@ -165,40 +165,68 @@ function correlationRowClass(correlation: number): string {
   return "factor-significance-row--significant";
 }
 
+const GRANULARITY_ORDER = ["component", "ensemble", "strategy", "desk"] as const;
+const GRANULARITY_LABELS: Record<string, string> = {
+  component: "Component — one factor alone",
+  ensemble: "Ensemble — relationships among a strategy's own factors",
+  strategy: "Strategy — one strategy's realized, combined output (fittable by an optimizer)",
+  desk: "Desk — cross-strategy, whole portfolio",
+};
+
 function MetricCatalogSection() {
   const state = useApi<ResearchMetricCatalogResponse>(endpoints.adminResearchMetricCatalog);
   const metrics = state.data?.metrics ?? [];
-  const grouped = useMemo(() => groupByCategory(metrics), [metrics]);
+  const byLevel = useMemo(() => groupByGranularity(metrics), [metrics]);
 
   return (
     <Panel>
       <SectionHeading
-        eyebrow="The full taxonomy"
+        eyebrow="The full taxonomy, by level"
         title="Research metric catalog"
-        description="Every metric this project's research program can compute, enumerated up front. A metric having no data yet is an honest 'not run', not an oversight — not every factor needs every check, and null is allowed."
+        description="Metric granularity matches factor granularity: component metrics evaluate one factor alone, ensemble metrics evaluate relationships among a strategy's own factors, strategy metrics evaluate one strategy's realized output, desk metrics evaluate cross-strategy portfolio construction. A metric having no data yet is an honest 'not run', not an oversight."
       />
       <ResourceState loading={state.loading} error={state.error} onRetry={state.reload} resource="metric catalog" />
-      {Object.entries(grouped).map(([category, categoryMetrics]) => (
-        <div key={category} className="methodology-card__note methodology-card__note--null" style={{ display: "block", marginBottom: 10 }}>
-          <strong style={{ display: "block", marginBottom: 6, textTransform: "capitalize" }}>{category.replace(/_/g, " ")}</strong>
-          <div className="operator-table-scroll">
-            <table className="operator-table">
-              <thead><tr><th>Metric</th><th>Unit</th><th>Status</th></tr></thead>
-              <tbody>
-                {categoryMetrics.map((metric) => (
-                  <tr key={metric.metric_key} title={metric.description}>
-                    <td>{metric.label}</td>
-                    <td>{metric.unit || NOT_AVAILABLE}</td>
-                    <td>{metric.has_data ? <StatusPill value="data available" tone="positive" /> : <Minus aria-hidden="true" size={14} className="strategy-no-spec" />}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {GRANULARITY_ORDER.map((level) => {
+        const levelMetrics = byLevel[level];
+        if (!levelMetrics?.length) return null;
+        const byCategory = groupByCategory(levelMetrics);
+        return (
+          <div key={level} style={{ marginBottom: 16 }}>
+            <h3 style={{ margin: "0 0 8px", fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 14, fontWeight: 500 }}>
+              {GRANULARITY_LABELS[level] || level}
+            </h3>
+            {Object.entries(byCategory).map(([category, categoryMetrics]) => (
+              <div key={category} className="methodology-card__note methodology-card__note--null" style={{ display: "block", marginBottom: 10 }}>
+                <strong style={{ display: "block", marginBottom: 6, textTransform: "capitalize" }}>{category.replace(/_/g, " ")}</strong>
+                <div className="operator-table-scroll">
+                  <table className="operator-table">
+                    <thead><tr><th>Metric</th><th>Unit</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {categoryMetrics.map((metric) => (
+                        <tr key={metric.metric_key} title={metric.description}>
+                          <td>{metric.label}</td>
+                          <td>{metric.unit || NOT_AVAILABLE}</td>
+                          <td>{metric.has_data ? <StatusPill value="data available" tone="positive" /> : <Minus aria-hidden="true" size={14} className="strategy-no-spec" />}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </Panel>
   );
+}
+
+function groupByGranularity(metrics: ResearchCatalogMetric[]): Record<string, ResearchCatalogMetric[]> {
+  const grouped: Record<string, ResearchCatalogMetric[]> = {};
+  for (const metric of metrics) {
+    (grouped[metric.granularity] ||= []).push(metric);
+  }
+  return grouped;
 }
 
 function groupByCategory(metrics: ResearchCatalogMetric[]): Record<string, ResearchCatalogMetric[]> {

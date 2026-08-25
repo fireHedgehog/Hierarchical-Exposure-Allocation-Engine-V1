@@ -4,6 +4,10 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Engine — metric granularity axis
+
+- New `research_metric_catalog.granularity` column (`component` / `ensemble` / `strategy` / `desk`), independent from `category`: WHAT LEVEL of the strategy hierarchy a metric evaluates, mapped onto the existing `strategy_components` → ensemble math → strategy backtest → desk-portfolio schema. User-identified gap: the 71-metric catalog had flattened single-factor metrics (IC), cross-factor metrics (correlation, effective number of bets), and realized-return metrics (Sharpe, CAGR — the tier an optimizer could fit) into one undifferentiated list. All 71 rows re-tagged; the Research page's catalog panel now groups by level first, then category.
+
 ### Engine — first research-loop smoke test
 
 - Added Jegadeesh & Titman's (1993) original "12-1" momentum (12-month return, most recent month skipped) as a real `strategy_components` candidate (`status='draft'`) under `cross_sectional_momentum`, proving the whole research loop end to end with a genuine literature-classic factor: ~10 lines in one existing extraction function, zero schema/endpoint/UI changes, DB insert and API read-path both verified directly. Correlates 0.68 with 6M, 0.44 with 3M, only 0.08 with 1M, not flagged redundant — effective number of bets rose from 1.74 to 2.11 once included, a genuine, honest, diversifying result.
