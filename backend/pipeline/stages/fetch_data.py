@@ -54,7 +54,16 @@ def run_fetch_data_stage(
     as_of = now.date()
     observation_start = (as_of - timedelta(days=FRED_OBSERVATION_WINDOW_DAYS)).isoformat()
     observation_end = as_of.isoformat()
-    realtime = as_of.isoformat()
+    # A 1-day safety margin, not the dataset's real as_of: FRED validates
+    # realtime_start/realtime_end against ITS OWN server clock (observed to
+    # run on US time, behind UTC), and rejects a pin later than that with a
+    # real HTTP 400 -- "realtime_start can not be after today's date". Since
+    # `now` here is UTC, the hours right after UTC midnight are still
+    # "yesterday" for FRED. Pinning one real day earlier costs nothing (FRED
+    # vintages do not change intraday) and removes this clock-skew edge case
+    # entirely, rather than requesting a vintage FRED may not consider to
+    # exist yet.
+    realtime = (as_of - timedelta(days=1)).isoformat()
 
     fetched_series: dict[str, list[FredObservation]] = {}
     for series_id in SERIES_METADATA:

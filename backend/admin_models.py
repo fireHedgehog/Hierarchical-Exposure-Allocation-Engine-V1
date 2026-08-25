@@ -36,3 +36,9 @@ class EngineModeWriteRequest(BaseModel):
 
     mode: Literal["pilot", "production"]
     reason: str | None = Field(default=None, max_length=500)
+
+
+class SignalValidationRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_key: Literal["macro_regime_composite", "cross_sectional_momentum"]

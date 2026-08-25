@@ -921,3 +921,41 @@ export interface FactorSignificanceRun {
 export interface FactorSignificanceRunResponse {
   run: FactorSignificanceRun;
 }
+
+export interface FactorCorrelationPair {
+  key_a: string;
+  key_b: string;
+  correlation: number;
+  flagged_redundant: boolean;
+}
+
+export interface SignalValidationRun {
+  run_id: string;
+  strategy_key: string;
+  strategy_version?: Nullable<string>;
+  dataset_snapshot_id?: Nullable<string>;
+  summary: string;
+  started_at?: Nullable<string>;
+  finished_at?: Nullable<string>;
+  factor_correlations: FactorCorrelationPair[];
+  effective_number_of_bets?: Nullable<number>;
+  factor_count?: Nullable<number>;
+}
+
+export interface SignalValidationRunResponse {
+  run: SignalValidationRun;
+}
+
+export interface ResearchCatalogMetric {
+  metric_key: string;
+  category: string;
+  label: string;
+  unit?: Nullable<string>;
+  description: string;
+  applicable_families: string[];
+  has_data: boolean;
+}
+
+export interface ResearchMetricCatalogResponse {
+  metrics: ResearchCatalogMetric[];
+}

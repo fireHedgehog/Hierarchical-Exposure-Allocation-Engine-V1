@@ -16,6 +16,8 @@ export const endpoints = {
   adminStrategies: "/api/v1/admin/strategies",
   adminStrategy: (key: string) => `/api/v1/admin/strategies/${safeAdminKey(key)}`,
   adminFactorSignificanceLatest: "/api/v1/admin/research/factor-significance/latest",
+  adminSignalValidationLatest: (strategyKey: string) => `/api/v1/admin/research/signal-validation/latest?strategy_key=${safeAdminKey(strategyKey)}`,
+  adminResearchMetricCatalog: "/api/v1/admin/research/metric-catalog",
 } as const;
 
 export class ApiError extends Error {
@@ -91,7 +93,8 @@ type OperatorAction =
   | "provider.verify"
   | "pipeline.run"
   | "engine_mode.write"
-  | "research.run_factor_significance";
+  | "research.run_factor_significance"
+  | "research.run_signal_validation";
 type OperatorMethod = "POST" | "PUT" | "DELETE";
 
 interface OperatorRequest {
@@ -163,6 +166,14 @@ export function runFactorSignificanceResearch<T>(): Promise<T> {
     method: "POST",
     action: "research.run_factor_significance",
     body: {},
+  });
+}
+
+export function runSignalValidationResearch<T>(strategyKey: "macro_regime_composite" | "cross_sectional_momentum"): Promise<T> {
+  return operatorJson<T>("/api/v1/admin/research/signal-validation/runs", {
+    method: "POST",
+    action: "research.run_signal_validation",
+    body: { strategy_key: strategyKey },
   });
 }
 

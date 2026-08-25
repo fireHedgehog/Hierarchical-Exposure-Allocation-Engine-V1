@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import threading
@@ -20,6 +21,7 @@ from backend.admin_models import (
     EngineModeWriteRequest,
     PipelineRunRequest,
     ProviderVerifyRequest,
+    SignalValidationRunRequest,
 )
 from backend.admin_repository import (
     PipelineNotFoundError,
@@ -56,8 +58,11 @@ from backend.repository import (
 )
 from backend.research_repository import (
     DatasetNotSealedError,
+    UnsupportedSignalValidationFamilyError,
     get_latest_factor_significance_run,
+    get_latest_signal_validation_run,
     run_factor_significance_research,
+    run_signal_validation_research,
 )
 from backend.secrets import (
     KeyringEnvironmentSecretStore,
@@ -560,6 +565,71 @@ def create_app(
                 "No factor-significance research run has been recorded yet.",
             )
         return {"run": run}
+
+    @application.post(
+        "/api/v1/admin/research/signal-validation/runs",
+        tags=["operator"],
+        dependencies=[Depends(operator_guard("research.run_signal_validation", admin_origins))],
+    )
+    def admin_run_signal_validation_research(payload: SignalValidationRunRequest) -> dict[str, Any]:
+        try:
+            with connect(path) as connection:
+                return {"run": run_signal_validation_research(connection, now_fn(), payload.strategy_key)}
+        except DatasetNotSealedError as error:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "dataset_not_sealed", "message": str(error)},
+            ) from error
+        except UnsupportedSignalValidationFamilyError as error:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "signal_validation_unsupported", "message": str(error)},
+            ) from error
+
+    @application.get(
+        "/api/v1/admin/research/signal-validation/latest",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_latest_signal_validation_research(strategy_key: str) -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            run = get_latest_signal_validation_run(connection, strategy_key)
+        if run is None:
+            raise _not_found(
+                "signal_validation_run_not_found",
+                f"No signal-validation research run has been recorded yet for {strategy_key}.",
+            )
+        return {"run": run}
+
+    @application.get(
+        "/api/v1/admin/research/metric-catalog",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_research_metric_catalog() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            rows = connection.execute(
+                """
+                SELECT c.metric_key, c.category, c.label, c.unit, c.description, c.applicable_families_json,
+                       c.sort_order,
+                       EXISTS(SELECT 1 FROM research_run_metrics m WHERE m.metric_key = c.metric_key) AS has_data
+                FROM research_metric_catalog c ORDER BY c.sort_order
+                """
+            ).fetchall()
+        return {
+            "metrics": [
+                {
+                    "metric_key": row["metric_key"],
+                    "category": row["category"],
+                    "label": row["label"],
+                    "unit": row["unit"],
+                    "description": row["description"],
+                    "applicable_families": json.loads(row["applicable_families_json"]),
+                    "has_data": bool(row["has_data"]),
+                }
+                for row in rows
+            ]
+        }
 
     @application.get("/{full_path:path}", include_in_schema=False)
     def frontend(full_path: str) -> FileResponse:

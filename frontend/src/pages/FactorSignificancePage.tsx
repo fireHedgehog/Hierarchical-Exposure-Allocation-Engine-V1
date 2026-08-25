@@ -1,9 +1,23 @@
-import { AlertTriangle, FlaskConical, RefreshCw } from "lucide-react";
+import { AlertTriangle, FlaskConical, Minus, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
-import { endpoints, operatorErrorMessage, runFactorSignificanceResearch, useApi } from "../api/client";
+import {
+  endpoints,
+  operatorErrorMessage,
+  runFactorSignificanceResearch,
+  runSignalValidationResearch,
+  useApi,
+} from "../api/client";
 import { OperatorPageHeader } from "../components/OperatorPageHeader";
 import { Panel, ResourceState, SectionHeading, StatusPill, Unavailable } from "../components/Ui";
-import type { FactorSignificanceResult, FactorSignificanceRun, FactorSignificanceRunResponse } from "../types";
+import type {
+  FactorSignificanceResult,
+  FactorSignificanceRun,
+  FactorSignificanceRunResponse,
+  ResearchCatalogMetric,
+  ResearchMetricCatalogResponse,
+  SignalValidationRun,
+  SignalValidationRunResponse,
+} from "../types";
 import { formatNumber, formatTimestamp, NOT_AVAILABLE, toneForDirection } from "../utils/format";
 
 export function FactorSignificancePage() {
@@ -52,8 +66,147 @@ export function FactorSignificancePage() {
           detail="Run significance research against the latest sealed dataset to populate this page."
         />
       ) : null}
+
+      <SignalValidationSection
+        strategyKey="macro_regime_composite"
+        title="Macro factors — diversification"
+        description="Number of factors != number of independent bets. PCA on the 8 macro factors' real pairwise correlation matrix, over the same sealed dataset."
+      />
+      <SignalValidationSection
+        strategyKey="cross_sectional_momentum"
+        title="Momentum horizons — diversification"
+        description="Same method applied to the 1M/3M/6M momentum horizons: are they three independent views, or mostly one restated three ways?"
+      />
+
+      <MetricCatalogSection />
     </div>
   );
+}
+
+function SignalValidationSection({
+  strategyKey,
+  title,
+  description,
+}: {
+  strategyKey: "macro_regime_composite" | "cross_sectional_momentum";
+  title: string;
+  description: string;
+}) {
+  const state = useApi<SignalValidationRunResponse>(endpoints.adminSignalValidationLatest(strategyKey));
+  const [running, setRunning] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const run = state.data?.run;
+
+  const startRun = async () => {
+    setRunning(true);
+    setActionError(null);
+    try {
+      await runSignalValidationResearch<SignalValidationRunResponse>(strategyKey);
+      state.reload();
+    } catch (error) {
+      setActionError(operatorErrorMessage(error, "The signal-validation research request failed."));
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Panel>
+      <SectionHeading
+        eyebrow="Signal validation — effective number of bets"
+        title={title}
+        description={description}
+        action={(
+          <button className="button operator-run-button" type="button" onClick={startRun} disabled={running}>
+            <FlaskConical aria-hidden="true" size={16} /> {running ? "Running…" : "Run"}
+          </button>
+        )}
+      />
+      {actionError ? <div className="operator-action-message operator-action-message--error" role="alert"><AlertTriangle aria-hidden="true" size={16} />{actionError}</div> : null}
+      {run ? (
+        <>
+          <dl className="strategy-identity-grid">
+            <div><dt>Effective number of bets</dt><dd><strong>{run.effective_number_of_bets != null ? run.effective_number_of_bets.toFixed(2) : NOT_AVAILABLE}</strong> of {run.factor_count ?? NOT_AVAILABLE} factors</dd></div>
+            <div><dt>Run at</dt><dd>{formatTimestamp(run.started_at)}</dd></div>
+            <div><dt>Dataset snapshot</dt><dd><code>{run.dataset_snapshot_id || NOT_AVAILABLE}</code></dd></div>
+          </dl>
+          <p className="methodology-card__summary">{run.summary}</p>
+          {run.factor_correlations?.length ? (
+            <div className="operator-table-scroll">
+              <table className="operator-table">
+                <thead>
+                  <tr><th>Factor A</th><th>Factor B</th><th>Correlation</th><th>Flag</th></tr>
+                </thead>
+                <tbody>
+                  {run.factor_correlations.map((pair) => (
+                    <tr key={`${pair.key_a}-${pair.key_b}`} className={correlationRowClass(pair.correlation)}>
+                      <td><code>{pair.key_a}</code></td>
+                      <td><code>{pair.key_b}</code></td>
+                      <td>{pair.correlation.toFixed(3)}</td>
+                      <td>{pair.flagged_redundant ? <StatusPill value="redundant" tone="negative" /> : <StatusPill value="ok" tone="positive" />}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </>
+      ) : !state.loading ? (
+        <Unavailable compact title="No signal-validation run recorded yet" detail="Run it against the latest sealed dataset." />
+      ) : null}
+    </Panel>
+  );
+}
+
+function correlationRowClass(correlation: number): string {
+  const magnitude = Math.abs(correlation);
+  if (magnitude >= 0.7) return "factor-significance-row--negative";
+  if (magnitude >= 0.3) return "factor-significance-row--caution";
+  return "factor-significance-row--significant";
+}
+
+function MetricCatalogSection() {
+  const state = useApi<ResearchMetricCatalogResponse>(endpoints.adminResearchMetricCatalog);
+  const metrics = state.data?.metrics ?? [];
+  const grouped = useMemo(() => groupByCategory(metrics), [metrics]);
+
+  return (
+    <Panel>
+      <SectionHeading
+        eyebrow="The full taxonomy"
+        title="Research metric catalog"
+        description="Every metric this project's research program can compute, enumerated up front. A metric having no data yet is an honest 'not run', not an oversight — not every factor needs every check, and null is allowed."
+      />
+      <ResourceState loading={state.loading} error={state.error} onRetry={state.reload} resource="metric catalog" />
+      {Object.entries(grouped).map(([category, categoryMetrics]) => (
+        <div key={category} className="methodology-card__note methodology-card__note--null" style={{ display: "block", marginBottom: 10 }}>
+          <strong style={{ display: "block", marginBottom: 6, textTransform: "capitalize" }}>{category.replace(/_/g, " ")}</strong>
+          <div className="operator-table-scroll">
+            <table className="operator-table">
+              <thead><tr><th>Metric</th><th>Unit</th><th>Status</th></tr></thead>
+              <tbody>
+                {categoryMetrics.map((metric) => (
+                  <tr key={metric.metric_key} title={metric.description}>
+                    <td>{metric.label}</td>
+                    <td>{metric.unit || NOT_AVAILABLE}</td>
+                    <td>{metric.has_data ? <StatusPill value="data available" tone="positive" /> : <Minus aria-hidden="true" size={14} className="strategy-no-spec" />}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+    </Panel>
+  );
+}
+
+function groupByCategory(metrics: ResearchCatalogMetric[]): Record<string, ResearchCatalogMetric[]> {
+  const grouped: Record<string, ResearchCatalogMetric[]> = {};
+  for (const metric of metrics) {
+    (grouped[metric.category] ||= []).push(metric);
+  }
+  return grouped;
 }
 
 function RunSummaryPanel({ run }: { run: FactorSignificanceRun }) {

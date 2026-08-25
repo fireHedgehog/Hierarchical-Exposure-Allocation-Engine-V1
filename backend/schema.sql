@@ -1252,6 +1252,12 @@ CREATE TABLE IF NOT EXISTS research_runs (
     research_run_id TEXT PRIMARY KEY,
     strategy_key TEXT NOT NULL,
     strategy_version TEXT NOT NULL,
+    -- Which strategy_components row this run evaluates, if it targets one
+    -- specific sub-signal rather than the whole ensemble (e.g. IC for just
+    -- macd_crossover). NULL means the run evaluates the strategy/version as
+    -- a whole -- both are legitimate, not every desk has component-level
+    -- granularity yet.
+    component_key TEXT,
     dataset_snapshot_id TEXT REFERENCES dataset_snapshots(id),
     code_commit TEXT,
     parameters_json TEXT NOT NULL DEFAULT '{}',
@@ -1261,6 +1267,16 @@ CREATE TABLE IF NOT EXISTS research_runs (
     started_at TEXT,
     finished_at TEXT,
     summary TEXT NOT NULL,
+    -- A completed run can still turn out to be a real, human mistake (wrong
+    -- window, a bug in the extraction step) discovered after the fact.
+    -- Research history stays append-only -- correcting a mistake means
+    -- recording a NEW run and pointing the old one here, never deleting or
+    -- silently editing sealed evidence. superseded_by_run_id says "a later
+    -- run replaces this one's conclusion"; invalidated_reason says "this
+    -- run's numbers should not be trusted" -- independent facts, since a run
+    -- can be invalidated with no replacement yet.
+    superseded_by_run_id TEXT REFERENCES research_runs(research_run_id),
+    invalidated_reason TEXT,
     CHECK (status != 'completed' OR dataset_snapshot_id IS NOT NULL),
     FOREIGN KEY (strategy_key, strategy_version)
         REFERENCES strategy_versions(strategy_key, version)
@@ -1354,6 +1370,147 @@ CREATE TABLE IF NOT EXISTS factor_significance_results (
 
 CREATE INDEX IF NOT EXISTS idx_factor_significance_results_significant
     ON factor_significance_results(run_id, significant, factor_key);
+
+-- General-purpose quant research evidence layer, generalizing the pattern
+-- proven narrowly by factor_significance_runs/results (macro-factor-vs-
+-- symbol correlation only) to any research category, against any strategy
+-- or strategy_component. Reused, not duplicated, going forward: adding a
+-- new research category (backtest performance, robustness, trading
+-- reality, portfolio risk -- not built yet, catalogued below so the full
+-- shape is visible) means new catalog rows and new utility functions in
+-- backend/engine/research/, never new tables or new UI.
+--
+-- research_metric_catalog is the full enumerated vocabulary of what CAN be
+-- computed -- registering a metric here is not a claim it has been
+-- computed for anything yet. research_run_metrics holds only what a real
+-- research_runs row actually produced. The evidence page renders one row
+-- per catalog entry per subject: a real value where research_run_metrics
+-- has one, an honest dash where it doesn't -- "I enumerate all possible
+-- metrics from my knowledge does not mean we always need to run all" (the
+-- standing instruction this table exists to satisfy), not an implied
+-- oversight.
+CREATE TABLE IF NOT EXISTS research_metric_catalog (
+    metric_key TEXT PRIMARY KEY,
+    category TEXT NOT NULL CHECK (category IN (
+        'data_integrity', 'signal_validation', 'backtest_performance',
+        'robustness_validation', 'trading_reality', 'portfolio_risk'
+    )),
+    label TEXT NOT NULL,
+    unit TEXT,
+    description TEXT NOT NULL,
+    -- JSON array of strategies.family values this metric structurally
+    -- applies to; '[]' means universal (e.g. every category-1 data-
+    -- integrity check, or a correlation-based category-2 check, applies
+    -- regardless of desk type). A non-universal example: backtest_performance
+    -- metrics (Sharpe, drawdown, ...) apply to tradable/timing families, not
+    -- to macro_regime -- a regime classifier has no trade to have a Sharpe
+    -- ratio on, matching this project's own "macro only needs a p-test and
+    -- PCA, not a detailed backtest" framing.
+    applicable_families_json TEXT NOT NULL DEFAULT '[]',
+    sort_order INTEGER NOT NULL
+);
+
+INSERT OR IGNORE INTO research_metric_catalog (metric_key, category, label, unit, description, applicable_families_json, sort_order) VALUES
+    -- 1. Data integrity
+    ('point_in_time_data', 'data_integrity', 'Point-in-time data', NULL, 'Every input value was actually available (observed_at/available_at) at or before the decision timestamp used to test it.', '[]', 1),
+    ('no_look_ahead_bias', 'data_integrity', 'No look-ahead bias', NULL, 'No feature or label uses information not yet knowable at the simulated decision time.', '[]', 2),
+    ('no_survivorship_bias', 'data_integrity', 'No survivorship bias', NULL, 'The evaluated universe includes symbols that were later delisted or removed, not only current survivors.', '[]', 3),
+    ('corporate_action_adjustment', 'data_integrity', 'Corporate action adjustment', NULL, 'Splits, dividends, and other corporate actions are correctly reflected in the price series used.', '[]', 4),
+    ('delisting_returns', 'data_integrity', 'Delisting returns', NULL, 'A delisted security'' final return is captured, not silently dropped from the sample.', '[]', 5),
+    ('universe_membership_at_t', 'data_integrity', 'Universe membership at time t', NULL, 'Eligibility is evaluated against the universe as it stood at each historical decision date, not today''s universe applied retroactively.', '[]', 6),
+    ('publication_reporting_lag', 'data_integrity', 'Publication / reporting lag', NULL, 'The real gap between a value''s observation date and its actual public availability date is modeled, not assumed to be zero.', '[]', 7),
+    -- 2. Signal / factor validation
+    ('factor_ic', 'signal_validation', 'Factor IC (Information Coefficient)', 'correlation', 'Pearson correlation between a factor''s value and the real forward return it is meant to predict.', '[]', 10),
+    ('factor_rank_ic', 'signal_validation', 'Rank IC', 'correlation', 'Spearman rank correlation between a factor''s value and the real forward return -- robust to outliers and nonlinearity that Pearson IC is not.', '[]', 11),
+    ('ic_mean', 'signal_validation', 'IC mean', 'correlation', 'Mean IC across multiple evaluation periods.', '[]', 12),
+    ('ic_std', 'signal_validation', 'IC std', 'correlation', 'Standard deviation of IC across multiple evaluation periods -- how stable the relationship is, not just its average.', '[]', 13),
+    ('icir', 'signal_validation', 'ICIR', 'ratio', 'IC mean divided by IC std -- an information-ratio-style measure of a factor''s risk-adjusted predictive consistency.', '[]', 14),
+    ('factor_return', 'signal_validation', 'Factor return', 'fraction', 'Return of a portfolio built purely from this factor''s ranking.', '[]', 15),
+    ('long_short_spread', 'signal_validation', 'Long-short spread', 'fraction', 'Return difference between the factor''s top and bottom ranked buckets.', '[]', 16),
+    ('factor_hit_rate', 'signal_validation', 'Hit rate', 'fraction', 'Share of periods where the factor''s ranking direction matched the realized outcome direction.', '[]', 17),
+    ('factor_turnover', 'signal_validation', 'Factor turnover', 'fraction', 'How much the factor''s cross-sectional ranking churns period to period -- high turnover raises real trading cost for the same signal.', '[]', 18),
+    ('decay_half_life', 'signal_validation', 'Decay / half-life', 'periods', 'How many periods it takes for the factor''s predictive power (IC) to fall to half its initial value.', '[]', 19),
+    ('factor_correlation', 'signal_validation', 'Factor correlation', 'correlation', 'Pairwise correlation between this factor and every other registered factor in its family -- the raw input to effective-number-of-bets and redundancy detection.', '[]', 20),
+    ('effective_number_of_bets', 'signal_validation', 'Effective number of bets', 'count', 'PCA-based measure of how many genuinely independent bets a factor family actually represents -- N correlated factors are worth far fewer than N independent ones.', '[]', 21),
+    ('exposure_correlation', 'signal_validation', 'Exposure correlation', 'correlation', 'Correlation between this factor''s resulting portfolio exposure and another factor''s or the market''s.', '[]', 22),
+    ('marginal_contribution', 'signal_validation', 'Marginal contribution', 'fraction', 'The factor''s unique contribution to combined predictive power after accounting for its correlation with already-registered factors.', '[]', 23),
+    -- 4. Backtest performance metrics
+    ('cagr', 'backtest_performance', 'CAGR / annualized return', 'fraction', 'Compound annual growth rate of the strategy''s equity curve.', '["single_name_timing","cross_sectional_discovery","instrument_expression"]', 30),
+    ('annualized_volatility', 'backtest_performance', 'Annualized volatility', 'fraction', 'Standard deviation of returns, annualized.', '["single_name_timing","cross_sectional_discovery","instrument_expression"]', 31),
+    ('sharpe_ratio', 'backtest_performance', 'Sharpe ratio', 'ratio', 'Annualized mean return divided by annualized volatility.', '["single_name_timing","cross_sectional_discovery","instrument_expression"]', 32),
+    ('sortino_ratio', 'backtest_performance', 'Sortino ratio', 'ratio', 'Like Sharpe, but only penalizing downside volatility.', '["single_name_timing","cross_sectional_discovery","instrument_expression"]', 33),
+    ('max_drawdown', 'backtest_performance', 'Maximum drawdown', 'fraction', 'Largest peak-to-trough decline in the equity curve.', '["single_name_timing","cross_sectional_discovery","instrument_expression"]', 34),
+    ('drawdown_duration', 'backtest_performance', 'Drawdown duration', 'periods', 'How long the strategy stayed below its prior peak.', '["single_name_timing","cross_sectional_discovery","instrument_expression"]', 35),
+    ('calmar_ratio', 'backtest_performance', 'Calmar ratio', 'ratio', 'CAGR divided by maximum drawdown.', '["single_name_timing","cross_sectional_discovery","instrument_expression"]', 36),
+    ('trade_hit_rate', 'backtest_performance', 'Hit rate / win rate', 'fraction', 'Share of closed trades with a positive return.', '["single_name_timing"]', 37),
+    ('payoff_ratio', 'backtest_performance', 'Payoff ratio', 'ratio', 'Average winning trade divided by average losing trade.', '["single_name_timing"]', 38),
+    ('profit_factor', 'backtest_performance', 'Profit factor', 'ratio', 'Gross profit divided by gross loss.', '["single_name_timing"]', 39),
+    ('value_at_risk', 'backtest_performance', 'Value at Risk (VaR)', 'fraction', 'Loss threshold not expected to be exceeded at a given confidence level.', '["single_name_timing","cross_sectional_discovery","instrument_expression","portfolio_construction"]', 40),
+    ('expected_shortfall', 'backtest_performance', 'Expected Shortfall (CVaR)', 'fraction', 'Average loss in the tail beyond the VaR threshold.', '["single_name_timing","cross_sectional_discovery","instrument_expression","portfolio_construction"]', 41),
+    ('return_skewness', 'backtest_performance', 'Skewness', 'ratio', 'Asymmetry of the return distribution.', '["single_name_timing","cross_sectional_discovery","instrument_expression"]', 42),
+    ('return_kurtosis', 'backtest_performance', 'Kurtosis', 'ratio', 'Tail-heaviness of the return distribution relative to normal.', '["single_name_timing","cross_sectional_discovery","instrument_expression"]', 43),
+    ('portfolio_turnover', 'backtest_performance', 'Turnover', 'fraction', 'How much the resulting positions actually trade, period to period -- distinct from factor_turnover (ranking churn) upstream of it.', '["single_name_timing","cross_sectional_discovery","portfolio_construction"]', 44),
+    ('market_beta', 'backtest_performance', 'Market beta', 'ratio', 'Sensitivity of strategy returns to the broad market.', '["single_name_timing","cross_sectional_discovery","instrument_expression","portfolio_construction"]', 45),
+    ('jensens_alpha', 'backtest_performance', 'Jensen''s alpha', 'fraction', 'Return in excess of what market beta alone would predict (CAPM residual).', '["single_name_timing","cross_sectional_discovery","instrument_expression","portfolio_construction"]', 46),
+    -- 5. Robustness / statistical validation
+    ('in_sample_out_of_sample', 'robustness_validation', 'In-sample / out-of-sample', NULL, 'Performance is compared between the period a rule was developed on and a genuinely unseen later period.', '[]', 50),
+    ('walk_forward_validation', 'robustness_validation', 'Walk-forward validation', NULL, 'Repeated re-fit-then-test on rolling, non-overlapping forward windows.', '[]', 51),
+    ('rolling_window_analysis', 'robustness_validation', 'Rolling window analysis', NULL, 'Metric stability measured across overlapping rolling windows rather than one fixed period.', '[]', 52),
+    ('parameter_sensitivity', 'robustness_validation', 'Parameter sensitivity', NULL, 'How much results change under small, reasonable changes to hand-picked parameters -- a cliff-edge result is a red flag.', '[]', 53),
+    ('subsample_stability', 'robustness_validation', 'Subsample stability', NULL, 'Results hold up across different sub-periods or sub-universes, not just the full sample.', '[]', 54),
+    ('regime_analysis', 'robustness_validation', 'Regime analysis', NULL, 'Performance broken out by macro/vol regime rather than reported as one blended average.', '[]', 55),
+    ('bootstrap_monte_carlo', 'robustness_validation', 'Bootstrap / Monte Carlo', NULL, 'Resampling-based confidence bounds on a metric, rather than a single point estimate.', '[]', 56),
+    ('multiple_hypothesis_testing', 'robustness_validation', 'Multiple-hypothesis testing', NULL, 'How many hypotheses were actually tried before this one was reported -- the honest denominator behind any p-value.', '[]', 57),
+    ('false_discovery_rate', 'robustness_validation', 'False discovery rate', 'fraction', 'Benjamini-Hochberg-style correction already implemented and used in this project (engine/research/significance.py) for macro-factor and momentum-horizon testing.', '[]', 58),
+    ('deflated_sharpe_ratio', 'robustness_validation', 'Deflated Sharpe ratio', 'ratio', 'Sharpe ratio adjusted for the number of trials, track record length, and return non-normality (Bailey & Lopez de Prado, 2014).', '["single_name_timing","cross_sectional_discovery","instrument_expression"]', 59),
+    ('probability_of_backtest_overfitting', 'robustness_validation', 'Probability of Backtest Overfitting (PBO)', 'fraction', 'Combinatorially-symmetric cross-validation estimate of the probability that the selected strategy is overfit (Bailey, Borwein, Lopez de Prado & Zhu, 2017).', '["single_name_timing","cross_sectional_discovery","instrument_expression"]', 60),
+    -- 6. Trading reality
+    ('transaction_costs', 'trading_reality', 'Transaction costs', 'fraction', 'Commissions and fees actually deducted from simulated returns.', '["single_name_timing","cross_sectional_discovery","instrument_expression","portfolio_construction"]', 70),
+    ('bid_ask_spread', 'trading_reality', 'Bid-ask spread', 'fraction', 'Real quoted spread cost paid crossing the market on entry and exit, not a mid-price fill.', '["single_name_timing","instrument_expression"]', 71),
+    ('slippage', 'trading_reality', 'Slippage', 'fraction', 'Difference between the intended and actually achievable execution price.', '["single_name_timing","instrument_expression"]', 72),
+    ('market_impact', 'trading_reality', 'Market impact', 'fraction', 'Price movement caused by the order itself, scaling with size relative to liquidity.', '["single_name_timing","instrument_expression","portfolio_construction"]', 73),
+    ('borrow_cost', 'trading_reality', 'Borrow cost', 'fraction', 'Cost of borrowing shares to hold a short position.', '["single_name_timing","instrument_expression"]', 74),
+    ('short_availability', 'trading_reality', 'Short availability', NULL, 'Whether shares are actually borrowable for a proposed short, not merely assumed available.', '["single_name_timing","instrument_expression"]', 75),
+    ('liquidity_constraints', 'trading_reality', 'Liquidity constraints', NULL, 'Position size checked against real traded volume, not sized as if infinitely liquid.', '["single_name_timing","instrument_expression","portfolio_construction"]', 76),
+    ('adv_participation_limit', 'trading_reality', 'ADV participation limit', 'fraction', 'Order size capped as a fraction of average daily volume.', '["single_name_timing","instrument_expression","portfolio_construction"]', 77),
+    ('execution_delay', 'trading_reality', 'Execution delay', 'periods', 'Real gap between signal generation and achievable fill, not same-bar fills assumed for free.', '["single_name_timing","instrument_expression"]', 78),
+    ('capacity', 'trading_reality', 'Capacity', 'usd', 'Maximum capital the strategy can absorb before its own trading materially degrades its edge.', '["single_name_timing","cross_sectional_discovery","instrument_expression","portfolio_construction"]', 79),
+    -- 7. Portfolio / risk layer
+    ('position_sizing', 'portfolio_risk', 'Position sizing', NULL, 'The rule mapping conviction/signal strength to an actual position size.', '["instrument_expression","portfolio_construction"]', 90),
+    ('volatility_targeting', 'portfolio_risk', 'Volatility targeting', NULL, 'Position size scaled to hit a target portfolio volatility rather than a fixed notional.', '["portfolio_construction"]', 91),
+    ('risk_budgeting', 'portfolio_risk', 'Risk budgeting', NULL, 'Risk, not capital, allocated across sleeves/positions as the primary budget unit.', '["portfolio_construction"]', 92),
+    ('factor_exposure_limits', 'portfolio_risk', 'Factor exposure limits', NULL, 'Portfolio-level caps on net exposure to any one factor.', '["portfolio_construction"]', 93),
+    ('sector_industry_constraints', 'portfolio_risk', 'Sector / industry constraints', NULL, 'Caps on concentration within any one sector or industry.', '["portfolio_construction"]', 94),
+    ('single_name_concentration_limits', 'portfolio_risk', 'Single-name concentration limits', NULL, 'Caps on how much of the portfolio any one security can represent.', '["portfolio_construction"]', 95),
+    ('beta_neutralization', 'portfolio_risk', 'Beta neutralization', NULL, 'Whether and how market-beta exposure is hedged out of the portfolio.', '["portfolio_construction"]', 96),
+    ('dollar_neutralization', 'portfolio_risk', 'Dollar neutralization', NULL, 'Long and short dollar exposure balanced to a target net.', '["portfolio_construction"]', 97),
+    ('factor_neutralization', 'portfolio_risk', 'Factor neutralization', NULL, 'Unwanted factor exposures hedged out so a position expresses the intended bet only.', '["portfolio_construction"]', 98),
+    ('correlation_covariance_control', 'portfolio_risk', 'Correlation / covariance control', NULL, 'Portfolio construction accounts for the real covariance between positions, not just their individual risk.', '["portfolio_construction"]', 99),
+    ('gross_net_exposure_limits', 'portfolio_risk', 'Gross / net exposure limits', NULL, 'Hard caps on total long+short (gross) and long-short (net) exposure.', '["portfolio_construction"]', 100),
+    ('drawdown_control', 'portfolio_risk', 'Drawdown control', NULL, 'A rule that reduces risk in response to realized drawdown, rather than a static allocation regardless of recent losses.', '["portfolio_construction"]', 101);
+
+-- Real results for the catalog above. subject_key is whatever the metric
+-- is ABOUT within this run -- a factor_key, a strategy_component_key, a
+-- symbol, or the sentinel '_ensemble_' for a metric describing the whole
+-- group (e.g. effective_number_of_bets is a property of an entire
+-- correlation matrix, not any one factor). Mirrors strategy_diagnostics'
+-- exact EAV shape at the run level instead of the strategy-version level,
+-- because one research run typically produces many metrics for many
+-- subjects at once.
+CREATE TABLE IF NOT EXISTS research_run_metrics (
+    research_run_id TEXT NOT NULL REFERENCES research_runs(research_run_id),
+    subject_key TEXT NOT NULL,
+    metric_key TEXT NOT NULL REFERENCES research_metric_catalog(metric_key),
+    label TEXT NOT NULL,
+    value REAL,
+    unit TEXT,
+    status TEXT NOT NULL,
+    description TEXT,
+    PRIMARY KEY (research_run_id, subject_key, metric_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_research_run_metrics_metric
+    ON research_run_metrics(metric_key, subject_key);
 
 -- Append-only audit/history boundaries. In-progress runs may advance to a
 -- terminal state; once terminal, their headers and stage records are sealed.

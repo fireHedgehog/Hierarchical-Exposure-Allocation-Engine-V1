@@ -4,6 +4,14 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Engine — research-evidence layer (signal validation / effective number of bets)
+
+- New `research_metric_catalog` (71 entries) enumerates the full quant-research taxonomy across 6 categories — data integrity, signal validation, backtest performance, robustness/statistical validation, trading reality, portfolio/risk — each tagged with which strategy families it structurally applies to. New EAV `research_run_metrics` holds only what a real research run actually computed; an uncomputed catalog entry renders as an honest dash, not an implied gap. `research_runs` extended with `component_key`, `superseded_by_run_id`, and `invalidated_reason` for correcting a research mistake without deleting sealed history (schema-ready; no endpoint uses the latter two yet).
+- New `backend/engine/research/signal_validation.py`: Rank IC, IC-series mean/std/ICIR, pairwise correlation matrix, effective number of bets (PCA/inverse-Herfindahl), and redundancy flagging — pure, standalone-tested functions, 11 new tests.
+- `POST /api/v1/admin/research/signal-validation/runs` wires real, point-in-time-aligned extraction for macro's 8 factors and momentum's 3 horizons. First live run: macro's 8 factors → effective number of bets 2.43 (CPI/core-PCE/PPI flagged redundant at r=0.92-0.998); momentum's 3 horizons → ENB 1.74 (3M/6M redundant at r=0.75). Real numbers validating the "10 factors, PCA, ENB ≈ 2" framing this milestone was built to prove.
+- Research page (Operations → Research) gets a diversification panel per factor family and a full metric-catalog reference table.
+- Unrelated bug found and fixed while proving this live: `fetch_data`'s FRED realtime pin used UTC "today," which can run a day ahead of FRED's own server clock right after UTC midnight, causing a reproducible HTTP 400. Fixed with a 1-day safety margin.
+
 ### Engine — strategy registry backfill
 
 - Registered the 5 real engine algorithms (macro regime composite, cross-sectional momentum, MACD/RSI single-name timing, risk envelope allocation, conviction-scaled instrument selection) in the `strategies`/`strategy_versions` registry that has existed since Edition V1 but was never populated. Each carries real parameters, a `naive-v1` version, a `verification_status` flag (`registered_only` until Milestone 4's statistical gate passes), a `next_review_at` date, and honestly-NULL decay/capacity diagnostics. Seeded in schema.sql, not code or documentation prose — queryable via the existing Strategy registry pages with no new UI.
