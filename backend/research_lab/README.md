@@ -22,6 +22,17 @@ feature.
    that folder's `README.md`): a hypothesis's evidence shape isn't decided yet, and
    a premature schema is worse than no schema.
 
+## Reuse is one-way
+
+A script in here may import real, hypothesis-agnostic utilities from
+`backend/engine/research/` (`significance.py`'s Pearson significance and
+Benjamini-Hochberg correction; `signal_validation.py`'s IC, correlation,
+effective number of bets) — that's the point of them being reusable, and it's
+the whole reason you don't need to re-derive a p-value function from scratch for
+every new hypothesis. The rule is one-way: `research_lab/` may import from
+`engine/`, `engine/` (or anything else in production) must never import from
+`research_lab/`.
+
 ## What's normal and expected in here
 
 Hardcoded observed values, magic numbers, no docstrings, no type hints, no tests,

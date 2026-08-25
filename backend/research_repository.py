@@ -3,13 +3,14 @@ from __future__ import annotations
 import bisect
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from backend.engine.factors import (
     InsufficientBacktestHistoryError,
     run_cross_sectional_momentum_backtest,
 )
 from backend.engine.factors.types import Bar
+from backend.engine.regime import InsufficientSeriesDataError, compute_regime_v2
 from backend.engine.regime.types import SeriesObservation
 from backend.engine.research import (
     FORWARD_HORIZON_TRADING_DAYS,
@@ -58,6 +59,40 @@ def _latest_sealed_dataset_id(connection: sqlite3.Connection) -> str | None:
     return row["id"] if row else None
 
 
+def _macro_composite_score_series(
+    factor_observations: dict[str, list[SeriesObservation]],
+) -> list[SeriesObservation]:
+    """Real, point-in-time composite regime score at each of CPIAUCSL's own
+    observation dates (same anchor convention as _macro_factor_series):
+    truncate every factor's history to what was actually available at that
+    date, then run it through the real naive-v2 composite (compute_regime_v2)
+    -- the same weighted sum that drives the live regime label, not a
+    re-derived approximation of it. This is what 0.20 named and left undone:
+    every individual factor's forward-return correlation was tested, never
+    the composite score itself. An anchor with too little trailing history
+    for any one factor's surprise window (up to 60 periods, for VIX/rates)
+    is honestly skipped -- InsufficientSeriesDataError, not a fabricated
+    value -- so the resulting series is real from its first computable point
+    on, never padded."""
+
+    anchor_dates = sorted({obs.observation_date for obs in factor_observations.get("CPIAUCSL", [])})
+    composite_observations: list[SeriesObservation] = []
+    for anchor in anchor_dates:
+        truncated = {
+            series_id: [obs for obs in observations if obs.observation_date <= anchor]
+            for series_id, observations in factor_observations.items()
+        }
+        try:
+            result = compute_regime_v2(truncated, date.fromisoformat(anchor))
+        except InsufficientSeriesDataError:
+            continue
+        composite_score = sum(result.weights[factor.key] * factor.contribution for factor in result.factors)
+        composite_observations.append(
+            SeriesObservation(observation_date=anchor, value=composite_score, observed_at="", available_at="")
+        )
+    return composite_observations
+
+
 def run_factor_significance_research(
     connection: sqlite3.Connection,
     now: datetime,
@@ -98,6 +133,10 @@ def run_factor_significance_research(
                 )
                 for row in rows
             ]
+
+    composite_series = _macro_composite_score_series(factor_observations)
+    if composite_series:
+        factor_observations["macro_regime_composite_score"] = composite_series
 
     staging_rows = connection.execute(
         "SELECT symbol, category FROM staging_symbols WHERE active = 1 AND category != 'macro_series'"
@@ -196,10 +235,12 @@ def _write_macro_regime_diagnostic(
     """Real, auto-updating link from this research run onto the strategy
     registry: 'last checked' becomes a real fact (MAX(as_of) across
     diagnostics), not a guess. Deliberately does NOT touch verification_status
-    -- this run tests each macro factor against each symbol individually, not
-    the regime composite as one unit, so flipping macro_regime_composite to
-    'verified' or 'not_significant' from this alone would overclaim. The
-    honest move is a diagnostic fact, not a status the test doesn't support.
+    -- this run tests the 8 individual macro factors AND the composite regime
+    score, each against each symbol independently, but one correlation
+    surviving correction is not a walk-forward backtest, so flipping
+    macro_regime_composite to 'verified' or 'not_significant' from this alone
+    would overclaim. The honest move is a diagnostic fact, not a status the
+    test doesn't support.
     """
 
     strategy = connection.execute(
@@ -225,8 +266,8 @@ def _write_macro_regime_diagnostic(
             f"{run.test_count} pairs tested",
             timestamp,
             (
-                f"{summary} Tests each of the 8 macro factors against each staging symbol individually, "
-                "not the regime composite as a single unit -- this does not itself verify or invalidate "
+                f"{summary} Tests each of the 8 macro factors, and the composite regime score itself, "
+                "against each staging symbol individually -- this does not itself verify or invalidate "
                 "macro_regime_composite; see Operations -> Research for the full pair-by-pair breakdown."
             ),
         ),

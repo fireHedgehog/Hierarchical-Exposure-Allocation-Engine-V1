@@ -4,6 +4,16 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — macro composite's own regime score gets a real forward-return IC test
+
+- `_macro_composite_score_series()` builds the real, point-in-time composite regime score (the same `compute_regime_v2` blend that drives the live regime label) as a real time series, then folds it into the existing 8-factor significance batch as a 9th tested series — no new table, same Pearson/Benjamini-Hochberg correction pool. Closes the gap named in 0.20: every individual macro factor's forward-return correlation had been tested, never the blended composite itself.
+- Live-verified against a fresh real pipeline run: 102 real composite-score points (2018-01 to 2026-07) tested against all 22 staging symbols — none of the 22 correlations survive correction (|r| ≤ 0.13), an honest null result, while the pre-existing NFCI-vs-XLV finding (r=+0.18, adjusted p=0.007) reproduced unchanged.
+
+### Infrastructure — `backend/research_lab/` scratch-code convention; hypotheses folder in the nav
+
+- New `backend/research_lab/`: throwaway, no-quality-bar scripts for testing a hypothesis, governed by two rules — never imported by production code, never writes to the database. Reuse is one-way: a script here may import the real utilities in `backend/engine/research/`, never the reverse.
+- Side nav gained a "Research hypotheses" link to the GitHub-rendered `docs/hypotheses/` folder, instead of building an in-app Markdown renderer.
+
 ### Research — hypotheses start as Markdown working papers, not DB rows
 
 - Retracted `research_observations` and the `warsh_reaction_function` DB registration (both new in this same Unreleased section, never shipped) after recognizing the underlying problem directly: `research_observations.signal_direction` was a hawkish/dovish/neutral/inconclusive `CHECK` constraint, a shape specific to a Fed-policy hypothesis — a price-action or fundamentals hypothesis needs a genuinely different data shape, so committing to one SQL schema at the pre-conclusion research stage is premature structure.
