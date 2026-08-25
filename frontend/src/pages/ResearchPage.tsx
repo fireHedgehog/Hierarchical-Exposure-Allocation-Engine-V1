@@ -1,5 +1,7 @@
-import { AlertTriangle, FlaskConical, Minus, RefreshCw } from "lucide-react";
+import { AlertTriangle, ExternalLink, FlaskConical, Minus } from "lucide-react";
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   endpoints,
   operatorErrorMessage,
@@ -15,12 +17,73 @@ import type {
   FactorSignificanceRunResponse,
   ResearchCatalogMetric,
   ResearchMetricCatalogResponse,
-  SignalValidationRun,
   SignalValidationRunResponse,
 } from "../types";
 import { formatNumber, formatTimestamp, NOT_AVAILABLE, toneForDirection } from "../utils/format";
 
-export function FactorSignificancePage() {
+// One section per strategy family, grouped by what the research is ABOUT --
+// not by which statistical method produced it. Each section links to that
+// strategy's Registry record, and the Registry record links back (see
+// StrategyDetailPage's "View research" action) -- a real click-through both
+// directions, not two pages that happen to describe the same thing.
+
+export function ResearchPage() {
+  return (
+    <div className="workspace operator-page">
+      <OperatorPageHeader
+        title="Research"
+        description="Real statistical evidence behind the desk's factors, one section per strategy. Every number here is either a real result from a real run or an honest 'not run yet' -- never a placeholder."
+      />
+
+      <StrategyResearchSection strategyKey="macro_regime_composite" anchorId="macro-regime" title="Macro regime factors">
+        <FactorSignificanceSubsection />
+        <SignalValidationSection
+          strategyKey="macro_regime_composite"
+          title="Diversification"
+          description="Number of factors != number of independent bets. PCA on the 8 macro factors' real pairwise correlation matrix, over the same sealed dataset."
+        />
+      </StrategyResearchSection>
+
+      <StrategyResearchSection strategyKey="cross_sectional_momentum" anchorId="cross-sectional-momentum" title="Cross-sectional momentum factors">
+        <SignalValidationSection
+          strategyKey="cross_sectional_momentum"
+          title="Diversification"
+          description="Are the momentum horizons independent views, or mostly one restated several ways? Same method as macro, applied to this strategy's own components."
+        />
+      </StrategyResearchSection>
+
+      <div id="metric-catalog">
+        <MetricCatalogSection />
+      </div>
+    </div>
+  );
+}
+
+function StrategyResearchSection({
+  strategyKey,
+  anchorId,
+  title,
+  children,
+}: {
+  strategyKey: string;
+  anchorId: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section id={anchorId} className="research-strategy-section">
+      <div className="research-strategy-section__header">
+        <h2>{title}</h2>
+        <Link className="button button--quiet" to={`/operations/strategies/${encodeURIComponent(strategyKey)}`}>
+          Registry record <ExternalLink aria-hidden="true" size={13} />
+        </Link>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function FactorSignificanceSubsection() {
   const state = useApi<FactorSignificanceRunResponse>(endpoints.adminFactorSignificanceLatest);
   const [running, setRunning] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -40,46 +103,28 @@ export function FactorSignificancePage() {
   };
 
   return (
-    <div className="workspace operator-page">
-      <OperatorPageHeader
+    <Panel>
+      <SectionHeading
+        eyebrow="Component level — one factor vs. one symbol's forward return"
         title="Factor significance"
-        description="Milestone 4, step 1 (docs/engine-milestones.md): real Pearson correlation and a real p-value between every macro factor and every staging symbol's forward return, corrected for multiple comparisons. Staging-tier proof of concept — the full validation program (PCA/decorrelation, decay, fitted weights) is not run here."
+        description="Real Pearson correlation and a real p-value between every macro factor and every staging symbol's forward return, corrected for multiple comparisons."
         action={(
           <button className="button operator-run-button" type="button" onClick={startRun} disabled={running}>
-            <FlaskConical aria-hidden="true" size={16} /> {running ? "Running…" : "Run significance research"}
+            <FlaskConical aria-hidden="true" size={16} /> {running ? "Running…" : "Run"}
           </button>
         )}
       />
-
       {actionError ? <div className="operator-action-message operator-action-message--error" role="alert"><AlertTriangle aria-hidden="true" size={16} />{actionError}</div> : null}
-
       <ResourceState loading={state.loading} error={state.error} onRetry={state.reload} resource="factor-significance research run" />
-
       {run ? (
         <>
           <RunSummaryPanel run={run} />
           <ResultsPanel run={run} />
         </>
       ) : !state.loading && !state.error ? (
-        <Unavailable
-          title="No research run recorded yet"
-          detail="Run significance research against the latest sealed dataset to populate this page."
-        />
+        <Unavailable compact title="No research run recorded yet" detail="Run significance research against the latest sealed dataset." />
       ) : null}
-
-      <SignalValidationSection
-        strategyKey="macro_regime_composite"
-        title="Macro factors — diversification"
-        description="Number of factors != number of independent bets. PCA on the 8 macro factors' real pairwise correlation matrix, over the same sealed dataset."
-      />
-      <SignalValidationSection
-        strategyKey="cross_sectional_momentum"
-        title="Momentum horizons — diversification"
-        description="Same method applied to the 1M/3M/6M momentum horizons: are they three independent views, or mostly one restated three ways?"
-      />
-
-      <MetricCatalogSection />
-    </div>
+    </Panel>
   );
 }
 
@@ -181,7 +226,7 @@ function MetricCatalogSection() {
   return (
     <Panel>
       <SectionHeading
-        eyebrow="The full taxonomy, by level"
+        eyebrow="Every strategy, the full taxonomy, by level"
         title="Research metric catalog"
         description="Metric granularity matches factor granularity: component metrics evaluate one factor alone, ensemble metrics evaluate relationships among a strategy's own factors, strategy metrics evaluate one strategy's realized output, desk metrics evaluate cross-strategy portfolio construction. A metric having no data yet is an honest 'not run', not an oversight."
       />
@@ -239,23 +284,17 @@ function groupByCategory(metrics: ResearchCatalogMetric[]): Record<string, Resea
 
 function RunSummaryPanel({ run }: { run: FactorSignificanceRun }) {
   return (
-    <Panel>
-      <SectionHeading
-        eyebrow={`${run.method} · ${run.correction_method}`}
-        title="Latest run"
-        description={run.summary}
-      />
-      <dl className="strategy-identity-grid">
-        <div><dt>Forward horizon</dt><dd>{run.forward_horizon_days} trading days</dd></div>
-        <div><dt>Alpha</dt><dd>{run.alpha}</dd></div>
-        <div><dt>Min samples</dt><dd>{formatNumber(run.min_samples)}</dd></div>
-        <div><dt>Factors × symbols</dt><dd>{run.factor_count} × {run.symbol_count}</dd></div>
-        <div><dt>Pairs tested</dt><dd>{formatNumber(run.test_count)} / {formatNumber(run.factor_count * run.symbol_count)}</dd></div>
-        <div><dt>Significant after correction</dt><dd>{formatNumber(run.significant_count)}</dd></div>
-        <div><dt>Run at</dt><dd>{formatTimestamp(run.started_at)}</dd></div>
-        <div><dt>Dataset snapshot</dt><dd><code>{run.dataset_snapshot_id || NOT_AVAILABLE}</code></dd></div>
-      </dl>
-    </Panel>
+    <dl className="strategy-identity-grid">
+      <div><dt>Method</dt><dd>{run.method} · {run.correction_method}</dd></div>
+      <div><dt>Forward horizon</dt><dd>{run.forward_horizon_days} trading days</dd></div>
+      <div><dt>Alpha</dt><dd>{run.alpha}</dd></div>
+      <div><dt>Min samples</dt><dd>{formatNumber(run.min_samples)}</dd></div>
+      <div><dt>Factors × symbols</dt><dd>{run.factor_count} × {run.symbol_count}</dd></div>
+      <div><dt>Pairs tested</dt><dd>{formatNumber(run.test_count)} / {formatNumber(run.factor_count * run.symbol_count)}</dd></div>
+      <div><dt>Significant after correction</dt><dd>{formatNumber(run.significant_count)}</dd></div>
+      <div><dt>Run at</dt><dd>{formatTimestamp(run.started_at)}</dd></div>
+      <div><dt>Dataset snapshot</dt><dd><code>{run.dataset_snapshot_id || NOT_AVAILABLE}</code></dd></div>
+    </dl>
   );
 }
 
@@ -264,16 +303,12 @@ function ResultsPanel({ run }: { run: FactorSignificanceRun }) {
   const sorted = useMemo(() => sortResults(results), [results]);
 
   if (!results.length) {
-    return <Unavailable title="No pair results are persisted for this run" />;
+    return <Unavailable compact title="No pair results are persisted for this run" />;
   }
 
   return (
-    <Panel>
-      <SectionHeading
-        eyebrow="Every (factor, symbol) pair"
-        title="Correlation and significance"
-        description="A pair without 'significant' is not confirmed to have zero effect — it means the real data available so far cannot distinguish it from noise at this run's alpha. Direction is reported only for significant pairs, never inferred from a non-significant correlation sign."
-      />
+    <>
+      <p className="methodology-card__summary">{run.summary}</p>
       <div className="operator-table-scroll">
         <table className="operator-table factor-significance-table">
           <thead>
@@ -304,7 +339,7 @@ function ResultsPanel({ run }: { run: FactorSignificanceRun }) {
           </tbody>
         </table>
       </div>
-    </Panel>
+    </>
   );
 }
 

@@ -2297,6 +2297,11 @@ summary:focus-visible,
 .artifact-list code { overflow: hidden; color: var(--muted); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Methodology page: box-and-arrow computation-chain diagrams */
+.research-strategy-section { margin-bottom: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.research-strategy-section:first-of-type { padding-top: 0; border-top: none; }
+.research-strategy-section__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.research-strategy-section__header h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 19px; font-weight: 500; }
+.research-strategy-section > .panel { margin-bottom: 12px; }
 .methodology-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px; }
 .methodology-card { display: flex; flex-direction: column; gap: 11px; padding: 16px; }
 .methodology-card__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }

@@ -4,6 +4,10 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Frontend — Research page reorganized
+
+- User-identified the Research page had become five unrelated things (macro significance, macro diversification, momentum diversification, the 71-metric catalog) stacked under a page still titled "Factor significance," with no click-through to or from the Strategy registry. Renamed `FactorSignificancePage.tsx` → `ResearchPage.tsx` (route unchanged), restructured into one section per strategy family with a "Registry record" link out of each; Strategy detail page gained a matching "View research" link and per-run "View full result" links. Also named honestly, not fixed: no whole-strategy backtest exists yet for `cross_sectional_momentum` (the composite ranking has never been traded into a real equity curve) — the real reason all 40 `strategy`-level catalog metrics are still dashes, not a UI gap.
+
 ### Engine — metric granularity axis
 
 - New `research_metric_catalog.granularity` column (`component` / `ensemble` / `strategy` / `desk`), independent from `category`: WHAT LEVEL of the strategy hierarchy a metric evaluates, mapped onto the existing `strategy_components` → ensemble math → strategy backtest → desk-portfolio schema. User-identified gap: the 71-metric catalog had flattened single-factor metrics (IC), cross-factor metrics (correlation, effective number of bets), and realized-return metrics (Sharpe, CAGR — the tier an optimizer could fit) into one undifferentiated list. All 71 rows re-tagged; the Research page's catalog panel now groups by level first, then category.

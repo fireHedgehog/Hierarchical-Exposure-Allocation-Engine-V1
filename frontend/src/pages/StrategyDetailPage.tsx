@@ -1,10 +1,18 @@
-import { ArrowLeft, ExternalLink, FileCheck2, Fingerprint, History, RefreshCw } from "lucide-react";
+import { ArrowLeft, ExternalLink, FileCheck2, FlaskConical, Fingerprint, History, RefreshCw } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { endpoints, useApi } from "../api/client";
 import { OperatorPageHeader } from "../components/OperatorPageHeader";
 import { Panel, ResourceState, SectionHeading, StatusPill, Unavailable } from "../components/Ui";
 import type { ResearchArtifact, StrategyComponent, StrategyDetail, StrategyDetailResponse, StrategyVersion } from "../types";
 import { formatScalar, formatTimestamp, NOT_AVAILABLE } from "../utils/format";
+
+// Strategy keys that have a dedicated section on the Research page, and its
+// anchor there -- kept as an explicit, small map (not inferred) so a link
+// is never shown pointing at a section that doesn't exist yet.
+const RESEARCH_ANCHORS: Record<string, string> = {
+  macro_regime_composite: "macro-regime",
+  cross_sectional_momentum: "cross-sectional-momentum",
+};
 
 export function StrategyDetailPage() {
   const { key = "" } = useParams();
@@ -13,6 +21,7 @@ export function StrategyDetailPage() {
   const strategy = state.data?.strategy;
   const currentVersion = resolveCurrentStrategyVersion(strategy);
   const currentDecay = currentVersion?.diagnostics?.find((diagnostic) => diagnostic.metric_key === "decay_rate");
+  const researchAnchor = strategy ? RESEARCH_ANCHORS[strategy.key] : undefined;
 
   return (
     <div className="workspace operator-page strategy-detail-page">
@@ -21,9 +30,16 @@ export function StrategyDetailPage() {
         title={strategy?.name || "Strategy record"}
         description={strategy?.summary || "Loading the persisted lifecycle and evidence record."}
         action={(
-          <button className="button button--quiet" type="button" onClick={state.reload} disabled={state.loading || !endpoint}>
-            <RefreshCw aria-hidden="true" size={15} /> Refresh strategy
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            {researchAnchor ? (
+              <Link className="button button--quiet" to={`/operations/research#${researchAnchor}`}>
+                <FlaskConical aria-hidden="true" size={15} /> View research
+              </Link>
+            ) : null}
+            <button className="button button--quiet" type="button" onClick={state.reload} disabled={state.loading || !endpoint}>
+              <RefreshCw aria-hidden="true" size={15} /> Refresh strategy
+            </button>
+          </div>
         )}
       />
       {!endpoint ? <div className="resource-state resource-state--error" role="alert">Invalid strategy key.</div> : null}
@@ -97,6 +113,11 @@ export function StrategyDetailPage() {
                     <div className="research-run-header"><div><FileCheck2 aria-hidden="true" size={16} /><strong>{run.id}</strong></div><StatusPill value={run.status} /></div>
                     <p>{run.summary || "No research summary is persisted."}</p>
                     <small>Version {run.strategy_version || NOT_AVAILABLE} · {formatTimestamp(run.started_at)} → {formatTimestamp(run.finished_at)}</small>
+                    {run.id?.startsWith("signal-validation-") && researchAnchor ? (
+                      <Link className="button button--quiet" to={`/operations/research#${researchAnchor}`}>
+                        View full result <ExternalLink aria-hidden="true" size={13} />
+                      </Link>
+                    ) : null}
                     <ArtifactList artifacts={run.artifacts} />
                   </article>
                 ))}

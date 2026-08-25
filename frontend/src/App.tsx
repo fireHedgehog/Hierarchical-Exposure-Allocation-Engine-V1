@@ -3,9 +3,9 @@ import { AppShell } from "./components/AppShell";
 import { DeskPage } from "./pages/DeskPage";
 import { CredentialsPage } from "./pages/CredentialsPage";
 import { DataManagementPage } from "./pages/DataManagementPage";
-import { FactorSignificancePage } from "./pages/FactorSignificancePage";
 import { MethodologyPage } from "./pages/MethodologyPage";
 import { OperationsOverviewPage } from "./pages/OperationsOverviewPage";
+import { ResearchPage } from "./pages/ResearchPage";
 import { StrategyDetailPage } from "./pages/StrategyDetailPage";
 import { StrategyRegistryPage } from "./pages/StrategyRegistryPage";
 import { SymbolDirectoryPage } from "./pages/SymbolDirectoryPage";
@@ -23,7 +23,7 @@ export function App() {
         <Route path="operations/credentials" element={<CredentialsPage />} />
         <Route path="operations/strategies" element={<StrategyRegistryPage />} />
         <Route path="operations/strategies/:key" element={<StrategyDetailPage />} />
-        <Route path="operations/research" element={<FactorSignificancePage />} />
+        <Route path="operations/research" element={<ResearchPage />} />
         <Route path="operations/methodology" element={<MethodologyPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
