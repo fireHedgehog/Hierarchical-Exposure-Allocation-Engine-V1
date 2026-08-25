@@ -419,8 +419,9 @@ def test_seeded_admin_inventory_strategies_signals_and_chart_annotations(
     # registered in schema.sql (macro_regime_composite, cross_sectional_momentum,
     # macd_rsi_single_name_timing, risk_envelope_allocation,
     # conviction_instrument_selection) + 2 honest draft placeholders with no
-    # implementation yet (sentiment_text_mining, fundamental_analysis).
-    assert strategies["summary"]["total"] == 9
+    # implementation yet (sentiment_text_mining, fundamental_analysis) + 1
+    # cold-start, observation-only research entity (warsh_reaction_function).
+    assert strategies["summary"]["total"] == 10
     assert strategies["strategies"][0]["decay"]["value"] is None
     detail = client.get(
         "/api/v1/admin/strategies/state_conditioned_exposure"
@@ -1900,19 +1901,25 @@ def test_legacy_demo_gets_complete_versioned_v3_fixture_on_reseed(tmp_path: Path
         assert connection.execute("SELECT COUNT(*) FROM data_assets").fetchone()[0] == 6
         # 2 synthetic demo fixtures + 5 real engine algorithms + 2 honest
         # draft placeholders with no implementation yet (sentiment_text_mining,
-        # fundamental_analysis), all registered in schema.sql. Of the 5 real
-        # ones, macro_regime_composite, cross_sectional_momentum, and
-        # macd_rsi_single_name_timing each carry 2 versions: naive-v1 and
+        # fundamental_analysis) + 1 cold-start, observation-only research
+        # entity (warsh_reaction_function), all registered in schema.sql. Of
+        # the 5 real ones, macro_regime_composite, cross_sectional_momentum,
+        # and macd_rsi_single_name_timing each carry 2 versions: naive-v1 and
         # naive-v2; each version has 2 diagnostics rows; macd_rsi's naive-v2
         # additionally registers 2 strategy_components: macd_crossover and
         # rsi_overbought_exit. cross_sectional_momentum's naive-v2 registers
         # one more: 12m_skip1m, the first research-loop smoke-test candidate
         # (status='draft', not yet promoted into the live blend).
-        assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 9
-        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 10
+        # warsh_reaction_function registers 2 more components (monetary_
+        # policy_function, market_functioning_function) and 1 seeded
+        # research_observations row (the only real 2026 datapoint at
+        # registration time).
+        assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 10
+        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 11
         assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 22
-        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 10
-        assert connection.execute("SELECT COUNT(*) FROM strategy_components").fetchone()[0] == 3
+        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 11
+        assert connection.execute("SELECT COUNT(*) FROM strategy_components").fetchone()[0] == 5
+        assert connection.execute("SELECT COUNT(*) FROM research_observations").fetchone()[0] == 1
         synthetic_assets = connection.execute(
             """
             SELECT asset_key, dataset_snapshot_id, row_count

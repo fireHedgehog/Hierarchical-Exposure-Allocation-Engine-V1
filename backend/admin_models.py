@@ -48,3 +48,15 @@ class StrategyBacktestRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     strategy_key: Literal["cross_sectional_momentum"]
+
+
+class ObservationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_key: str = Field(pattern=r"^[a-z0-9_]{1,64}$")
+    component_key: str | None = Field(default=None, pattern=r"^[a-z0-9_]{1,64}$")
+    observed_at: str | None = Field(default=None, max_length=32)
+    event_label: str = Field(min_length=1, max_length=200)
+    signal_direction: Literal["hawkish", "dovish", "neutral", "inconclusive"]
+    observation: str = Field(min_length=1, max_length=4000)
+    source_note: str | None = Field(default=None, max_length=500)

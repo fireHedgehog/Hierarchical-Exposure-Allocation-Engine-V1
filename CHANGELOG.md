@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — cold-start observation log, Warsh Fed reaction-function hypothesis
+
+- New `research_observations` table: a real, dated, append-only log of qualitative event checkpoints for a hypothesis with essentially zero sample size — distinct from `research_runs` (needs a sealed dataset) and `strategy_components` (a computed-or-overridden number). One row per real-world event, honestly categorized (hawkish/dovish/neutral/inconclusive), never a fabricated probability. `POST /api/v1/admin/research/observations` (operator-guarded), read via the existing strategy-detail response.
+- Registered `warsh_reaction_function` (`policy_reaction_function` family, `status='draft'`, not wired into any pipeline stage) — a hypothesis that Fed Chair Kevin Warsh reacts primarily to Treasury/credit-market *functioning*, not the absolute yield level, declared as two independent sub-functions (monetary policy; market functioning) rather than one blended reaction. Confirms directly against `macro_regime_composite`: that composite's hand-picked factor weights are themselves an implicit reaction-function model tuned for a well-observed chair, and there's no reason those weights transfer to a chair with ~3 months of tenure. One real observation seeded (July 2026 FOMC, hawkish-leaning). Full research framework (5-group observation taxonomy, R0-R6 response ladder, speech text-factor keywords) recorded in the version's parameters, translated in full into English.
+
 ### Frontend — display-name correction, `macd_rsi_single_name_timing`
 
 - Renamed the user-facing name from "MACD/RSI single-name timing" to "Single-name timing" — a name tied to today's specific components reads as wrong the moment one is retired or a new one registered. `strategy_key` stays untouched (same separation already applied to `security_id` vs. ticker); only the display label changed, via an `UPDATE` alongside the seed row so existing databases pick it up too, not just fresh clones.

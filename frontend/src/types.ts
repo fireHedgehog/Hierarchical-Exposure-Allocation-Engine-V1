@@ -872,11 +872,23 @@ export interface StrategyResearchRun {
   artifacts?: Nullable<ResearchArtifact[]>;
 }
 
+export interface StrategyObservation {
+  observation_id: string;
+  component_key?: Nullable<string>;
+  observed_at?: Nullable<string>;
+  event_label: string;
+  signal_direction: "hawkish" | "dovish" | "neutral" | "inconclusive" | string;
+  observation: string;
+  source_note?: Nullable<string>;
+  created_at: string;
+}
+
 export interface StrategyDetail extends StrategySummary {
   retirement_reason?: Nullable<string>;
   versions?: Nullable<StrategyVersion[]>;
   lifecycle?: Nullable<StrategyLifecycleEvent[]>;
   research_runs?: Nullable<StrategyResearchRun[]>;
+  observations?: Nullable<StrategyObservation[]>;
 }
 
 export interface StrategiesResponse {

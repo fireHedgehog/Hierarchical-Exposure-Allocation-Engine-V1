@@ -1383,6 +1383,15 @@ def get_strategy(connection: sqlite3.Connection, strategy_key: str) -> dict[str,
                 ],
             }
         )
+    observation_rows = connection.execute(
+        """
+        SELECT observation_id, component_key, observed_at, event_label, signal_direction,
+               observation, source_note, created_at
+        FROM research_observations WHERE strategy_key = ?
+        ORDER BY COALESCE(observed_at, created_at) DESC, rowid DESC
+        """,
+        (strategy_key,),
+    ).fetchall()
     return {
         "strategy": {
             "key": row["strategy_key"],
@@ -1398,7 +1407,59 @@ def get_strategy(connection: sqlite3.Connection, strategy_key: str) -> dict[str,
             "versions": version_payloads,
             "lifecycle": [dict(event) for event in lifecycle],
             "research_runs": research_runs,
+            "observations": [dict(observation) for observation in observation_rows],
         }
+    }
+
+
+def add_research_observation(
+    connection: sqlite3.Connection,
+    now: datetime,
+    *,
+    strategy_key: str,
+    component_key: str | None,
+    observed_at: str | None,
+    event_label: str,
+    signal_direction: str,
+    observation: str,
+    source_note: str | None,
+) -> dict[str, Any]:
+    """Append one real, dated checkpoint for a cold-start research entity --
+    e.g. warsh_reaction_function. Append-only by convention (no update/delete
+    path): a wrong observation gets corrected by adding a new one with an
+    honest source_note, the same "correct forward, never rewrite sealed
+    history" rule applied everywhere else in this schema."""
+
+    exists = connection.execute(
+        "SELECT 1 FROM strategies WHERE strategy_key = ?", (strategy_key,)
+    ).fetchone()
+    if exists is None:
+        raise StrategyNotFoundError(strategy_key)
+
+    observation_id = f"obs-{uuid.uuid4()}"
+    created_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    connection.execute(
+        """
+        INSERT INTO research_observations (
+            observation_id, strategy_key, component_key, observed_at, event_label,
+            signal_direction, observation, source_note, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            observation_id, strategy_key, component_key, observed_at, event_label,
+            signal_direction, observation, source_note, created_at,
+        ),
+    )
+    return {
+        "observation_id": observation_id,
+        "strategy_key": strategy_key,
+        "component_key": component_key,
+        "observed_at": observed_at,
+        "event_label": event_label,
+        "signal_direction": signal_direction,
+        "observation": observation,
+        "source_note": source_note,
+        "created_at": created_at,
     }
 
 
