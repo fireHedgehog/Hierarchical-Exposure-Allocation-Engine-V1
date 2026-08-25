@@ -17,6 +17,7 @@ export const endpoints = {
   adminStrategy: (key: string) => `/api/v1/admin/strategies/${safeAdminKey(key)}`,
   adminFactorSignificanceLatest: "/api/v1/admin/research/factor-significance/latest",
   adminSignalValidationLatest: (strategyKey: string) => `/api/v1/admin/research/signal-validation/latest?strategy_key=${safeAdminKey(strategyKey)}`,
+  adminStrategyBacktestLatest: (strategyKey: string) => `/api/v1/admin/research/strategy-backtest/latest?strategy_key=${safeAdminKey(strategyKey)}`,
   adminResearchMetricCatalog: "/api/v1/admin/research/metric-catalog",
 } as const;
 
@@ -94,7 +95,8 @@ type OperatorAction =
   | "pipeline.run"
   | "engine_mode.write"
   | "research.run_factor_significance"
-  | "research.run_signal_validation";
+  | "research.run_signal_validation"
+  | "research.run_strategy_backtest";
 type OperatorMethod = "POST" | "PUT" | "DELETE";
 
 interface OperatorRequest {
@@ -173,6 +175,14 @@ export function runSignalValidationResearch<T>(strategyKey: "macro_regime_compos
   return operatorJson<T>("/api/v1/admin/research/signal-validation/runs", {
     method: "POST",
     action: "research.run_signal_validation",
+    body: { strategy_key: strategyKey },
+  });
+}
+
+export function runStrategyBacktestResearch<T>(strategyKey: "cross_sectional_momentum"): Promise<T> {
+  return operatorJson<T>("/api/v1/admin/research/strategy-backtest/runs", {
+    method: "POST",
+    action: "research.run_strategy_backtest",
     body: { strategy_key: strategyKey },
   });
 }

@@ -7,6 +7,7 @@ import {
   operatorErrorMessage,
   runFactorSignificanceResearch,
   runSignalValidationResearch,
+  runStrategyBacktestResearch,
   useApi,
 } from "../api/client";
 import { OperatorPageHeader } from "../components/OperatorPageHeader";
@@ -18,8 +19,9 @@ import type {
   ResearchCatalogMetric,
   ResearchMetricCatalogResponse,
   SignalValidationRunResponse,
+  StrategyBacktestRunResponse,
 } from "../types";
-import { formatNumber, formatTimestamp, NOT_AVAILABLE, toneForDirection } from "../utils/format";
+import { formatNumber, formatScalar, formatTimestamp, NOT_AVAILABLE, toneForDirection } from "../utils/format";
 
 // Sectioned by granularity first -- component, ensemble, strategy, desk --
 // the same four-level taxonomy the metric catalog uses. Strategy is the
@@ -61,12 +63,11 @@ export function ResearchPage() {
       </GranularitySection>
 
       <GranularitySection level="strategy" description="Tests one strategy's own realized, combined output -- CAGR, Sharpe, drawdown -- the tier an optimizer could actually fit.">
-        <Panel>
-          <Unavailable
-            title="No strategy-level backtest built yet"
-            detail="Nothing yet takes a strategy's composite ranking and actually trades it into a real equity curve, for any strategy. A real, honest gap -- not run, not hidden."
-          />
-        </Panel>
+        <StrategyBacktestSection
+          strategyKey="cross_sectional_momentum"
+          title="Cross-sectional momentum"
+          description="Naive-v1 walk-forward: rank the universe with the real production ranking, buy the top symbols equal-weighted, hold to the next rebalance, chain the real returns into an equity curve."
+        />
       </GranularitySection>
 
       <GranularitySection level="desk" description="Tests cross-strategy, whole-portfolio construction -- exposure limits, neutralization, concentration.">
@@ -241,6 +242,70 @@ function correlationRowClass(correlation: number): string {
   if (magnitude >= 0.7) return "factor-significance-row--negative";
   if (magnitude >= 0.3) return "factor-significance-row--caution";
   return "factor-significance-row--significant";
+}
+
+function StrategyBacktestSection({
+  strategyKey,
+  title,
+  description,
+}: {
+  strategyKey: "cross_sectional_momentum";
+  title: string;
+  description: string;
+}) {
+  const state = useApi<StrategyBacktestRunResponse>(endpoints.adminStrategyBacktestLatest(strategyKey));
+  const [running, setRunning] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const run = state.data?.run;
+
+  const startRun = async () => {
+    setRunning(true);
+    setActionError(null);
+    try {
+      await runStrategyBacktestResearch<StrategyBacktestRunResponse>(strategyKey);
+      state.reload();
+    } catch (error) {
+      setActionError(operatorErrorMessage(error, "The strategy-backtest research request failed."));
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Panel>
+      <SectionHeading
+        eyebrow={title}
+        title="Walk-forward backtest"
+        description={description}
+        action={(
+          <div style={{ display: "flex", gap: 8 }}>
+            <RegistryLink strategyKey={strategyKey} />
+            <button className="button operator-run-button" type="button" onClick={startRun} disabled={running}>
+              <FlaskConical aria-hidden="true" size={16} /> {running ? "Running…" : "Run"}
+            </button>
+          </div>
+        )}
+      />
+      {actionError ? <div className="operator-action-message operator-action-message--error" role="alert"><AlertTriangle aria-hidden="true" size={16} />{actionError}</div> : null}
+      {run ? (
+        <>
+          <dl className="strategy-identity-grid">
+            <div><dt>CAGR</dt><dd><strong>{formatScalar(run.cagr, "fraction")}</strong></dd></div>
+            <div><dt>Sharpe ratio</dt><dd>{formatScalar(run.sharpe_ratio, "ratio")}</dd></div>
+            <div><dt>Max drawdown</dt><dd>{formatScalar(run.max_drawdown, "fraction")}</dd></div>
+            <div><dt>Calmar ratio</dt><dd>{formatScalar(run.calmar_ratio, "ratio")}</dd></div>
+            <div><dt>Annualized volatility</dt><dd>{formatScalar(run.annualized_volatility, "fraction")}</dd></div>
+            <div><dt>Turnover per rebalance</dt><dd>{formatScalar(run.portfolio_turnover, "fraction")}</dd></div>
+            <div><dt>Run at</dt><dd>{formatTimestamp(run.started_at)}</dd></div>
+            <div><dt>Dataset snapshot</dt><dd><code>{run.dataset_snapshot_id || NOT_AVAILABLE}</code></dd></div>
+          </dl>
+          <p className="methodology-card__summary">{run.summary}</p>
+        </>
+      ) : !state.loading ? (
+        <Unavailable compact title="No strategy-backtest run recorded yet" detail="Run it against the latest sealed dataset." />
+      ) : null}
+    </Panel>
+  );
 }
 
 function MetricCatalogSection() {

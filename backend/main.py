@@ -22,6 +22,7 @@ from backend.admin_models import (
     PipelineRunRequest,
     ProviderVerifyRequest,
     SignalValidationRunRequest,
+    StrategyBacktestRunRequest,
 )
 from backend.admin_repository import (
     PipelineNotFoundError,
@@ -56,13 +57,17 @@ from backend.repository import (
     get_latest_symbol,
     list_latest_symbols,
 )
+from backend.engine.factors import InsufficientBacktestHistoryError
 from backend.research_repository import (
     DatasetNotSealedError,
     UnsupportedSignalValidationFamilyError,
+    UnsupportedStrategyBacktestFamilyError,
     get_latest_factor_significance_run,
     get_latest_signal_validation_run,
+    get_latest_strategy_backtest_run,
     run_factor_significance_research,
     run_signal_validation_research,
+    run_strategy_backtest_research,
 )
 from backend.secrets import (
     KeyringEnvironmentSecretStore,
@@ -598,6 +603,46 @@ def create_app(
             raise _not_found(
                 "signal_validation_run_not_found",
                 f"No signal-validation research run has been recorded yet for {strategy_key}.",
+            )
+        return {"run": run}
+
+    @application.post(
+        "/api/v1/admin/research/strategy-backtest/runs",
+        tags=["operator"],
+        dependencies=[Depends(operator_guard("research.run_strategy_backtest", admin_origins))],
+    )
+    def admin_run_strategy_backtest_research(payload: StrategyBacktestRunRequest) -> dict[str, Any]:
+        try:
+            with connect(path) as connection:
+                return {"run": run_strategy_backtest_research(connection, now_fn(), payload.strategy_key)}
+        except DatasetNotSealedError as error:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "dataset_not_sealed", "message": str(error)},
+            ) from error
+        except UnsupportedStrategyBacktestFamilyError as error:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "strategy_backtest_unsupported", "message": str(error)},
+            ) from error
+        except InsufficientBacktestHistoryError as error:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "insufficient_backtest_history", "message": str(error)},
+            ) from error
+
+    @application.get(
+        "/api/v1/admin/research/strategy-backtest/latest",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_latest_strategy_backtest_research(strategy_key: str) -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            run = get_latest_strategy_backtest_run(connection, strategy_key)
+        if run is None:
+            raise _not_found(
+                "strategy_backtest_run_not_found",
+                f"No strategy-backtest research run has been recorded yet for {strategy_key}.",
             )
         return {"run": run}
 

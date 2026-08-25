@@ -42,3 +42,9 @@ class SignalValidationRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     strategy_key: Literal["macro_regime_composite", "cross_sectional_momentum"]
+
+
+class StrategyBacktestRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_key: Literal["cross_sectional_momentum"]

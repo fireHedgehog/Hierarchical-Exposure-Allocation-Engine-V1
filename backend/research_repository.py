@@ -5,6 +5,10 @@ import sqlite3
 import uuid
 from datetime import datetime
 
+from backend.engine.factors import (
+    InsufficientBacktestHistoryError,
+    run_cross_sectional_momentum_backtest,
+)
 from backend.engine.factors.types import Bar
 from backend.engine.regime.types import SeriesObservation
 from backend.engine.research import (
@@ -17,6 +21,16 @@ from backend.engine.research import (
     redundancy_pairs,
 )
 from backend.pipeline.stages.common import SERIES_METADATA, _iso_z, _security_id_for
+
+# Strategy families with a real "strategy"-level (whole, traded, realized)
+# backtest today. Only strategies that produce something directly tradable
+# belong here -- macro_regime_composite is deliberately absent: it is a
+# classifier feeding the allocation layer, not something you buy, so
+# "what is its CAGR" is not a meaningful question (it stays evaluated at
+# component/ensemble level, via factor_significance_runs and
+# signal-validation). Adding a new family means one new extraction +
+# backtest call, same shape as SIGNAL_VALIDATION_FAMILIES below.
+STRATEGY_BACKTEST_FAMILIES = ("cross_sectional_momentum",)
 
 # Factor families with real signal-validation support today. Adding a new
 # family means adding one extraction function here (which real DB columns
@@ -536,4 +550,177 @@ def get_latest_signal_validation_run(
         ],
         "effective_number_of_bets": enb_row["value"] if enb_row else None,
         "factor_count": len(factor_keys),
+    }
+
+
+class UnsupportedStrategyBacktestFamilyError(ValueError):
+    """No real whole-strategy backtest is defined for this strategy_key."""
+
+
+def _tradable_symbol_bars(connection: sqlite3.Connection, dataset_snapshot_id: str) -> dict[str, list[Bar]]:
+    """Real price history for every staging symbol actually eligible to be
+    bought -- excludes macro_series (not a security) and crypto_reference
+    (BTC-USD is a research reference only, "never a position candidate" per
+    this project's non-negotiable rules, see roadmap.md)."""
+
+    staging_rows = connection.execute(
+        "SELECT symbol, category FROM staging_symbols WHERE active = 1 AND category NOT IN ('macro_series', 'crypto_reference')"
+    ).fetchall()
+    bars_by_symbol: dict[str, list[Bar]] = {}
+    for row in staging_rows:
+        security_id = _security_id_for(row["symbol"], row["category"])
+        bar_rows = connection.execute(
+            "SELECT time, close FROM symbol_bars WHERE dataset_snapshot_id = ? AND security_id = ? AND close IS NOT NULL ORDER BY time",
+            (dataset_snapshot_id, security_id),
+        ).fetchall()
+        if bar_rows:
+            bars_by_symbol[row["symbol"]] = [Bar(time=bar["time"], close=bar["close"]) for bar in bar_rows]
+    return bars_by_symbol
+
+
+def run_strategy_backtest_research(
+    connection: sqlite3.Connection,
+    now: datetime,
+    strategy_key: str,
+    dataset_snapshot_id: str | None = None,
+    *,
+    top_n: int = 5,
+    rebalance_days: int = 21,
+) -> dict[str, object]:
+    """Real, whole-strategy walk-forward backtest -- the "strategy"
+    granularity tier's first real content. Only strategies that produce
+    something directly tradable belong here (see STRATEGY_BACKTEST_FAMILIES);
+    a third family needs one new extraction function, not new math or new
+    tables, same pattern as run_signal_validation_research.
+    """
+
+    if strategy_key not in STRATEGY_BACKTEST_FAMILIES:
+        raise UnsupportedStrategyBacktestFamilyError(
+            f"No strategy-level backtest is defined for {strategy_key!r} yet. "
+            f"Supported: {', '.join(STRATEGY_BACKTEST_FAMILIES)}."
+        )
+
+    resolved_dataset_id = dataset_snapshot_id or _latest_sealed_dataset_id(connection)
+    if resolved_dataset_id is None:
+        raise DatasetNotSealedError("No sealed dataset snapshot is available to research.")
+    dataset = connection.execute(
+        "SELECT id, immutable FROM dataset_snapshots WHERE id = ?", (resolved_dataset_id,)
+    ).fetchone()
+    if dataset is None or not dataset["immutable"]:
+        raise DatasetNotSealedError(f"Dataset snapshot {resolved_dataset_id!r} does not exist or is not sealed.")
+
+    strategy = connection.execute(
+        "SELECT current_version FROM strategies WHERE strategy_key = ?", (strategy_key,)
+    ).fetchone()
+    if strategy is None or strategy["current_version"] is None:
+        raise UnsupportedStrategyBacktestFamilyError(f"{strategy_key!r} has no current version registered.")
+    strategy_version = strategy["current_version"]
+
+    bars_by_symbol = _tradable_symbol_bars(connection, resolved_dataset_id)
+    backtest = run_cross_sectional_momentum_backtest(bars_by_symbol, top_n=top_n, rebalance_days=rebalance_days)
+
+    run_id = f"strategy-backtest-{uuid.uuid4()}"
+    timestamp = _iso_z(now)
+    summary = (
+        f"Naive-v1 walk-forward: top {backtest.top_n} of {len(bars_by_symbol)} tradable symbols, rebalanced every "
+        f"{backtest.rebalance_days} trading days, {len(backtest.periods)} periods ({backtest.period_start} to "
+        f"{backtest.period_end}). Total return {backtest.total_return:+.1%} vs. equal-weight universe benchmark "
+        f"{backtest.benchmark_total_return:+.1%}. "
+        + (f"CAGR {backtest.cagr:+.1%}. " if backtest.cagr is not None else "")
+        + (f"Sharpe {backtest.sharpe_ratio:.2f}. " if backtest.sharpe_ratio is not None else "")
+        + f"Max drawdown {backtest.max_drawdown:.1%}."
+    )
+
+    connection.execute(
+        """
+        INSERT INTO research_runs (
+            research_run_id, strategy_key, strategy_version, dataset_snapshot_id,
+            parameters_json, status, started_at, finished_at, summary
+        ) VALUES (?, ?, ?, ?, ?, 'completed', ?, ?, ?)
+        """,
+        (
+            run_id, strategy_key, strategy_version, resolved_dataset_id,
+            f'{{"top_n": {top_n}, "rebalance_days": {rebalance_days}}}', timestamp, timestamp, summary,
+        ),
+    )
+
+    subject_key = "_strategy_"
+    metric_specs: list[tuple[str, str, float | None, str, str]] = [
+        ("cagr", "CAGR", backtest.cagr, "fraction", "Annualized compound growth rate of the naive walk-forward equity curve."),
+        ("annualized_volatility", "Annualized volatility", backtest.annualized_volatility, "fraction", "Standard deviation of rebalance-period returns, annualized."),
+        ("sharpe_ratio", "Sharpe ratio", backtest.sharpe_ratio, "ratio", "Annualized mean return divided by annualized volatility; no risk-free rate subtracted (naive)."),
+        ("max_drawdown", "Maximum drawdown", backtest.max_drawdown, "fraction", "Largest peak-to-trough decline in the equity curve."),
+        ("calmar_ratio", "Calmar ratio", backtest.calmar_ratio, "ratio", "CAGR divided by |maximum drawdown|."),
+        ("portfolio_turnover", "Turnover", backtest.portfolio_turnover, "fraction", "Mean fraction of the top-N holdings that change at each rebalance."),
+    ]
+    connection.executemany(
+        """
+        INSERT INTO research_run_metrics (
+            research_run_id, subject_key, metric_key, label, value, unit, status, description
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (run_id, subject_key, metric_key, label, value, unit, "ok" if value is not None else "not_computable", description)
+            for metric_key, label, value, unit, description in metric_specs
+        ],
+    )
+
+    return {
+        "run_id": run_id,
+        "strategy_key": strategy_key,
+        "strategy_version": strategy_version,
+        "dataset_snapshot_id": resolved_dataset_id,
+        "top_n": backtest.top_n,
+        "rebalance_days": backtest.rebalance_days,
+        "period_start": backtest.period_start,
+        "period_end": backtest.period_end,
+        "period_count": len(backtest.periods),
+        "total_return": backtest.total_return,
+        "benchmark_total_return": backtest.benchmark_total_return,
+        "cagr": backtest.cagr,
+        "annualized_volatility": backtest.annualized_volatility,
+        "sharpe_ratio": backtest.sharpe_ratio,
+        "max_drawdown": backtest.max_drawdown,
+        "calmar_ratio": backtest.calmar_ratio,
+        "portfolio_turnover": backtest.portfolio_turnover,
+        "win_rate": backtest.win_rate,
+        "summary": summary,
+        "started_at": timestamp,
+        "finished_at": timestamp,
+    }
+
+
+def get_latest_strategy_backtest_run(
+    connection: sqlite3.Connection, strategy_key: str
+) -> dict[str, object] | None:
+    run_row = connection.execute(
+        """
+        SELECT research_run_id, strategy_key, strategy_version, dataset_snapshot_id, summary, started_at, finished_at
+        FROM research_runs
+        WHERE strategy_key = ? AND research_run_id LIKE 'strategy-backtest-%'
+        ORDER BY started_at DESC, rowid DESC LIMIT 1
+        """,
+        (strategy_key,),
+    ).fetchone()
+    if run_row is None:
+        return None
+    metric_rows = connection.execute(
+        "SELECT metric_key, value, status FROM research_run_metrics WHERE research_run_id = ? AND subject_key = '_strategy_'",
+        (run_row["research_run_id"],),
+    ).fetchall()
+    metrics_by_key = {row["metric_key"]: row["value"] for row in metric_rows}
+    return {
+        "run_id": run_row["research_run_id"],
+        "strategy_key": run_row["strategy_key"],
+        "strategy_version": run_row["strategy_version"],
+        "dataset_snapshot_id": run_row["dataset_snapshot_id"],
+        "summary": run_row["summary"],
+        "started_at": run_row["started_at"],
+        "finished_at": run_row["finished_at"],
+        "cagr": metrics_by_key.get("cagr"),
+        "annualized_volatility": metrics_by_key.get("annualized_volatility"),
+        "sharpe_ratio": metrics_by_key.get("sharpe_ratio"),
+        "max_drawdown": metrics_by_key.get("max_drawdown"),
+        "calmar_ratio": metrics_by_key.get("calmar_ratio"),
+        "portfolio_turnover": metrics_by_key.get("portfolio_turnover"),
     }

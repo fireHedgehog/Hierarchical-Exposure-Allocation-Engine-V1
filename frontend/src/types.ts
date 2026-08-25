@@ -946,6 +946,26 @@ export interface SignalValidationRunResponse {
   run: SignalValidationRun;
 }
 
+export interface StrategyBacktestRun {
+  run_id: string;
+  strategy_key: string;
+  strategy_version?: Nullable<string>;
+  dataset_snapshot_id?: Nullable<string>;
+  summary: string;
+  started_at?: Nullable<string>;
+  finished_at?: Nullable<string>;
+  cagr?: Nullable<number>;
+  annualized_volatility?: Nullable<number>;
+  sharpe_ratio?: Nullable<number>;
+  max_drawdown?: Nullable<number>;
+  calmar_ratio?: Nullable<number>;
+  portfolio_turnover?: Nullable<number>;
+}
+
+export interface StrategyBacktestRunResponse {
+  run: StrategyBacktestRun;
+}
+
 export interface ResearchCatalogMetric {
   metric_key: string;
   category: string;
