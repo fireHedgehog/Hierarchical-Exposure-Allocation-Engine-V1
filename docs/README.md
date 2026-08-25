@@ -60,6 +60,8 @@ Each stage follows the same contract proven since `regime_filter`: a real functi
 - [Architecture](architecture.md): boundaries and data flow.
 - [Operations](operations.md): credentials, manual runs, testing, and scheduling gate.
 - [Strategy lifecycle](strategy-lifecycle.md): evidence, promotion, monitoring, and retirement.
+- [Research hypotheses](hypotheses/README.md): pre-database working papers for candidate research ideas — a hypothesis lives here, versioned, until it reaches a real conclusion; only then does it become a `strategies` row.
+- [`backend/research_lab/`](../backend/research_lab/README.md): the code-side counterpart — throwaway, no-quality-bar scripts for testing a hypothesis; never imported by production, never writes to the database. Skip it in review/cleanup by default; see its README for the exact rule.
 - [ADR 0001](adr/0001-database-canonical-research.md): canonical records and reproducible exports.
 - [Changelog](../CHANGELOG.md): material product, design, application, data, and operating changes.
 - [`backend/schema.sql`](../backend/schema.sql): executable persistence contract.

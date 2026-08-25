@@ -19,7 +19,6 @@ from backend import __version__
 from backend.admin_models import (
     CredentialWriteRequest,
     EngineModeWriteRequest,
-    ObservationCreateRequest,
     PipelineRunRequest,
     ProviderVerifyRequest,
     SignalValidationRunRequest,
@@ -29,7 +28,6 @@ from backend.admin_repository import (
     PipelineNotFoundError,
     ProviderNotFoundError,
     StrategyNotFoundError,
-    add_research_observation,
     get_data_inventory,
     get_overview,
     get_pipeline,
@@ -542,30 +540,6 @@ def create_app(
                 return get_strategy(connection, strategy_key)
         except StrategyNotFoundError as error:
             raise _not_found("strategy_not_found", f"Strategy {strategy_key} is not registered.") from error
-
-    @application.post(
-        "/api/v1/admin/research/observations",
-        tags=["operator"],
-        dependencies=[Depends(operator_guard("research.add_observation", admin_origins))],
-    )
-    def admin_add_research_observation(payload: ObservationCreateRequest) -> dict[str, Any]:
-        try:
-            with connect(path) as connection:
-                return {
-                    "observation": add_research_observation(
-                        connection,
-                        now_fn(),
-                        strategy_key=payload.strategy_key,
-                        component_key=payload.component_key,
-                        observed_at=payload.observed_at,
-                        event_label=payload.event_label,
-                        signal_direction=payload.signal_direction,
-                        observation=payload.observation,
-                        source_note=payload.source_note,
-                    )
-                }
-        except StrategyNotFoundError as error:
-            raise _not_found("strategy_not_found", f"Strategy {payload.strategy_key} is not registered.") from error
 
     @application.post(
         "/api/v1/admin/research/factor-significance/runs",

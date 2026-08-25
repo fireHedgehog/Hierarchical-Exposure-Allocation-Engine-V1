@@ -6,10 +6,12 @@ import {
   BookOpenCheck,
   ChevronRight,
   Database,
+  ExternalLink,
   FlaskConical,
   KeyRound,
   Menu,
   Network,
+  Newspaper,
   PlayCircle,
   Search,
   Settings2,
@@ -145,6 +147,15 @@ export function AppShell() {
             <span>Methodology</span>
             <ChevronRight className="nav-chevron" aria-hidden="true" />
           </NavLink>
+          <a
+            href="https://github.com/fireHedgehog/Hierarchical-Exposure-Allocation-Engine-V1/tree/main/docs/hypotheses"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Newspaper aria-hidden="true" />
+            <span>Research hypotheses</span>
+            <ExternalLink className="nav-chevron" aria-hidden="true" size={14} />
+          </a>
         </nav>
 
         <div className="symbol-jump">

@@ -127,42 +127,10 @@ export function StrategyDetailPage() {
               </div>
             ) : <Unavailable title="Research runs not available" detail="No reproducible result artifact has been registered yet." />}
           </Panel>
-
-          <Panel>
-            <SectionHeading
-              eyebrow="Cold-start research"
-              title="Observations"
-              description="One real, dated checkpoint per real-world event — never a fabricated probability. The log itself, not any single entry, is what eventually turns a narrative into a usable classifier."
-            />
-            {strategy.observations?.length ? (
-              <div className="research-run-list">
-                {strategy.observations.map((entry) => (
-                  <article key={entry.observation_id}>
-                    <div className="research-run-header">
-                      <div><History aria-hidden="true" size={16} /><strong>{entry.event_label}</strong></div>
-                      <StatusPill value={entry.signal_direction} tone={signalDirectionTone(entry.signal_direction)} />
-                    </div>
-                    <p>{entry.observation}</p>
-                    <small>
-                      {entry.component_key ? `${entry.component_key} · ` : ""}
-                      {entry.observed_at ? formatTimestamp(entry.observed_at) : "Date not confirmed"} · logged {formatTimestamp(entry.created_at)}
-                    </small>
-                    {entry.source_note ? <small>{entry.source_note}</small> : null}
-                  </article>
-                ))}
-              </div>
-            ) : <Unavailable compact title="No observations recorded yet" detail="Not every strategy accumulates a checkpoint log — most are computed directly from data instead." />}
-          </Panel>
         </>
       ) : null}
     </div>
   );
-}
-
-function signalDirectionTone(direction: string): "info" | "warning" | "neutral" {
-  if (direction === "hawkish") return "info";
-  if (direction === "dovish") return "warning";
-  return "neutral";
 }
 
 export function resolveCurrentStrategyVersion(strategy?: StrategyDetail | null): StrategyVersion | undefined {

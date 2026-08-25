@@ -1000,36 +1000,6 @@ CREATE TABLE IF NOT EXISTS strategy_lifecycle_events (
     strategy_version TEXT
 );
 
--- Real, dated, qualitative checkpoints for a cold-start hypothesis --
--- distinct from research_runs (which requires a sealed dataset snapshot
--- and produces computed metrics) and from strategy_components (a named
--- sub-signal with a computed-or-overridden numeric value). An observation
--- here is a real-world event interpretation with essentially zero sample
--- size to start (e.g. a new policymaker's revealed behavior): one row per
--- real checkpoint (an FOMC meeting, a keynote, a market-stress episode),
--- honestly categorized, never a fabricated probability. The append-only
--- log itself -- not any single entry -- is what turns a narrative into a
--- usable classifier once enough real checkpoints exist (10-20, by the
--- standing rule for this kind of research). component_key is not
--- FK-enforced to strategy_components: a strategy-level-only observation
--- (about no specific sub-function) is equally legitimate.
-CREATE TABLE IF NOT EXISTS research_observations (
-    observation_id TEXT PRIMARY KEY,
-    strategy_key TEXT NOT NULL REFERENCES strategies(strategy_key),
-    component_key TEXT,
-    observed_at TEXT,
-    event_label TEXT NOT NULL,
-    signal_direction TEXT NOT NULL CHECK (
-        signal_direction IN ('hawkish', 'dovish', 'neutral', 'inconclusive')
-    ),
-    observation TEXT NOT NULL,
-    source_note TEXT,
-    created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_research_observations_strategy
-    ON research_observations(strategy_key, observed_at);
-
 -- Sub-strategy granularity: a strategy_versions row (e.g.
 -- macd_rsi_single_name_timing naive-v2) is itself an ensemble of named,
 -- independently versioned, independently retireable components -- e.g.
@@ -1133,52 +1103,6 @@ INSERT OR IGNORE INTO strategies (strategy_key, name, family, summary, status, c
 -- just fresh clones.
 UPDATE strategies SET name = 'Single-name timing', updated_at = '2026-08-25T00:00:00Z'
 WHERE strategy_key = 'macd_rsi_single_name_timing' AND name != 'Single-name timing';
-
--- Cold-start policy-reaction-function research (2026-08-25): registered for
--- observation only, explicitly NOT wired into any pipeline stage --
--- status='draft' and no code_reference, both honest facts, not a
--- placeholder waiting to be filled in on the next commit. Kevin Warsh
--- became Fed Chair 2026-05-22; the desk's existing macro_regime_composite
--- (8 hand-picked factors, including core PCE at weight 0.15) is itself an
--- implicit reaction-function model tuned for a well-observed chair's
--- revealed behavior over years of data -- there is no reason to assume its
--- factor weights transfer to a chair with ~3 months of tenure. This
--- registers a genuinely separate hypothesis rather than editing that
--- assumption into the existing composite.
-INSERT OR IGNORE INTO strategies (strategy_key, name, family, summary, status, current_version, added_at, retired_at, retirement_reason, public_spec_url, created_at, updated_at) VALUES
-    ('warsh_reaction_function', 'Warsh Fed reaction function', 'policy_reaction_function',
-     'Models how Fed Chair Kevin Warsh''s FOMC reacts to market and macro conditions, as two independent sub-functions (monetary policy; market functioning) rather than one blended reaction -- informed by his 2006-2011 Fed Governor record (used only as a Bayesian prior, not a training set) and 2026 revealed preference. Registered for observation only; not wired into any pipeline stage.',
-     'draft', 'v0.1', '2026-08-25', NULL, NULL, NULL, '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z');
-
-INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
-    ('warsh_reaction_function', 'v0.1', '2026-08-25T00:00:00Z',
-     'H-W01: Warsh''s Fed reacts primarily to deterioration in Treasury and credit-market functioning, not to the absolute level of long-term yields. Market price pain (a high yield, a falling equity index) is treated as distinct from market dysfunction (a failed auction, repo stress, a break in credit transmission); the Fed is hypothesized to tolerate the former and intervene on the latter, largely independent of the yield level itself.',
-     'None claimed. This is a cold-start hypothesis with essentially zero real 2026 data (Warsh has held the chair for about three months and has deliberately minimized forward guidance -- in a July 2026 press conference he stated that the market says it wants his reaction function but really wants his forecast/dot). His 2006-2011 record is a prior, not a training set: the financial system''s structure, the Fed''s balance sheet, and the fiscal backdrop have all changed materially since then. Real calibration requires roughly 10-20 observation checkpoints (FOMC meetings, Jackson Hole, Treasury-market stress episodes) before this can function as a regime classifier rather than a narrative.',
-     'v0.1: initial registration. Declares two independent sub-functions (monetary_policy_function, market_functioning_function) rather than one combined reaction, based on the documented historical split in Warsh''s own record: in 2008 he supported the Fed''s unprecedented liquidity facilities once repo, commercial paper, and interbank funding markets showed genuine market-functioning failure; by 2010, discussing further asset purchases, he turned notably cautious, citing damage to market functioning, the risk of being seen as monetizing government debt, crowding out private buyers, and central-bank credibility -- concerns that map closely onto the current environment (a large fiscal deficit, an elevated 30-year yield, and a Treasury that would prefer lower yields).',
-     '{"observation_variable_groups":{"price":["10Y nominal yield","30Y nominal yield","10Y TIPS real yield","30Y TIPS real yield","breakeven inflation","curve slope"],"treasury_functioning":["auction tail","bid-to-cover ratio","dealer take-down share","bid/ask spread","market depth","fails-to-deliver","MOVE index"],"funding_plumbing":["SOFR-IORB spread","repo rate","SRF usage","discount window usage","reserve balances"],"credit_transmission":["IG spread","HY spread","mortgage spread","bank lending standards","commercial paper pricing","private credit pricing"],"macro":["core PCE","inflation expectations","unemployment rate","initial claims","GDP/growth"]},"variable_group_priority_note":"funding_plumbing and treasury_functioning are hypothesized to matter more to intervention timing than the macro group -- the reverse of macro_regime_composite''s own weighting, where core PCE alone carries 0.15.","response_ladder":{"R0":"tolerate","R1":"verbal intervention","R2":"rate-path adjustment","R3":"SRF / repo / liquidity provision","R4":"reserve-management Treasury bill purchases","R5":"emergency credit facilities","R6":"long-duration Treasury purchases / QE"},"response_ladder_note":"R3-R5 can expand the Fed balance sheet without implying monetary easing -- the Fed''s own Monetary Policy Report already classifies current short-bill purchases as reserve-management, not QE. Balance-sheet growth alone must never be labeled QE=true.","speech_text_factor_keywords":{"put_probability_down":["price stability","market forces","fiscal responsibility","market participants","inflation credibility"],"put_probability_up":["market functioning","financial stability","credit transmission","liquidity","ample reserves","disorderly","balance-sheet flexibility"],"qe_branch_probability_up_sharply":["longer-term Treasury purchases","portfolio balance","duration","asset purchases"]},"next_checkpoint":"Jackson Hole keynote, 2026-08-28 10:00 ET (Fed-confirmed)"}',
-     NULL, NULL, '2026-11-25');
-
-UPDATE strategies SET current_version = 'v0.1', updated_at = '2026-08-25T00:00:00Z'
-WHERE strategy_key = 'warsh_reaction_function';
-
-INSERT OR IGNORE INTO strategy_components (strategy_key, version, component_key, name, component_type, roles_json, code_reference, base_weight, status, verification_status, decay_rate, next_review_at, created_at, updated_at) VALUES
-    ('warsh_reaction_function', 'v0.1', 'monetary_policy_function', 'Monetary-policy reaction function', 'manual_override', '["contribution"]', NULL, NULL, 'draft', 'registered_only', NULL, '2026-11-25', '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z'),
-    ('warsh_reaction_function', 'v0.1', 'market_functioning_function', 'Market-functioning reaction function', 'manual_override', '["contribution"]', NULL, NULL, 'draft', 'registered_only', NULL, '2026-11-25', '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z');
-
--- First real observation: the only actual 2026 datapoint available at
--- registration time. Exact FOMC meeting date not given/confirmed --
--- observed_at is left NULL rather than guessed, per this project's
--- standing "unknown data stays null" rule.
-INSERT OR IGNORE INTO research_observations (observation_id, strategy_key, component_key, observed_at, event_label, signal_direction, observation, source_note, created_at) VALUES
-    ('warsh-obs-2026-07-fomc', 'warsh_reaction_function', 'monetary_policy_function', NULL, 'July 2026 FOMC',
-     'hawkish',
-     'The FOMC held rates 9-3 with core PCE still above the 2% target; the three dissenters wanted a hike, not a cut. The statement said the Committee "will deliver price stability." No easing guidance was given despite long-term yields already being elevated -- the first real 2026 evidence that Warsh does not treat a high yield level, by itself, as a reason to ease.',
-     'User-reported (2026-08-25 research session); exact meeting date not confirmed.', '2026-08-25T00:00:00Z');
-
-INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
-    ('v0.1-warsh_reaction_function-draft', 'warsh_reaction_function', '2026-08-25T00:00:00Z', NULL, 'draft',
-     'Registered for observation only, explicitly not wired into any pipeline stage: a cold-start hypothesis (H-W01) with ~3 months of real Warsh-as-Chair data. Two independent sub-functions declared (monetary_policy_function, market_functioning_function) based on his documented 2008 vs. 2010 record. Will accumulate one real observation per FOMC/Jackson Hole/stress-episode checkpoint; promotion out of draft is gated on roughly 10-20 real checkpoints, not a fixed date.',
-     'v0.1');
 
 INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
     ('macro_regime_composite', 'naive-v1', '2026-08-24T00:00:00Z',
