@@ -295,6 +295,57 @@ def run_factor_engine_stage(
                     )
                 )
 
+        # Current timing state, as of the latest fetched bar -- distinct from
+        # the entry/exit fill events above (a historical trade ledger) and
+        # from the cross-sectional symbol_signals row (relative standing, not
+        # timing). Answers "is now the right time," not "how did this do
+        # historically": is a position currently open with no exit trigger
+        # yet, flat with no new entry trigger yet, or has no entry signal
+        # fired at all in this window. One row per symbol per snapshot
+        # (event_status='signal_state', matching symbol_events' own
+        # vocabulary for a non-executed, current-state read).
+        latest_close = backtest_bars[-1].close if backtest_bars else None
+        if backtest.status == "no_entry_signal_active":
+            timing_label = f"No entry signal active — {symbol}"
+            timing_detail = backtest.methodology
+        elif not backtest.trades:
+            timing_label = f"No entry signal yet — {symbol}"
+            timing_detail = (
+                f"No MACD bullish crossover has fired for {symbol} in this window "
+                f"({backtest.period_start} to {backtest.period_end})."
+            )
+        elif backtest.trades[-1].exit_date is None:
+            open_trade = backtest.trades[-1]
+            timing_label = f"Holding — {symbol}"
+            timing_detail = (
+                f"Entered {open_trade.entry_date} ({open_trade.entry_reason}). Position remains open as of "
+                f"{backtest.period_end}; no MACD bearish crossover or RSI-overbought trigger has fired since."
+            )
+        else:
+            last_trade = backtest.trades[-1]
+            timing_label = f"Flat — {symbol}"
+            timing_detail = (
+                f"Last exited {last_trade.exit_date} ({last_trade.exit_reason}). No new MACD bullish crossover "
+                f"has fired as of {backtest.period_end}."
+            )
+        event_rows.append(
+            (
+                dataset_snapshot_id,
+                security_id,
+                f"timing-signal-{symbol.lower()}",
+                backtest.period_end,
+                "timing_signal",
+                "signal_state",
+                timing_label,
+                latest_close,
+                timing_detail,
+                "engine_backtest",
+                f"{backtest.period_end}T00:00:00Z",
+                f"{backtest.period_end}T00:00:00Z",
+                timestamp,
+            )
+        )
+
         metric_specs = [
             (
                 "total_return",

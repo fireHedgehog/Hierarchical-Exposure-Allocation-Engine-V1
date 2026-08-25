@@ -341,10 +341,11 @@ def test_real_pipeline_run_persists_backtest_events_and_metrics_per_symbol(
     assert total_return_metric["value"] is not None
 
     event_types = {event["type"] for event in detail["events"]}
-    assert event_types <= {"backtest_entry_fill", "backtest_exit_fill"}
+    assert event_types <= {"backtest_entry_fill", "backtest_exit_fill", "timing_signal"}
+    assert "timing_signal" in event_types  # one current-state row is always written, win or lose
     for event in detail["events"]:
-        assert event["status"] == "executed"
-        assert event["detail"]  # every entry/exit carries a real why-reason
+        assert event["status"] in {"executed", "signal_state"}
+        assert event["detail"]  # every entry/exit/current-state row carries a real why-reason
 
 
 def test_staging_universe_is_seeded_by_default_with_no_paid_provider_references(

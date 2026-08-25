@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Engine — real per-symbol current timing signal (regime + cross-sectional + timing, connected)
+
+- New `symbol_events` row per symbol per snapshot (`event_type='timing_signal'`, `event_status='signal_state'`), derived from the MACD/RSI backtest's own trade log — no new table, no new backend field. One of three honest states: holding (open, no exit trigger since entry), flat (closed, no new entry trigger since), or no signal yet.
+- Closes a real gap: the cross-sectional signal (relative sector/name strength) and the timing signal (is now the right entry/exit moment) were both computed but never shown together — `factor_engine.py`'s own code comment already said as much. Zero frontend changes needed — the existing generic event-render path picks up the new type automatically.
+- Live-verified with real data: IGV and XLE both really did exit on RSI-overbought recently and are flat with no new entry signal; SMH reads cross-sectionally bullish (rank 5 of 22) while its timing state is flat (MACD just crossed bearish) — a real "strong sector, wrong entry moment" read.
+
 ### Research — momentum horizon forward-return IC test; a real sign bug found, not yet fixed
 
 - `run_momentum_significance_research()` tests each of cross_sectional_momentum's 4 candidate horizons (1m/3m/6m/12m_skip1m) for real Pearson IC and Rank IC against forward returns — the gap 0.16 explicitly left open. Reuses the exact pooled pairing and Benjamini-Hochberg correction already proven in the live `compute_horizon_weights`; does not touch the live blend itself.
