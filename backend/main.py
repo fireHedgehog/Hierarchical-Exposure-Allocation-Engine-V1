@@ -66,10 +66,12 @@ from backend.research_repository import (
     get_latest_momentum_significance_run,
     get_latest_signal_validation_run,
     get_latest_strategy_backtest_run,
+    get_latest_timing_signal_significance_run,
     run_factor_significance_research,
     run_momentum_significance_research,
     run_signal_validation_research,
     run_strategy_backtest_research,
+    run_timing_signal_significance_research,
 )
 from backend.secrets import (
     KeyringEnvironmentSecretStore,
@@ -635,6 +637,36 @@ def create_app(
             raise _not_found(
                 "momentum_significance_run_not_found",
                 "No momentum-significance research run has been recorded yet.",
+            )
+        return {"run": run}
+
+    @application.post(
+        "/api/v1/admin/research/timing-signal-significance/runs",
+        tags=["operator"],
+        dependencies=[Depends(operator_guard("research.run_timing_signal_significance", admin_origins))],
+    )
+    def admin_run_timing_signal_significance_research() -> dict[str, Any]:
+        try:
+            with connect(path) as connection:
+                return {"run": run_timing_signal_significance_research(connection, now_fn())}
+        except DatasetNotSealedError as error:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "dataset_not_sealed", "message": str(error)},
+            ) from error
+
+    @application.get(
+        "/api/v1/admin/research/timing-signal-significance/latest",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_latest_timing_signal_significance_research() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            run = get_latest_timing_signal_significance_run(connection)
+        if run is None:
+            raise _not_found(
+                "timing_signal_significance_run_not_found",
+                "No timing-signal-significance research run has been recorded yet.",
             )
         return {"run": run}
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import bisect
 import sqlite3
+import statistics
 import uuid
 from datetime import date, datetime
 
@@ -11,6 +12,7 @@ from backend.engine.factors import (
 )
 from backend.engine.factors.momentum_v2 import _pooled_ic_samples
 from backend.engine.factors.types import Bar
+from backend.engine.indicators import compute_macd, compute_rsi
 from backend.engine.regime import InsufficientSeriesDataError, compute_regime_v2
 from backend.engine.regime.types import SeriesObservation
 from backend.engine.research import (
@@ -25,6 +27,7 @@ from backend.engine.research import (
     rank_information_coefficient,
     redundancy_pairs,
 )
+from backend.engine.timing import MACD_CROSSOVER, RSI_OVERBOUGHT_EXIT
 from backend.pipeline.stages.common import SERIES_METADATA, _iso_z, _security_id_for
 
 # Strategy families with a real "strategy"-level (whole, traded, realized)
@@ -818,6 +821,234 @@ def get_latest_momentum_significance_run(connection: sqlite3.Connection) -> dict
         "started_at": run_row["started_at"],
         "finished_at": run_row["finished_at"],
         "results": list(by_horizon.values()),
+    }
+
+
+# Matches run_macd_rsi_backtest_v2's live defaults (backend/engine/timing/backtest_v2.py).
+TIMING_RSI_PERIOD = 14
+TIMING_RSI_OVERBOUGHT = 70.0
+TIMING_MACD_FAST = 12
+TIMING_MACD_SLOW = 26
+TIMING_MACD_SIGNAL = 9
+
+
+def run_timing_signal_significance_research(
+    connection: sqlite3.Connection,
+    now: datetime,
+    dataset_snapshot_id: str | None = None,
+) -> dict[str, object]:
+    """Real event-study significance test for macd_rsi_single_name_timing's
+    two components -- the piece 0.13's role-tagged design left untested: does
+    a real MACD bullish crossover actually predict a positive forward return
+    (the only registered entry trigger), and does a real RSI-overbought
+    reading actually predict a negative one (one of two registered exit
+    triggers)? MACD and RSI are role-tagged, sequential triggers, not
+    co-equal weighted factors (see backtest_v2.py's own module docstring) --
+    so this is deliberately NOT the same pairwise-correlation/ENB shape used
+    for macro_regime_composite/cross_sectional_momentum. Each day across
+    every tradable symbol's full history is one sample: a 0/1 event
+    indicator (did this component fire today) paired with the real forward
+    return -- point-biserial correlation, computed with the exact same
+    pearson_significance used everywhere else in this file, since a
+    binary-vs-continuous Pearson correlation is mathematically a two-sample
+    mean-difference test. A validity check on the rule itself, not a change
+    to it: compute_horizon_weights and run_macd_rsi_backtest_v2 are untouched.
+    """
+
+    resolved_dataset_id = dataset_snapshot_id or _latest_sealed_dataset_id(connection)
+    if resolved_dataset_id is None:
+        raise DatasetNotSealedError("No sealed dataset snapshot is available to research.")
+    dataset = connection.execute(
+        "SELECT id, immutable FROM dataset_snapshots WHERE id = ?", (resolved_dataset_id,)
+    ).fetchone()
+    if dataset is None or not dataset["immutable"]:
+        raise DatasetNotSealedError(f"Dataset snapshot {resolved_dataset_id!r} does not exist or is not sealed.")
+
+    strategy = connection.execute(
+        "SELECT current_version FROM strategies WHERE strategy_key = 'macd_rsi_single_name_timing'"
+    ).fetchone()
+    if strategy is None or strategy["current_version"] is None:
+        raise UnsupportedSignalValidationFamilyError("macd_rsi_single_name_timing has no current version registered.")
+    strategy_version = strategy["current_version"]
+
+    bars_by_symbol = _tradable_symbol_bars(connection, resolved_dataset_id)
+
+    macd_x: list[float] = []
+    macd_y: list[float] = []
+    rsi_x: list[float] = []
+    rsi_y: list[float] = []
+    for bars in bars_by_symbol.values():
+        ordered = sorted(bars, key=lambda bar: bar.time)
+        closes = [bar.close for bar in ordered]
+        n = len(closes)
+        macd_line, signal_line, _histogram = compute_macd(
+            closes, fast=TIMING_MACD_FAST, slow=TIMING_MACD_SLOW, signal=TIMING_MACD_SIGNAL
+        )
+        rsi = compute_rsi(closes, period=TIMING_RSI_PERIOD)
+        for i in range(1, n - FORWARD_HORIZON_TRADING_DAYS):
+            if closes[i] == 0:
+                continue
+            forward_return = (closes[i + FORWARD_HORIZON_TRADING_DAYS] - closes[i]) / abs(closes[i])
+            if (
+                macd_line[i] is not None
+                and signal_line[i] is not None
+                and macd_line[i - 1] is not None
+                and signal_line[i - 1] is not None
+            ):
+                bullish_cross = macd_line[i - 1] <= signal_line[i - 1] and macd_line[i] > signal_line[i]
+                macd_x.append(1.0 if bullish_cross else 0.0)
+                macd_y.append(forward_return)
+            if rsi[i] is not None:
+                overbought = rsi[i] >= TIMING_RSI_OVERBOUGHT
+                rsi_x.append(1.0 if overbought else 0.0)
+                rsi_y.append(forward_return)
+
+    raw: list[dict[str, object]] = []
+    for component_key, x, y, event_label in (
+        (MACD_CROSSOVER, macd_x, macd_y, "MACD bullish crossover"),
+        (RSI_OVERBOUGHT_EXIT, rsi_x, rsi_y, "RSI(14) >= 70 (overbought)"),
+    ):
+        if len(x) < MIN_SAMPLES or sum(x) < 3 or (len(x) - sum(x)) < 3:
+            raw.append({"component_key": component_key, "sample_size": len(x), "status": "insufficient_data"})
+            continue
+        correlation, p_value = pearson_significance(x, y)
+        event_returns = [yi for xi, yi in zip(x, y) if xi == 1.0]
+        non_event_returns = [yi for xi, yi in zip(x, y) if xi == 0.0]
+        raw.append(
+            {
+                "component_key": component_key,
+                "event_label": event_label,
+                "sample_size": len(x),
+                "event_count": int(sum(x)),
+                "correlation": correlation,
+                "p_value": p_value,
+                "mean_forward_return_on_event": statistics.fmean(event_returns),
+                "mean_forward_return_otherwise": statistics.fmean(non_event_returns),
+                "status": "ok",
+            }
+        )
+
+    testable = [item for item in raw if item["status"] == "ok"]
+    p_values = [item["p_value"] for item in testable]  # type: ignore[misc]
+    adjusted_p_values, significant_flags = benjamini_hochberg(p_values, alpha=0.05)
+    for item, adjusted_p_value, is_significant in zip(testable, adjusted_p_values, significant_flags):
+        item["adjusted_p_value"] = adjusted_p_value
+        item["significant"] = is_significant
+
+    run_id = f"timing-signal-significance-{uuid.uuid4()}"
+    timestamp = _iso_z(now)
+    significant_count = sum(1 for item in testable if item.get("significant"))
+    summary = (
+        f"Tested {len(testable)} of {len(raw)} registered timing components as real event studies "
+        f"(pooled across every tradable symbol's full history, {FORWARD_HORIZON_TRADING_DAYS}-day forward return); "
+        f"{significant_count} remained significant after benjamini_hochberg correction at alpha=0.05."
+    )
+
+    connection.execute(
+        """
+        INSERT INTO research_runs (
+            research_run_id, strategy_key, strategy_version, dataset_snapshot_id,
+            parameters_json, status, started_at, finished_at, summary
+        ) VALUES (?, 'macd_rsi_single_name_timing', ?, ?, '{}', 'completed', ?, ?, ?)
+        """,
+        (run_id, strategy_version, resolved_dataset_id, timestamp, timestamp, summary),
+    )
+
+    metric_rows: list[tuple] = []
+    for item in raw:
+        component_key = item["component_key"]
+        if item["status"] == "insufficient_data":
+            metric_rows.append(
+                (
+                    run_id, component_key, "factor_ic", f"{component_key} event-study IC", None, "correlation",
+                    "insufficient_data",
+                    f"Only {item['sample_size']} paired samples, or too few real event days; need at least "
+                    f"{MIN_SAMPLES} samples and 3 event days.",
+                )
+            )
+            continue
+        is_significant = bool(item["significant"])
+        metric_rows.append(
+            (
+                run_id, component_key, "factor_ic", f"{item['event_label']} event-study IC", item["correlation"],
+                "correlation", "ok",
+                f"Point-biserial r={item['correlation']:+.3f} over {item['sample_size']} real pooled days "
+                f"({item['event_count']} real event days), adjusted p={item['adjusted_p_value']:.4f} "
+                f"({'significant' if is_significant else 'not significant'} after Benjamini-Hochberg correction). "
+                f"Mean {FORWARD_HORIZON_TRADING_DAYS}-day forward return on event days "
+                f"{item['mean_forward_return_on_event']:+.2%} vs. {item['mean_forward_return_otherwise']:+.2%} otherwise.",
+            )
+        )
+    connection.executemany(
+        """
+        INSERT INTO research_run_metrics (
+            research_run_id, subject_key, metric_key, label, value, unit, status, description
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        metric_rows,
+    )
+
+    return {
+        "run_id": run_id,
+        "strategy_key": "macd_rsi_single_name_timing",
+        "strategy_version": strategy_version,
+        "dataset_snapshot_id": resolved_dataset_id,
+        "summary": summary,
+        "started_at": timestamp,
+        "finished_at": timestamp,
+        "results": [
+            {
+                "component_key": item["component_key"],
+                "event_label": item.get("event_label"),
+                "sample_size": item["sample_size"],
+                "event_count": item.get("event_count"),
+                "status": item["status"],
+                "correlation": item.get("correlation"),
+                "p_value": item.get("p_value"),
+                "adjusted_p_value": item.get("adjusted_p_value"),
+                "mean_forward_return_on_event": item.get("mean_forward_return_on_event"),
+                "mean_forward_return_otherwise": item.get("mean_forward_return_otherwise"),
+                "significant": bool(item.get("significant", False)),
+            }
+            for item in raw
+        ],
+    }
+
+
+def get_latest_timing_signal_significance_run(connection: sqlite3.Connection) -> dict[str, object] | None:
+    run_row = connection.execute(
+        """
+        SELECT research_run_id, strategy_key, strategy_version, dataset_snapshot_id, summary, started_at, finished_at
+        FROM research_runs WHERE research_run_id LIKE 'timing-signal-significance-%'
+        ORDER BY started_at DESC, rowid DESC LIMIT 1
+        """
+    ).fetchone()
+    if run_row is None:
+        return None
+    metric_rows = connection.execute(
+        """
+        SELECT subject_key, value, status, description FROM research_run_metrics
+        WHERE research_run_id = ? AND metric_key = 'factor_ic' ORDER BY subject_key
+        """,
+        (run_row["research_run_id"],),
+    ).fetchall()
+    return {
+        "run_id": run_row["research_run_id"],
+        "strategy_key": run_row["strategy_key"],
+        "strategy_version": run_row["strategy_version"],
+        "dataset_snapshot_id": run_row["dataset_snapshot_id"],
+        "summary": run_row["summary"],
+        "started_at": run_row["started_at"],
+        "finished_at": run_row["finished_at"],
+        "results": [
+            {
+                "component_key": row["subject_key"],
+                "correlation": row["value"],
+                "status": row["status"],
+                "description": row["description"],
+            }
+            for row in metric_rows
+        ],
     }
 
 

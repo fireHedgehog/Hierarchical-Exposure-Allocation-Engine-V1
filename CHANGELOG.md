@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — timing-signal event-study IC test; MACD entry shows no real edge
+
+- `run_timing_signal_significance_research()` tests macd_rsi_single_name_timing's two components as real event studies (0/1 event indicator vs. real 21-day forward return, pooled across every symbol's full history) — the third and final "3 category" gap (macro, name selection, timing), closing out after 0.25/0.26 covered the other two.
+- Live-verified: RSI-overbought is a real, validated exit signal (r=-0.015, adjusted p=0.0012, 4,583 real event days). MACD bullish crossover — the strategy's only registered entry trigger — shows no real edge (r=+0.002, p=0.66) over this universe/decade. Flagged, not silently patched.
+
 ### Frontend — "Run pipeline" button was buried below a full-page report
 
 - `OperationsOverviewPage.tsx` reordered: the pipeline run panel (`Dry preflight`/`Run available stages`) and latest-run record now render right after the top stat grid; the evidence-gated roadmap (`ProductReadinessPanel`, a long five-milestone report) moved to the bottom. A page titled "Run pipeline" now leads with the ability to run it. User-caught by trying to actually use the page, not by reading the code.
