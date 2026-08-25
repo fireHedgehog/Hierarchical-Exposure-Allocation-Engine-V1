@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — first full hypothesis cycle; two new literature-backed candidates preregistered
+
+- Two candidates preregistered under `docs/hypotheses/`: time-series momentum (Moskowitz, Ooi & Pedersen 2012) as a timing-layer challenger to MACD; low-volatility anomaly (Ang, Hodrick, Xing & Zhang 2006; Frazzini & Pedersen 2014) as a cross-sectional addition. Added `preregistered` as a real status distinct from `observing`.
+- New `backend/research_lab/time_series_momentum.py`: real IC test across 4 horizons against the sealed dataset, read-only. Result recorded honestly: all 4 horizons significant but negative — the opposite of the predicted direction — moved to `concluded-rejected` (on this universe/window) with a stated, unproven mechanism rather than discarded or softened.
+
 ### Research — timing-signal event-study IC test; MACD entry shows no real edge
 
 - `run_timing_signal_significance_research()` tests macd_rsi_single_name_timing's two components as real event studies (0/1 event indicator vs. real 21-day forward return, pooled across every symbol's full history) — the third and final "3 category" gap (macro, name selection, timing), closing out after 0.25/0.26 covered the other two.

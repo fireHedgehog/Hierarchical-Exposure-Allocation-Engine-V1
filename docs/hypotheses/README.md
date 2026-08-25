@@ -46,13 +46,15 @@ gate before research even reaches the DB.
 | Hypothesis | Type of evidence | Status | Checkpoints so far |
 | --- | --- | --- | --- |
 | [Warsh Fed reaction function](warsh-reaction-function.md) | categorical (hawkish/dovish/neutral/inconclusive) per FOMC/speech event | observing | 1 |
+| [Time-series momentum](time-series-momentum.md) | continuous (IC vs. real forward return) | concluded-rejected | 1 |
+| [Low-volatility anomaly](low-volatility-anomaly.md) | continuous (IC vs. real forward return) | preregistered | 0 |
 
 ## Template for a new hypothesis
 
 ```markdown
 # <Name> (H-<slug>)
 
-Status: observing | concluded-confirmed | concluded-rejected | archived
+Status: preregistered | observing | concluded-confirmed | concluded-rejected | archived
 Version: v0.1
 Registered: <date>
 
