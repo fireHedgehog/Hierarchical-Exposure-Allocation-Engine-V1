@@ -512,6 +512,11 @@ def get_latest_signal_validation_run(
     ).fetchall()
     correlations = [dict(row) for row in metric_rows if row["metric_key"] == "factor_correlation"]
     enb_row = next((dict(row) for row in metric_rows if row["metric_key"] == "effective_number_of_bets"), None)
+    factor_keys: set[str] = set()
+    for row in correlations:
+        key_a, key_b = row["subject_key"].split("|", 1)
+        factor_keys.add(key_a)
+        factor_keys.add(key_b)
     return {
         "run_id": run_row["research_run_id"],
         "strategy_key": run_row["strategy_key"],
@@ -530,4 +535,5 @@ def get_latest_signal_validation_run(
             for row in correlations
         ],
         "effective_number_of_bets": enb_row["value"] if enb_row else None,
+        "factor_count": len(factor_keys),
     }

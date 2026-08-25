@@ -6,12 +6,15 @@ import { Panel, ResourceState, SectionHeading, StatusPill, Unavailable } from ".
 import type { ResearchArtifact, StrategyComponent, StrategyDetail, StrategyDetailResponse, StrategyVersion } from "../types";
 import { formatScalar, formatTimestamp, NOT_AVAILABLE } from "../utils/format";
 
-// Strategy keys that have a dedicated section on the Research page, and its
-// anchor there -- kept as an explicit, small map (not inferred) so a link
-// is never shown pointing at a section that doesn't exist yet.
+// Strategy keys with real content on the Research page, mapped to which
+// granularity-level section it lives in there (the page is sectioned by
+// level first, strategy second) -- kept as an explicit, small map so a
+// link is never shown pointing at a section with nothing in it. Update
+// this when a strategy's first "strategy"-level or "desk"-level result
+// lands; for now both existing strategies only have ensemble-level content.
 const RESEARCH_ANCHORS: Record<string, string> = {
-  macro_regime_composite: "macro-regime",
-  cross_sectional_momentum: "cross-sectional-momentum",
+  macro_regime_composite: "ensemble",
+  cross_sectional_momentum: "ensemble",
 };
 
 export function StrategyDetailPage() {

@@ -21,36 +21,59 @@ import type {
 } from "../types";
 import { formatNumber, formatTimestamp, NOT_AVAILABLE, toneForDirection } from "../utils/format";
 
-// One section per strategy family, grouped by what the research is ABOUT --
-// not by which statistical method produced it. Each section links to that
-// strategy's Registry record, and the Registry record links back (see
-// StrategyDetailPage's "View research" action) -- a real click-through both
-// directions, not two pages that happen to describe the same thing.
+// Sectioned by granularity first -- component, ensemble, strategy, desk --
+// the same four-level taxonomy the metric catalog uses. Strategy is the
+// secondary label inside each level, not the primary structure: a viewer's
+// first question is "what am I looking at" (one factor? relationships
+// between factors? a realized backtest?), and only then "which strategy."
+
+const GRANULARITY_ORDER = ["component", "ensemble", "strategy", "desk"] as const;
+const GRANULARITY_LABELS: Record<string, string> = {
+  component: "Component — one factor alone",
+  ensemble: "Ensemble — relationships among a strategy's own factors",
+  strategy: "Strategy — one strategy's realized, combined output (fittable by an optimizer)",
+  desk: "Desk — cross-strategy, whole portfolio",
+};
 
 export function ResearchPage() {
   return (
     <div className="workspace operator-page">
       <OperatorPageHeader
         title="Research"
-        description="Real statistical evidence behind the desk's factors, one section per strategy. Every number here is either a real result from a real run or an honest 'not run yet' -- never a placeholder."
+        description="Real statistical evidence behind the desk's factors, sectioned by what's being tested -- one factor alone, relationships among a strategy's factors, a strategy's realized output, or the whole portfolio. Every number is either a real result from a real run or an honest 'not run yet'."
       />
 
-      <StrategyResearchSection strategyKey="macro_regime_composite" anchorId="macro-regime" title="Macro regime factors">
+      <GranularitySection level="component" description="Tests one factor by itself, in isolation from every other factor.">
         <FactorSignificanceSubsection />
+      </GranularitySection>
+
+      <GranularitySection level="ensemble" description="Tests relationships among a strategy's own factors -- correlation, redundancy, how many genuinely independent bets they add up to.">
         <SignalValidationSection
           strategyKey="macro_regime_composite"
-          title="Diversification"
+          title="Macro regime factors"
           description="Number of factors != number of independent bets. PCA on the 8 macro factors' real pairwise correlation matrix, over the same sealed dataset."
         />
-      </StrategyResearchSection>
-
-      <StrategyResearchSection strategyKey="cross_sectional_momentum" anchorId="cross-sectional-momentum" title="Cross-sectional momentum factors">
         <SignalValidationSection
           strategyKey="cross_sectional_momentum"
-          title="Diversification"
-          description="Are the momentum horizons independent views, or mostly one restated several ways? Same method as macro, applied to this strategy's own components."
+          title="Cross-sectional momentum factors"
+          description="Same method applied to the momentum horizons: are they independent views, or mostly one restated several ways?"
         />
-      </StrategyResearchSection>
+      </GranularitySection>
+
+      <GranularitySection level="strategy" description="Tests one strategy's own realized, combined output -- CAGR, Sharpe, drawdown -- the tier an optimizer could actually fit.">
+        <Panel>
+          <Unavailable
+            title="No strategy-level backtest built yet"
+            detail="Nothing yet takes a strategy's composite ranking and actually trades it into a real equity curve, for any strategy. A real, honest gap -- not run, not hidden."
+          />
+        </Panel>
+      </GranularitySection>
+
+      <GranularitySection level="desk" description="Tests cross-strategy, whole-portfolio construction -- exposure limits, neutralization, concentration.">
+        <Panel>
+          <Unavailable title="Not built yet" detail="No multi-strategy portfolio layer exists yet to test." />
+        </Panel>
+      </GranularitySection>
 
       <div id="metric-catalog">
         <MetricCatalogSection />
@@ -59,27 +82,31 @@ export function ResearchPage() {
   );
 }
 
-function StrategyResearchSection({
-  strategyKey,
-  anchorId,
-  title,
+function GranularitySection({
+  level,
+  description,
   children,
 }: {
-  strategyKey: string;
-  anchorId: string;
-  title: string;
+  level: (typeof GRANULARITY_ORDER)[number];
+  description: string;
   children: ReactNode;
 }) {
   return (
-    <section id={anchorId} className="research-strategy-section">
+    <section id={level} className="research-strategy-section">
       <div className="research-strategy-section__header">
-        <h2>{title}</h2>
-        <Link className="button button--quiet" to={`/operations/strategies/${encodeURIComponent(strategyKey)}`}>
-          Registry record <ExternalLink aria-hidden="true" size={13} />
-        </Link>
+        <h2>{GRANULARITY_LABELS[level]}</h2>
       </div>
+      <p className="methodology-card__summary" style={{ marginBottom: 12 }}>{description}</p>
       {children}
     </section>
+  );
+}
+
+function RegistryLink({ strategyKey }: { strategyKey: string }) {
+  return (
+    <Link className="button button--quiet" to={`/operations/strategies/${encodeURIComponent(strategyKey)}`}>
+      Registry record <ExternalLink aria-hidden="true" size={13} />
+    </Link>
   );
 }
 
@@ -105,13 +132,16 @@ function FactorSignificanceSubsection() {
   return (
     <Panel>
       <SectionHeading
-        eyebrow="Component level — one factor vs. one symbol's forward return"
+        eyebrow="Macro regime factors"
         title="Factor significance"
         description="Real Pearson correlation and a real p-value between every macro factor and every staging symbol's forward return, corrected for multiple comparisons."
         action={(
-          <button className="button operator-run-button" type="button" onClick={startRun} disabled={running}>
-            <FlaskConical aria-hidden="true" size={16} /> {running ? "Running…" : "Run"}
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <RegistryLink strategyKey="macro_regime_composite" />
+            <button className="button operator-run-button" type="button" onClick={startRun} disabled={running}>
+              <FlaskConical aria-hidden="true" size={16} /> {running ? "Running…" : "Run"}
+            </button>
+          </div>
         )}
       />
       {actionError ? <div className="operator-action-message operator-action-message--error" role="alert"><AlertTriangle aria-hidden="true" size={16} />{actionError}</div> : null}
@@ -158,13 +188,16 @@ function SignalValidationSection({
   return (
     <Panel>
       <SectionHeading
-        eyebrow="Ensemble level — relationships among this strategy's own factors"
-        title={title}
+        eyebrow={title}
+        title="Diversification"
         description={description}
         action={(
-          <button className="button operator-run-button" type="button" onClick={startRun} disabled={running}>
-            <FlaskConical aria-hidden="true" size={16} /> {running ? "Running…" : "Run"}
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <RegistryLink strategyKey={strategyKey} />
+            <button className="button operator-run-button" type="button" onClick={startRun} disabled={running}>
+              <FlaskConical aria-hidden="true" size={16} /> {running ? "Running…" : "Run"}
+            </button>
+          </div>
         )}
       />
       {actionError ? <div className="operator-action-message operator-action-message--error" role="alert"><AlertTriangle aria-hidden="true" size={16} />{actionError}</div> : null}
@@ -210,14 +243,6 @@ function correlationRowClass(correlation: number): string {
   return "factor-significance-row--significant";
 }
 
-const GRANULARITY_ORDER = ["component", "ensemble", "strategy", "desk"] as const;
-const GRANULARITY_LABELS: Record<string, string> = {
-  component: "Component — one factor alone",
-  ensemble: "Ensemble — relationships among a strategy's own factors",
-  strategy: "Strategy — one strategy's realized, combined output (fittable by an optimizer)",
-  desk: "Desk — cross-strategy, whole portfolio",
-};
-
 function MetricCatalogSection() {
   const state = useApi<ResearchMetricCatalogResponse>(endpoints.adminResearchMetricCatalog);
   const metrics = state.data?.metrics ?? [];
@@ -226,9 +251,9 @@ function MetricCatalogSection() {
   return (
     <Panel>
       <SectionHeading
-        eyebrow="Every strategy, the full taxonomy, by level"
+        eyebrow="Reference — every metric this program can compute"
         title="Research metric catalog"
-        description="Metric granularity matches factor granularity: component metrics evaluate one factor alone, ensemble metrics evaluate relationships among a strategy's own factors, strategy metrics evaluate one strategy's realized output, desk metrics evaluate cross-strategy portfolio construction. A metric having no data yet is an honest 'not run', not an oversight."
+        description="Same level order as the sections above. A metric having no data yet is an honest 'not run', not an oversight — not every factor needs every check, and null is allowed."
       />
       <ResourceState loading={state.loading} error={state.error} onRetry={state.reload} resource="metric catalog" />
       {GRANULARITY_ORDER.map((level) => {

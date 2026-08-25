@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Frontend — hash-link scroll bug, missing factor_count, granularity-first regroup
+
+- User caught two real bugs by clicking the link a prior fix added: (1) `#anchor` navigation didn't scroll anywhere — React Router doesn't replicate a browser's native jump-to-`#id` behavior on client-side navigation — leaving the momentum link landing on the macro section with no visual cue anything was wrong. Fixed globally in `AppShell.tsx`, not per-page. (2) the read-back endpoint for a signal-validation run was missing `factor_count`, showing "Not available." Fixed by deriving it from the stored correlation pairs.
+- User follow-up: the Research page's strategy-first grouping ("Macro regime factors" / "Cross-sectional momentum factors" sections) buried the more important question — what granularity level is this. Regrouped to lead with level (Component / Ensemble / Strategy / Desk, matching the metric catalog's own order), strategy as the secondary label; explicit placeholder sections for the still-unbuilt Strategy and Desk levels state the gap instead of omitting it.
+
 ### Frontend — Research page reorganized
 
 - User-identified the Research page had become five unrelated things (macro significance, macro diversification, momentum diversification, the 71-metric catalog) stacked under a page still titled "Factor significance," with no click-through to or from the Strategy registry. Renamed `FactorSignificancePage.tsx` → `ResearchPage.tsx` (route unchanged), restructured into one section per strategy family with a "Registry record" link out of each; Strategy detail page gained a matching "View research" link and per-run "View full result" links. Also named honestly, not fixed: no whole-strategy backtest exists yet for `cross_sectional_momentum` (the composite ranking has never been traded into a real equity curve) — the real reason all 40 `strategy`-level catalog metrics are still dashes, not a UI gap.

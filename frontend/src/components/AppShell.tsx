@@ -39,6 +39,19 @@ export function AppShell() {
 
   useEffect(() => setMenuOpen(false), [location.pathname]);
 
+  // React Router does not replicate the browser's native behavior of
+  // scrolling to an #id on navigation -- that only happens on a real page
+  // load, not client-side routing. Without this, a link like
+  // "/operations/research#cross-sectional-momentum" changes the URL but
+  // leaves the viewport wherever it already was, which reads as "the link
+  // took me to the wrong section" even though the content is correct.
+  useEffect(() => {
+    if (!location.hash) return;
+    const id = decodeURIComponent(location.hash.slice(1));
+    const element = document.getElementById(id);
+    element?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [location.pathname, location.hash]);
+
   const serviceStatus = healthState.error
     ? "unavailable"
     : healthState.loading
