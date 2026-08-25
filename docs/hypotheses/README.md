@@ -48,6 +48,7 @@ gate before research even reaches the DB.
 | [Warsh Fed reaction function](warsh-reaction-function.md) | categorical (hawkish/dovish/neutral/inconclusive) per FOMC/speech event | observing | 1 |
 | [Time-series momentum](time-series-momentum.md) | continuous (IC vs. real forward return) | concluded-rejected | 2 |
 | [Low-volatility anomaly](low-volatility-anomaly.md) | continuous (IC vs. real forward return) | concluded-rejected (raw return) | 1 |
+| [Short-term mean reversion](short-term-mean-reversion.md) | continuous (IC vs. real forward return) | concluded-confirmed (1-week window) | 1 |
 
 ## Template for a new hypothesis
 

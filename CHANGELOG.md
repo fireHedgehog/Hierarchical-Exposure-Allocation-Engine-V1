@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — short-term mean reversion confirmed, the first non-rejected factor this session
+
+- New `research_lab/short_term_mean_reversion.py`: a fresh test at Jegadeesh (1990)'s original window (trailing ~1 week), not reused from the two rejected papers' reversal-shaped side effects — avoids hypothesizing after the results were known, disclosed explicitly in the new paper.
+- Real result: confirmed at the 1-week forward window (r=-0.0204, adjusted p=0.0020, n=26,044); not significant at 2 weeks (r=+0.0042, p=0.50) — the effect resolves within about a week, empirically locating the "time limit" boundary rather than just asserting one exists.
+
 ### Research — low-volatility anomaly run; a real 12-1 check on the reversal finding
 
 - Low-volatility anomaly run against real data: also rejected (r=-0.19, adjusted p<0.0001; calmest third's forward return +0.62% vs. +2.73% for the most volatile third) — likely the same underlying mechanism as time-series momentum's rejection (drawdowns getting bought aggressively in this window's bull market), not an unrelated fluke. Scope caveat recorded: only raw return tested, not the more precise risk-adjusted form of the academic claim.
