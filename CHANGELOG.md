@@ -4,6 +4,10 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — `proportion_significance()`: the statistical primitive for probability-shaped hypotheses
+
+- New, real, hypothesis-agnostic addition to `backend/engine/research/significance.py`: a real Fisher's exact test between two groups' hit-rates — answers "is P(event) actually different between two states," which `pearson_significance` cannot. Chosen over a naive two-proportion z-test for validity on small/imbalanced samples. 5 new tests, 155/155 passing.
+
 ### Research — risk-state reframing validated: a rejected signal confirmed as a real volatility signal
 
 - New H-DOW02 (`dow-theory-risk-state.md`), prompted by external review naming a real gap: every price/volume hypothesis this session was tested only as `factor → E[r]`, never against volatility/risk. Not a revival of the rejected H-DOW01a (return-direction) — a genuinely different claim, same structure-state indicator against forward realized volatility instead.

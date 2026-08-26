@@ -27,6 +27,31 @@ def pearson_significance(x: list[float], y: list[float]) -> tuple[float, float]:
     return float(result.statistic), float(result.pvalue)
 
 
+def proportion_significance(
+    successes_a: int, n_a: int, successes_b: int, n_b: int
+) -> tuple[float, float]:
+    """Real hit-rate/probability-difference test between two groups (e.g.
+    "P(rebound >= 10%) when broken" vs. "... when intact"), for hypotheses
+    shaped as a probability rather than a continuous IC -- pearson_significance
+    answers "does factor level correlate with outcome level"; this answers
+    "does the probability of a discrete outcome differ between two states."
+
+    Real Fisher's exact test (scipy) on the 2x2 contingency table -- not the
+    large-sample normal approximation a naive two-proportion z-test would
+    use, so it stays valid even when one group's event count is small.
+    Returns (proportion_a - proportion_b, two-sided p-value).
+    """
+
+    if n_a <= 0 or n_b <= 0:
+        raise ValueError(f"both group sizes must be positive, got n_a={n_a}, n_b={n_b}.")
+    if not (0 <= successes_a <= n_a) or not (0 <= successes_b <= n_b):
+        raise ValueError("successes must be between 0 and the group's own sample size.")
+    table = [[successes_a, n_a - successes_a], [successes_b, n_b - successes_b]]
+    _odds_ratio, p_value = stats.fisher_exact(table, alternative="two-sided")
+    proportion_difference = (successes_a / n_a) - (successes_b / n_b)
+    return proportion_difference, float(p_value)
+
+
 def benjamini_hochberg(p_values: list[float], alpha: float = 0.05) -> tuple[list[float], list[bool]]:
     """Benjamini-Hochberg false-discovery-rate correction.
 

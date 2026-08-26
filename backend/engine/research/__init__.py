@@ -5,7 +5,7 @@ from backend.engine.research.factor_symbol_correlation import (
     FactorSymbolResult,
     compute_factor_symbol_significance,
 )
-from backend.engine.research.significance import benjamini_hochberg, pearson_significance
+from backend.engine.research.significance import benjamini_hochberg, pearson_significance, proportion_significance
 from backend.engine.research.signal_validation import (
     ICSeriesStats,
     RedundancyFlag,
@@ -29,6 +29,7 @@ __all__ = [
     "ic_series_stats",
     "pairwise_correlation_matrix",
     "pearson_significance",
+    "proportion_significance",
     "rank_information_coefficient",
     "redundancy_pairs",
 ]

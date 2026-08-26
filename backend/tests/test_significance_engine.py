@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.engine.research.significance import benjamini_hochberg, pearson_significance
+from backend.engine.research.significance import benjamini_hochberg, pearson_significance, proportion_significance
 
 
 def test_pearson_significance_perfect_positive_correlation() -> None:
@@ -76,3 +76,35 @@ def test_benjamini_hochberg_adjusted_p_values_are_monotone_by_rank() -> None:
     order = sorted(range(len(p_values)), key=lambda i: p_values[i])
     ranked_adjusted = [adjusted[i] for i in order]
     assert ranked_adjusted == sorted(ranked_adjusted)
+
+
+def test_proportion_significance_large_real_difference() -> None:
+    # 90/100 vs 10/100 -- an unmistakable, real difference.
+    difference, p = proportion_significance(90, 100, 10, 100)
+    assert difference == pytest.approx(0.8)
+    assert p < 0.001
+
+
+def test_proportion_significance_no_real_difference() -> None:
+    difference, p = proportion_significance(50, 100, 50, 100)
+    assert difference == pytest.approx(0.0)
+    assert p == pytest.approx(1.0)
+
+
+def test_proportion_significance_small_samples_use_exact_test() -> None:
+    # Small counts, where a normal-approximation z-test would be unreliable
+    # -- Fisher's exact test stays valid here, which is exactly why it was
+    # chosen over a naive two-proportion z-test.
+    difference, p = proportion_significance(4, 5, 0, 5)
+    assert difference == pytest.approx(0.8)
+    assert 0.0 <= p <= 1.0
+
+
+def test_proportion_significance_rejects_non_positive_group_size() -> None:
+    with pytest.raises(ValueError):
+        proportion_significance(1, 0, 1, 10)
+
+
+def test_proportion_significance_rejects_successes_outside_range() -> None:
+    with pytest.raises(ValueError):
+        proportion_significance(11, 10, 1, 10)
