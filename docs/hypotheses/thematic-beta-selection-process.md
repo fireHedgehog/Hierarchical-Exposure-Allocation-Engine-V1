@@ -67,7 +67,7 @@ Ingredients 5-6 can't be sped up — blocked on data, or inherently real-time.
 
 ## The theme lifecycle ladder (R0-R10)
 
-Same shape as `warsh-reaction-function.md`'s response ladder, for a theme's
+Same graduated-checkpoint style as `macro-research/warsh-reaction-function.md`, for a theme's
 lifecycle instead of a policymaker's action. Stalling or skipping back is a
 real, recordable outcome.
 

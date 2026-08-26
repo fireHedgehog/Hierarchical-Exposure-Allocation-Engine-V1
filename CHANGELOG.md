@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — macro research subfolder + 3-layer framework
+
+- New `docs/hypotheses/macro-research/`: user-designed 3-layer structure (input signal / Fed response, decomposed into independent Rate-Balance sheet-Liquidity-Guidance dimensions / market outcome, kept separate from the response layer) replacing "does X predict QE/hike/risk-on" single-scalar questions. Per-indicator research card template; redundancy/incremental-value check reuses the existing `signal_validation.py` effective-number-of-bets machinery already proven on the 8 macro factors.
+- `warsh-reaction-function.md` (H-W01) moved into the subfolder and restructured onto this framework: its old R0-R6 response ladder replaced by the 4-dimension table; a new market-outcome layer added; the existing July 2026 FOMC observation re-tagged, `?` left honest where not recorded rather than reconstructed.
+- **`macro_regime_composite` stays frozen at naive-v2** until this program produces real, quantified evidence — explicit, non-negotiable, per direct instruction.
+
 ### Research — two informal claims run and rejected (H-GAPFILL01, H-CRASHREV01)
 
 - `research_lab/gap_down_fill.py`: SPY/QQQ gap-down fill rate is high in absolute terms (72-93%) but *lower* than the unconditional baseline (~99.9%) at every spec, both symbols — the opposite of the claim. Rejected.

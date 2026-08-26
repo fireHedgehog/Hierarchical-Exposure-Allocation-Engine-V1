@@ -54,7 +54,7 @@ justify that.
 ## Naming
 
 One file (or subfolder) per hypothesis, named to match its working paper, e.g.
-`warsh_reaction_function.py` next to `docs/hypotheses/warsh-reaction-function.md`.
+`warsh_reaction_function.py` next to `docs/hypotheses/macro-research/warsh-reaction-function.md` (a subfolder paper still gets a flat file here — this folder doesn't mirror `docs/hypotheses/` subfolders).
 Never name a file `test_*.py` or `*_test.py` — that would pull it into `pytest`'s
 default discovery, which this code is not written to survive.
 

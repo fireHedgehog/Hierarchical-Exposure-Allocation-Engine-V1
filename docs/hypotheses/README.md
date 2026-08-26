@@ -52,7 +52,7 @@ noted otherwise.
 
 | Hypothesis | Type of evidence | Status | Real finding | Dataset |
 | --- | --- | --- | --- | --- |
-| [Warsh Fed reaction function](warsh-reaction-function.md) | categorical (hawkish/dovish/neutral/inconclusive) per FOMC/speech event | observing | 1 real checkpoint (Jul 2026 FOMC, hawkish); awaiting Jackson Hole | n/a |
+| [Macro research](macro-research/README.md) (subfolder) | 3-layer input/response/outcome framework, own index | in progress | Warsh reaction function (H-W01): 1 real checkpoint, awaiting Jackson Hole | n/a |
 | [Time-series momentum](time-series-momentum.md) | continuous (IC vs. real forward return) | concluded-rejected | Opposite direction at every horizon; replicated on 2004-26 but weaker (only 2 of 5 horizons still significant, was 5 of 5) | 2016+, 2004+ |
 | [Low-volatility anomaly](low-volatility-anomaly.md) | continuous (IC vs. real forward return) | concluded-rejected (raw return) | Opposite direction — volatile beat calm | 2016+ |
 | [Short-term mean reversion](short-term-mean-reversion.md) | continuous (IC vs. real forward return) | concluded-confirmed (1-week window) | Confirmed and strengthened on 2004-26: r=-0.057 (was -0.02), and now significant at 2 weeks too (was not) | 2016+, 2004+ |

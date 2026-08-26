@@ -4,8 +4,10 @@ Status: observing
 Version: v0.1
 Registered: 2026-08-25
 
-Not wired into any pipeline stage. This is a working paper, not a registered
-strategy — see `docs/hypotheses/README.md` for why, and what "graduate" means.
+Not wired into any pipeline stage. Uses the 3-layer input/response/outcome
+structure defined in [`macro-research/README.md`](README.md) — this paper
+supplies the input-signal groups and is the first to apply the decomposed
+response table.
 
 ## Thesis
 
@@ -59,39 +61,49 @@ together:
 ## What would count as a real checkpoint
 
 Each FOMC meeting, Jackson Hole-style keynote, or market-stress episode is one
-checkpoint. Every checkpoint is read against five observation-variable groups —
-deliberately weighted differently than `macro_regime_composite`'s own priority
-(funding plumbing and Treasury functioning are hypothesized to matter more to
-intervention timing here than the macro group, the reverse of that composite's
-weighting):
+checkpoint, read through the 3-layer structure ([framework](README.md)).
+
+### Layer 1 — input signals
+
+Deliberately weighted differently than `macro_regime_composite`'s own
+priority (funding plumbing and Treasury functioning are hypothesized to
+matter more to intervention timing here than the macro group, the reverse of
+that composite's weighting):
 
 | Group | Variables |
 | --- | --- |
-| Price | 10Y nominal yield, 30Y nominal yield, 10Y TIPS real yield, 30Y TIPS real yield, breakeven inflation, curve slope |
+| Price | 10Y/30Y nominal yield, 10Y/30Y TIPS real yield, breakeven inflation, curve slope |
 | Treasury functioning | auction tail, bid-to-cover ratio, dealer take-down share, bid/ask spread, market depth, fails-to-deliver, MOVE index |
 | Funding plumbing | SOFR-IORB spread, repo rate, SRF usage, discount window usage, reserve balances |
 | Credit transmission | IG spread, HY spread, mortgage spread, bank lending standards, commercial paper pricing, private credit pricing |
 | Macro | core PCE, inflation expectations, unemployment rate, initial claims, GDP/growth |
 
-### Response ladder
+### Layer 2 — Fed response (independent dimensions, not one scalar)
 
-Each checkpoint's reading is placed on this graduated ladder, not read as a single
-hawkish/dovish scalar:
-
-| Level | Meaning |
+| Dimension | Outcomes |
 | --- | --- |
-| R0 | Tolerate |
-| R1 | Verbal intervention |
-| R2 | Rate-path adjustment |
-| R3 | SRF / repo / liquidity provision |
-| R4 | Reserve-management Treasury bill purchases |
-| R5 | Emergency credit facilities |
-| R6 | Long-duration Treasury purchases / QE |
+| Rate policy | Hike / Hold / Cut |
+| Balance sheet | QE / Neutral / QT |
+| Liquidity | None / Repo-SRF / Emergency facility |
+| Guidance | Hawkish / Neutral / Dovish |
 
-R3-R5 can expand the Fed balance sheet without implying monetary easing — the
-Fed's own Monetary Policy Report already classifies current short-bill purchases
-as reserve-management, not QE. Balance-sheet growth alone must never be labeled
-`QE=true`.
+Balance sheet ≠ Liquidity: reserve-management bill purchases can expand the
+balance sheet without being QE — the Fed's own Monetary Policy Report already
+draws this distinction. Never collapse the two into one `QE=true` flag.
+
+### Layer 3 — market outcome (kept separate from layer 2)
+
+| Dimension | Outcomes |
+| --- | --- |
+| Equity | Risk-on / Neutral / Risk-off |
+| Duration | Bull / Neutral / Bear |
+| Credit | Tightening / Neutral / Easing |
+| USD | Strong / Neutral / Weak |
+| Volatility | Expansion / Neutral / Compression |
+
+A cut doesn't automatically mean layer 3 = risk-on (a panic cut can coincide
+with equities still falling) — recorded independently, never inferred from
+layer 2.
 
 ### Speech text-factor keywords
 
@@ -119,6 +131,9 @@ per `docs/hypotheses/README.md`'s lifecycle.
 
 ## Observation log
 
-| Date | Event | Sub-function | Reading | Note |
-| --- | --- | --- | --- | --- |
-| unconfirmed (~July 2026) | July 2026 FOMC | Monetary policy | Hawkish | Held rates 9-3 with core PCE still above the 2% target; the three dissenters wanted a hike, not a cut. Statement said the Committee "will deliver price stability." No easing guidance was given despite long-term yields already being elevated — the first real 2026 evidence that Warsh does not treat a high yield level, by itself, as a reason to ease. (User-reported, 2026-08-25 research session; exact meeting date not confirmed.) |
+Columns match layer 2's dimensions, plus layer 3 where known; `?` where not
+yet recorded — never force-filled.
+
+| Date | Event | Rate | Balance sheet | Liquidity | Guidance | Layer 3 | Note |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| unconfirmed (~July 2026) | July 2026 FOMC | Hold | ? | None | Hawkish | ? | Held rates 9-3 with core PCE still above the 2% target; the three dissenters wanted a hike, not a cut. Statement said the Committee "will deliver price stability." No easing guidance despite long-term yields already elevated — the first real 2026 evidence Warsh does not treat a high yield level, by itself, as a reason to ease. Balance-sheet stance and market outcome not recorded at the time; left `?` rather than reconstructed after the fact. (User-reported, 2026-08-25 session; exact meeting date not confirmed.) |
