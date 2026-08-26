@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — 2004-2026 rerun: one strengthened, two replicated, one weakened
+
+- Reran the four price/vol hypotheses with real `research_lab` scripts against the real 2004-2026 dataset (now including 2008): time-series momentum weakened (2 of 5 horizons still significant, was 5 of 5); Dow Theory trend-structure and risk-state both replicated cleanly at similar magnitude; short-term mean reversion strengthened and now holds at 2 weeks too (was 1 week only) — the strongest, most durable result this session.
+- Each paper's observation log got a new dated entry with real numbers, never overwriting prior checkpoints. A temporary tracking table lived in `docs/hypotheses/README.md` for the duration and was deleted once done, per standing instruction that only this file accumulates — other docs stay snapshots, `git log` is the history.
+- Four items deliberately not rerun (production-factor audits, not research_lab scripts): the still-unfixed momentum sign bug, the draft 12-1 promotion decision, the MACD-entry retirement decision, and RSI/MACD-exit monitoring — named here so they aren't lost, deferred as product decisions.
+
 ### Research — hypothesis index gains a dataset column and real-finding recap
 
 - `docs/hypotheses/README.md`'s index: new `Dataset` column (`2016+` vs. `2004+`) flagging that 8 of this session's 11 hypothesis tests predate the 2004 data extension and one (H-VOLSCALE01) doesn't — not apples-to-apples. Checkpoint-count column replaced with a one-line real-finding summary per paper, for self-serve recap as the hypothesis count grows.

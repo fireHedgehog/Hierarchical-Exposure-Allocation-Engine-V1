@@ -53,12 +53,12 @@ noted otherwise.
 | Hypothesis | Type of evidence | Status | Real finding | Dataset |
 | --- | --- | --- | --- | --- |
 | [Warsh Fed reaction function](warsh-reaction-function.md) | categorical (hawkish/dovish/neutral/inconclusive) per FOMC/speech event | observing | 1 real checkpoint (Jul 2026 FOMC, hawkish); awaiting Jackson Hole | n/a |
-| [Time-series momentum](time-series-momentum.md) | continuous (IC vs. real forward return) | concluded-rejected | Opposite direction at every horizon (1m-12m, incl. 12-1 spec) — real reversal, not momentum, on this window | 2016+ |
+| [Time-series momentum](time-series-momentum.md) | continuous (IC vs. real forward return) | concluded-rejected | Opposite direction at every horizon; replicated on 2004-26 but weaker (only 2 of 5 horizons still significant, was 5 of 5) | 2016+, 2004+ |
 | [Low-volatility anomaly](low-volatility-anomaly.md) | continuous (IC vs. real forward return) | concluded-rejected (raw return) | Opposite direction — volatile beat calm | 2016+ |
-| [Short-term mean reversion](short-term-mean-reversion.md) | continuous (IC vs. real forward return) | concluded-confirmed (1-week window) | Real reversal at 1 week (r=-0.02, p=0.002); gone by 2 weeks | 2016+ |
+| [Short-term mean reversion](short-term-mean-reversion.md) | continuous (IC vs. real forward return) | concluded-confirmed (1-week window) | Confirmed and strengthened on 2004-26: r=-0.057 (was -0.02), and now significant at 2 weeks too (was not) | 2016+, 2004+ |
 | [MAX effect / lottery demand](max-effect-lottery-demand.md) | continuous (IC vs. real forward return) | concluded-rejected | Opposite direction — extreme-max beat calm-max; r=+0.78 with low-vol above, not independent | 2016+ |
-| [Dow Theory trend structure](dow-theory-trend-structure.md) | binary (intact/broken) vs. real forward return | concluded-rejected (opposite direction) | Broken structure beat intact structure on forward return | 2016+ |
-| [Dow Theory risk-state](dow-theory-risk-state.md) | binary (intact/broken) vs. real forward volatility | concluded-confirmed | Broken structure really does predict higher forward volatility (r=-0.04, p=0.0001) | 2016+ |
+| [Dow Theory trend structure](dow-theory-trend-structure.md) | binary (intact/broken) vs. real forward return | concluded-rejected (opposite direction) | Broken beat intact on forward return, replicated on 2004-26 at similar magnitude | 2016+, 2004+ |
+| [Dow Theory risk-state](dow-theory-risk-state.md) | binary (intact/broken) vs. real forward volatility | concluded-confirmed | Broken predicts higher forward volatility, replicated and slightly stronger on 2004-26 | 2016+, 2004+ |
 | [Vol-scaled cross-sectional momentum](vol-scaled-cross-sectional-momentum.md) | walk-forward equity curve comparison (Sharpe/drawdown) | concluded-inconclusive | Drawdown improvement vs. naive baseline is mostly just lower average exposure, not the timing mechanism | 2004+ |
 
 ## Template for a new hypothesis
