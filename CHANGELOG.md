@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Engine — short-term reversal entry engineered and wired in as naive-v3
+
+- New `backend/engine/timing/backtest_v3.py`: real entry when trailing 5-day return drops below -3% (disclosed, hand-picked, not fit), exit unchanged (RSI(14) >= 70). Same result shape and honest-failure behavior as `backtest_v2.py` — retiring either component degrades gracefully (open positions stay open, or `no_entry_signal_active`), never crashes or fabricates a rule. 5 new tests.
+- `macd_rsi_single_name_timing` promoted to `naive-v3`: `short_term_reversal_entry` flipped `draft` → `active` with a real `code_reference` (was `NULL`); `rsi_overbought_exit` carried forward active. `factor_engine.py` repointed at the new version and function; 8 stale MACD-referencing messages corrected. 161/161 backend tests passing.
+- Live-verified on a fresh real pipeline run: `factor_engine` logged 872 real entries across 22 symbols — the exact inverse of the prior milestone's proven zero-trade `no_entry_signal_active` state, now firing for the real reason a real entry trigger exists again. `symbol_events` couldn't be spot-checked against this specific run — `publish_snapshot` remains scaffolded and unconnected (pre-existing, unrelated), so no new snapshot was published; the stage's own message is the live proof here.
+
 ### Engine — MACD entry retired, short-term reversal registered as its draft replacement
 
 - `macd_crossover`'s status flipped to `retired` (fresh-clone-safe UPDATE, effective on the existing dev DB with no reset) — a real event study found no edge (0.29). It was the only registered entry trigger, so the pipeline now honestly reports `no_entry_signal_active` and zero trades — live-verified on a real pipeline run.

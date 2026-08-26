@@ -1315,6 +1315,42 @@ INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurre
      'short_term_reversal_entry registered as a draft candidate replacement for the retired macd_crossover entry trigger: real, replicated, cost-checked evidence exists (docs/hypotheses/), but the entry-trigger function itself has not been engineered or wired into the pipeline yet -- research evidence and a production-ready rule are different bars.',
      'naive-v2');
 
+-- naive-v3 (2026-08-26): the draft candidate above graduated into real,
+-- wired code (backend/engine/timing/backtest_v3.py) -- a genuine
+-- methodology change (the entry mechanism itself, not just a DB flag),
+-- so this is a NEW version row, not a rewrite of naive-v2, same convention
+-- naive-v1 -> naive-v2 already established. naive-v2's own components stay
+-- registered under 'naive-v2' as an unedited historical record of the
+-- draft-registration moment; naive-v3 registers its own copies reflecting
+-- what actually runs now. v1's and v2's fused/split functions both stay
+-- untouched and importable so any dataset snapshot already sealed under
+-- either stays honestly reproducible.
+INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
+    ('macd_rsi_single_name_timing', 'naive-v3', '2026-08-26T00:00:00Z',
+     'A real, replicated, cost-checked pullback (short-term reversal) is a more defensible entry trigger than a crossover rule with no measured edge. RSI-overbought as the exit trigger is carried forward unchanged -- its own evidence was never in question.',
+     'None claimed at the single-name specification level. H-STREV01 (IC) and H-STREV02 (a cross-sectional, bottom-N ranked strategy) both found a real effect, but this exact per-symbol absolute-threshold rule has not itself been backtested end to end -- naive/hand-picked threshold, not fit to this universe.',
+     'naive-v3: macd_crossover retired as an entry trigger (no real edge, 0.29); replaced by short_term_reversal_entry (trailing 5-day return < -3% triggers entry, disclosed and naive, not fit). rsi_overbought_exit unchanged. New engine/timing/backtest_v3.py; v1 and v2 stay untouched and importable.',
+     '{"reversal_lookback_days":5,"reversal_entry_threshold":-0.03,"rsi_period":14,"rsi_overbought":70.0,"min_bars":60,"components":["short_term_reversal_entry","rsi_overbought_exit"]}',
+     'backend/engine/timing/backtest_v3.py', '2026-08-26T00:00:00Z', '2027-02-26');
+
+UPDATE strategies SET current_version = 'naive-v3', updated_at = '2026-08-26T00:00:00Z'
+WHERE strategy_key = 'macd_rsi_single_name_timing';
+
+INSERT OR IGNORE INTO strategy_components (strategy_key, version, component_key, name, component_type, roles_json, code_reference, base_weight, status, verification_status, decay_rate, next_review_at, created_at, updated_at) VALUES
+    ('macd_rsi_single_name_timing', 'naive-v3', 'short_term_reversal_entry', 'Short-term reversal entry (5-day)', 'computed', '["entry"]', 'backend/engine/timing/backtest_v3.py', NULL, 'active', 'registered_only', NULL, '2027-02-26', '2026-08-26T00:00:00Z', '2026-08-26T00:00:00Z'),
+    ('macd_rsi_single_name_timing', 'naive-v3', 'rsi_overbought_exit', 'RSI(14) >= 70 overbought exit', 'computed', '["exit"]', 'backend/engine/indicators/rsi.py', NULL, 'active', 'registered_only', NULL, '2027-02-26', '2026-08-26T00:00:00Z', '2026-08-26T00:00:00Z');
+
+INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
+    ('naive-v3-macd_rsi_single_name_timing-promoted', 'macd_rsi_single_name_timing', '2026-08-26T00:00:00Z', 'active', 'active',
+     'Promoted naive-v2 -> naive-v3: macd_crossover retired as an entry trigger and replaced with short_term_reversal_entry, now real, wired code (backend/engine/timing/backtest_v3.py), not just a registered draft. RSI-overbought exit unchanged. A live pipeline run now shows real reversal-triggered trades instead of the honest zero-trade no_entry_signal_active state naive-v2 degraded to.',
+     'naive-v3');
+
+INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, label, value, unit, status, window_label, as_of, description, sort_order) VALUES
+    ('macd_rsi_single_name_timing', 'naive-v3', 'decay_rate', 'Signal decay rate', NULL, 'fraction_per_period', 'not_computed', NULL, NULL,
+     'Not yet measured at the strategy level. Component-level decay (per short_term_reversal_entry / rsi_overbought_exit) also not yet measured -- see strategy_components.decay_rate.', 1),
+    ('macd_rsi_single_name_timing', 'naive-v3', 'estimated_capacity_usd', 'Estimated capacity', NULL, 'usd', 'not_computed', NULL, NULL,
+     'Not yet measured. Requires liquidity/market-impact modeling not yet built -- real evidence already shows this strategy is turnover-sensitive (docs/hypotheses/short-term-reversal-cost-robustness.md), so capacity is likely to be a real, binding constraint once measured, not a formality.', 2);
+
 -- Research results remain DB-indexed. Files are optional, reproducible output
 -- artifacts identified by repository-relative path and checksum; Markdown is
 -- never an engine input or the canonical result store.

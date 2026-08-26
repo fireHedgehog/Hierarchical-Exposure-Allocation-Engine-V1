@@ -1902,22 +1902,25 @@ def test_legacy_demo_gets_complete_versioned_v3_fixture_on_reseed(tmp_path: Path
         # 2 synthetic demo fixtures + 5 real engine algorithms + 2 honest
         # draft placeholders with no implementation yet (sentiment_text_mining,
         # fundamental_analysis), all registered in schema.sql. Of the 5 real
-        # ones, macro_regime_composite, cross_sectional_momentum, and
-        # macd_rsi_single_name_timing each carry 2 versions: naive-v1 and
-        # naive-v2; each version has 2 diagnostics rows; macd_rsi's naive-v2
-        # additionally registers 3 strategy_components: macd_crossover
-        # (retired -- no real entry edge, 0.29), rsi_overbought_exit (active),
-        # and short_term_reversal_entry (draft candidate replacement, real
-        # evidence, not yet engineered) -- with two more lifecycle events
-        # recording that retirement/registration. cross_sectional_momentum's
-        # naive-v2 registers one more component: 12m_skip1m, the first
-        # research-loop smoke-test candidate (status='draft', not yet
-        # promoted into the live blend).
+        # ones, macro_regime_composite and cross_sectional_momentum each carry
+        # 2 versions (naive-v1, naive-v2); macd_rsi_single_name_timing carries
+        # 3 (naive-v1, naive-v2, naive-v3 -- naive-v3 real, wired code:
+        # macd_crossover retired for no real entry edge, 0.29; replaced by
+        # short_term_reversal_entry, real cost-checked evidence,
+        # backend/engine/timing/backtest_v3.py). naive-v2's own 3 components
+        # (macd_crossover, rsi_overbought_exit, short_term_reversal_entry
+        # draft) stay registered as an unedited historical record; naive-v3
+        # re-registers its own 2 (short_term_reversal_entry now active,
+        # rsi_overbought_exit carried forward) -- 3 lifecycle events record
+        # the retirement, the draft registration, and the naive-v3 promotion.
+        # cross_sectional_momentum's naive-v2 registers one more component:
+        # 12m_skip1m, the first research-loop smoke-test candidate
+        # (status='draft', not yet promoted into the live blend).
         assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 9
-        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 10
-        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 22
-        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 12
-        assert connection.execute("SELECT COUNT(*) FROM strategy_components").fetchone()[0] == 4
+        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 11
+        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 24
+        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 13
+        assert connection.execute("SELECT COUNT(*) FROM strategy_components").fetchone()[0] == 6
         synthetic_assets = connection.execute(
             """
             SELECT asset_key, dataset_snapshot_id, row_count

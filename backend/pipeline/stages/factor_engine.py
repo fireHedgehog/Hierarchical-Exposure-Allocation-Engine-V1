@@ -10,10 +10,10 @@ from backend.engine.factors.momentum_v2 import MIN_SAMPLES as MOMENTUM_MIN_SAMPL
 from backend.engine.instruments import conviction_from_composite
 from backend.engine.timing import (
     BacktestBar,
-    BacktestResultV2,
+    BacktestResultV3,
     InsufficientBacktestDataError,
     aggregate_backtests,
-    run_macd_rsi_backtest_v2,
+    run_reversal_rsi_backtest_v3,
 )
 from backend.pipeline.stages.common import (
     PRICE_SOFT_MAX_AGE_DAYS,
@@ -38,8 +38,8 @@ def run_factor_engine_stage(
     engine_mode: str,
 ) -> StageOutcome:
     """Rank the staging universe by naive-v2 IC-weighted cross-sectional momentum AND run a
-    naive per-symbol MACD/RSI backtest, attaching both to the still-open
-    desk/dataset snapshots regime_filter and fetch_data created.
+    naive per-symbol reversal-entry/RSI-exit backtest (naive-v3), attaching both to the
+    still-open desk/dataset snapshots regime_filter and fetch_data created.
     """
 
     if not dataset_snapshot_id or not desk_snapshot_id:
@@ -84,7 +84,7 @@ def run_factor_engine_stage(
     timing_component_rows = connection.execute(
         """
         SELECT component_key FROM strategy_components
-        WHERE strategy_key = 'macd_rsi_single_name_timing' AND version = 'naive-v2'
+        WHERE strategy_key = 'macd_rsi_single_name_timing' AND version = 'naive-v3'
           AND status IN ('active', 'watching')
         """
     ).fetchall()
@@ -150,7 +150,7 @@ def run_factor_engine_stage(
     recommendation_rows: list[tuple[Any, ...]] = []
     event_rows: list[tuple[Any, ...]] = []
     metric_rows: list[tuple[Any, ...]] = []
-    backtest_results: list[BacktestResultV2] = []
+    backtest_results: list[BacktestResultV3] = []
     backtests_run = 0
 
     for item in ranked:
@@ -219,7 +219,7 @@ def run_factor_engine_stage(
                 item.strength,
                 f"{item.direction.capitalize()} - rank {item.rank} of {universe_size}",
                 f"Naive-v2 IC-weighted 1M/3M/6M momentum of {item.blended_return:+.2%} ranks {item.rank} of {universe_size} peers "
-                f"(cross-sectional composite {item.composite_score:+.2f}). Not the same as the MACD/RSI single-name timing "
+                f"(cross-sectional composite {item.composite_score:+.2f}). Not the same as the single-name timing "
                 "backtest below — this is cross-sectional standing, that is historical entry/exit timing.",
                 None,
                 f"{item.last_date}T00:00:00Z",
@@ -247,12 +247,12 @@ def run_factor_engine_stage(
                 )
             )
 
-        # Independent single-name timing: a real MACD/RSI backtest over this
-        # symbol's full fetched history, not derived from the cross-sectional
-        # score above.
+        # Independent single-name timing: a real reversal-entry/RSI-exit
+        # backtest over this symbol's full fetched history, not derived from
+        # the cross-sectional score above.
         backtest_bars = [BacktestBar(time=bar.time, close=bar.close) for bar in bars_by_symbol.get(symbol, [])]
         try:
-            backtest = run_macd_rsi_backtest_v2(symbol, backtest_bars, active_components=active_timing_components)
+            backtest = run_reversal_rsi_backtest_v3(symbol, backtest_bars, active_components=active_timing_components)
         except InsufficientBacktestDataError:
             continue
         backtests_run += 1
@@ -311,21 +311,21 @@ def run_factor_engine_stage(
         elif not backtest.trades:
             timing_label = f"No entry signal yet — {symbol}"
             timing_detail = (
-                f"No MACD bullish crossover has fired for {symbol} in this window "
-                f"({backtest.period_start} to {backtest.period_end})."
+                f"No qualifying pullback (trailing-return entry threshold) has fired for {symbol} in this "
+                f"window ({backtest.period_start} to {backtest.period_end})."
             )
         elif backtest.trades[-1].exit_date is None:
             open_trade = backtest.trades[-1]
             timing_label = f"Holding — {symbol}"
             timing_detail = (
                 f"Entered {open_trade.entry_date} ({open_trade.entry_reason}). Position remains open as of "
-                f"{backtest.period_end}; no MACD bearish crossover or RSI-overbought trigger has fired since."
+                f"{backtest.period_end}; no RSI-overbought exit trigger has fired since."
             )
         else:
             last_trade = backtest.trades[-1]
             timing_label = f"Flat — {symbol}"
             timing_detail = (
-                f"Last exited {last_trade.exit_date} ({last_trade.exit_reason}). No new MACD bullish crossover "
+                f"Last exited {last_trade.exit_date} ({last_trade.exit_reason}). No new qualifying pullback "
                 f"has fired as of {backtest.period_end}."
             )
         event_rows.append(
@@ -352,7 +352,7 @@ def run_factor_engine_stage(
                 "Strategy return",
                 backtest.total_return,
                 "fraction",
-                f"Naive MACD/RSI backtest, {backtest.period_start} to {backtest.period_end}.",
+                f"Naive reversal-entry/RSI-exit backtest, {backtest.period_start} to {backtest.period_end}.",
                 1,
             ),
             (
@@ -427,7 +427,7 @@ def run_factor_engine_stage(
                 "completed",
                 1,
                 (
-                    f"Real MACD/RSI backtests ran for {aggregate.symbols_backtested} of {aggregate.symbols_tested} "
+                    f"Real reversal-entry/RSI-exit backtests ran for {aggregate.symbols_backtested} of {aggregate.symbols_tested} "
                     f"staging symbols ({aggregate.total_trades} total closed trades, {aggregate.period_start} to "
                     f"{aggregate.period_end}). Mean strategy return {aggregate.mean_total_return:+.1%} vs. mean "
                     f"buy-and-hold {aggregate.mean_buy_hold_return:+.1%} over the same per-symbol windows "
@@ -482,8 +482,9 @@ def run_factor_engine_stage(
                 0,
                 f"No staging symbol had at least the required minimum bars to run a backtest this run "
                 f"(0 of {universe_size} symbols scored).",
-                "Reserved for the naive MACD/RSI single-name backtest (backend/engine/timing/backtest_v2.py); "
-                "requires at least 60 daily bars of real fetched price history per symbol.",
+                "Reserved for the naive reversal-entry/RSI-exit single-name backtest "
+                "(backend/engine/timing/backtest_v3.py); requires at least 60 daily bars of real fetched "
+                "price history per symbol.",
                 None,
                 None,
                 "Each symbol's backtest only uses that symbol's own price history up to its own last fetched bar; "
@@ -583,7 +584,7 @@ def run_factor_engine_stage(
         status="completed",
         message=(
             f"Ranked {universe_size} staging symbols by naive-v2 IC-weighted cross-sectional momentum "
-            f"and ran a real MACD/RSI backtest for {backtests_run} of them "
+            f"and ran a real reversal-entry/RSI-exit backtest for {backtests_run} of them "
             f"({sum(1 for row in event_rows if row[4] == 'backtest_entry_fill')} entries logged). "
             + (
                 f"Desk-level aggregate: mean return {aggregate.mean_total_return:+.1%} vs. mean buy-and-hold "
