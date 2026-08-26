@@ -4,11 +4,11 @@ import math
 import statistics
 from dataclasses import dataclass
 
-from backend.engine.factors.momentum_v2 import compute_cross_section_v2
+from backend.engine.factors.momentum_v3 import compute_cross_section_v3
 from backend.engine.factors.types import Bar, InsufficientPriceDataError
 
 # The "strategy" granularity tier's first real content: does cross_sectional_
-# momentum's actual composite ranking (momentum_v2.compute_cross_section_v2,
+# momentum's actual composite ranking (momentum_v3.compute_cross_section_v3,
 # the same function factor_engine.py calls in production) turn into a real
 # equity curve if you actually trade it? Naive-v1, same contract as every
 # other engine module here: real function, real data, hand-picked
@@ -16,13 +16,14 @@ from backend.engine.factors.types import Bar, InsufficientPriceDataError
 # that is explicitly out of scope until Milestone 4 (docs/engine-milestones.md).
 #
 # Walk-forward, point-in-time by construction: at each rebalance date, only
-# bars up to and including that date are passed to compute_cross_section_v2
+# bars up to and including that date are passed to compute_cross_section_v3
 # -- the same function recomputes its own horizon weights fresh each time
 # from only the history available then, exactly as a live run would.
 #
 # Registered in the strategies table as `cross_sectional_momentum`
 # (naive-v1 at the strategy level -- a new tier, not a new version; the
-# ranking itself stays naive-v2, unchanged).
+# ranking itself now tracks whatever version is live in production --
+# naive-v3 as of this promotion -- kept in sync here rather than pinned).
 
 MIN_REBALANCES = 4  # a real minimum floor, not a fitted one -- guards a degenerate call
 
@@ -67,7 +68,7 @@ def run_cross_sectional_momentum_backtest(
 ) -> CrossSectionalBacktestResult:
     """Naive-v1 walk-forward backtest: at each rebalance date, rank the
     universe with the real, current production ranking function
-    (compute_cross_section_v2), buy the top `top_n` symbols equal-weighted,
+    (compute_cross_section_v3), buy the top `top_n` symbols equal-weighted,
     hold to the next rebalance, and chain the resulting real returns into an
     equity curve. `top_n` and `rebalance_days` are disclosed, hand-picked
     parameters, not fit to this universe -- the point of this pass is
@@ -83,7 +84,7 @@ def run_cross_sectional_momentum_backtest(
     # use the shortest history in the universe as the walk-forward spine so
     # every step is comparing symbols on the same real calendar position.
     min_length = min((len(bars) for bars in ordered_by_symbol.values()), default=0)
-    if min_length < 300:  # ~14 months: enough for compute_cross_section_v2's own 126-day floor plus room to walk forward
+    if min_length < 300:  # ~14 months: enough for compute_cross_section_v3's own 252-day floor plus room to walk forward
         raise InsufficientBacktestHistoryError(
             f"shortest symbol history is {min_length} bars; need at least 300 to walk forward at all."
         )
@@ -104,7 +105,7 @@ def run_cross_sectional_momentum_backtest(
             for symbol in symbols
         }
         try:
-            ranked, _weights = compute_cross_section_v2(truncated)
+            ranked, _weights = compute_cross_section_v3(truncated)
         except InsufficientPriceDataError:
             continue
 
@@ -197,7 +198,7 @@ def run_cross_sectional_momentum_backtest(
         win_rate=win_rate,
         methodology=(
             f"Naive-v1 walk-forward: every {rebalance_days} trading days, rank the universe with the real "
-            f"production ranking (momentum_v2.compute_cross_section_v2, recomputed from only the history "
+            f"production ranking (momentum_v3.compute_cross_section_v3, recomputed from only the history "
             f"available at that date), buy the top {top_n} symbols equal-weighted, hold to the next rebalance. "
             f"Benchmark is an equal-weighted hold of the whole eligible universe over the same periods. "
             "top_n and rebalance_days are disclosed, hand-picked parameters, not fit to this universe."

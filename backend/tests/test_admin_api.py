@@ -1902,25 +1902,26 @@ def test_legacy_demo_gets_complete_versioned_v3_fixture_on_reseed(tmp_path: Path
         # 2 synthetic demo fixtures + 5 real engine algorithms + 2 honest
         # draft placeholders with no implementation yet (sentiment_text_mining,
         # fundamental_analysis), all registered in schema.sql. Of the 5 real
-        # ones, macro_regime_composite and cross_sectional_momentum each carry
-        # 2 versions (naive-v1, naive-v2); macd_rsi_single_name_timing carries
-        # 3 (naive-v1, naive-v2, naive-v3 -- naive-v3 real, wired code:
-        # macd_crossover retired for no real entry edge, 0.29; replaced by
-        # short_term_reversal_entry, real cost-checked evidence,
-        # backend/engine/timing/backtest_v3.py). naive-v2's own 3 components
-        # (macd_crossover, rsi_overbought_exit, short_term_reversal_entry
-        # draft) stay registered as an unedited historical record; naive-v3
-        # re-registers its own 2 (short_term_reversal_entry now active,
-        # rsi_overbought_exit carried forward) -- 3 lifecycle events record
-        # the retirement, the draft registration, and the naive-v3 promotion.
-        # cross_sectional_momentum's naive-v2 registers one more component:
-        # 12m_skip1m, the first research-loop smoke-test candidate
-        # (status='draft', not yet promoted into the live blend).
+        # ones, macro_regime_composite carries 2 versions (naive-v1, naive-v2);
+        # macd_rsi_single_name_timing and cross_sectional_momentum each carry
+        # 3 (naive-v1, naive-v2, naive-v3). macd_rsi_single_name_timing's
+        # naive-v3: macd_crossover retired for no real entry edge (0.29),
+        # replaced by short_term_reversal_entry, real cost-checked evidence,
+        # backend/engine/timing/backtest_v3.py. cross_sectional_momentum's
+        # naive-v3: 12m_skip1m (Jegadeesh & Titman 1993 12-1 momentum,
+        # registered draft since 0.16) promoted into the live blend as a 4th
+        # horizon, backend/engine/factors/momentum_v3.py -- a promotion
+        # decision on already-standing evidence (0.16, 0.26), not new
+        # research. Each strategy's earlier version keeps its own component
+        # rows as an unedited historical record; naive-v3 re-registers its
+        # own current set -- 4 lifecycle events total record macd's
+        # retirement, draft registration, and naive-v3 promotion, plus
+        # cross_sectional_momentum's naive-v3 promotion.
         assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 9
-        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 11
-        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 24
-        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 13
-        assert connection.execute("SELECT COUNT(*) FROM strategy_components").fetchone()[0] == 6
+        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 12
+        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 26
+        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 14
+        assert connection.execute("SELECT COUNT(*) FROM strategy_components").fetchone()[0] == 7
         synthetic_assets = connection.execute(
             """
             SELECT asset_key, dataset_snapshot_id, row_count

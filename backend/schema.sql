@@ -1351,6 +1351,49 @@ INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, l
     ('macd_rsi_single_name_timing', 'naive-v3', 'estimated_capacity_usd', 'Estimated capacity', NULL, 'usd', 'not_computed', NULL, NULL,
      'Not yet measured. Requires liquidity/market-impact modeling not yet built -- real evidence already shows this strategy is turnover-sensitive (docs/hypotheses/short-term-reversal-cost-robustness.md), so capacity is likely to be a real, binding constraint once measured, not a formality.', 2);
 
+-- naive-v3 (2026-08-26): 12m_skip1m (Jegadeesh & Titman 1993 "12-1"
+-- momentum), registered draft since 0.16, promoted into the live blend as
+-- a 4th horizon alongside 1m/3m/6m. A real promotion decision, not new
+-- research: the standing evidence was already real and sufficient --
+-- 0.16 found it genuinely diversifying (correlates only 0.08 with 1m, not
+-- flagged redundant, raised effective number of bets from 1.74 to 2.11
+-- across the 3-horizon blend), and 0.26 found it a real, significant
+-- forward-return predictor (r=+0.067, adjusted p<0.05) in the opposite
+-- direction from 1m/3m's own significant reversal finding -- exactly why
+-- it needs its own separately time-windowed horizon rather than folding
+-- into the existing calendar buckets. New engine/factors/momentum_v3.py:
+-- same horizon-significance-weighting mechanism as naive-v2, generalized
+-- to 4 horizons with a per-horizon skip_days (0 for 1m/3m/6m, 21 for
+-- 12m_skip1m -- the defining feature of the 12-1 specification: the
+-- signal point is one month before the decision date, not the latest
+-- close). v1's and v2's code both stay untouched and importable so any
+-- dataset snapshot already sealed under either stays honestly
+-- reproducible.
+INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
+    ('cross_sectional_momentum', 'naive-v3', '2026-08-26T00:00:00Z',
+     'A horizon with real, replicated, significant forward-return predictive power (12m_skip1m, distinct in both window and direction from the existing 1m/3m/6m blend) should be weighted into the live cross-sectional score by the same real significance test the other three horizons already use, not left registered but unused.',
+     'None claimed beyond what 0.16/0.26 already found: 12m_skip1m is diversifying (ENB 1.74 -> 2.11) and a real, significant momentum predictor (r=+0.067) on this universe and window. Promoting it into the live blend does not itself add new evidence -- full Milestone 4 rigor (4-horizon decorrelation together, fitted weights, decay) has not run.',
+     'naive-v3: added 12m_skip1m (12-month return, most recent month skipped) as a 4th horizon in the live IC-weighted blend, alongside the unchanged 1m/3m/6m. Same significance-test-weighted mechanism as naive-v2, generalized to support a per-horizon skip_days.',
+     '{"horizons_days":{"1m":21,"3m":63,"6m":126,"12m_skip1m":252},"skip_days":{"1m":0,"3m":0,"6m":0,"12m_skip1m":21},"forward_horizon_trading_days":21,"min_samples":24,"stride_days":5,"correction_method":"benjamini_hochberg","alpha":0.05,"weight_rule":"proportional_to_abs_correlation_among_significant_horizons_else_equal_weight"}',
+     'backend/engine/factors/momentum_v3.py', '2026-08-26T00:00:00Z', '2027-02-26');
+
+UPDATE strategies SET current_version = 'naive-v3', updated_at = '2026-08-26T00:00:00Z'
+WHERE strategy_key = 'cross_sectional_momentum';
+
+INSERT OR IGNORE INTO strategy_components (strategy_key, version, component_key, name, component_type, roles_json, code_reference, base_weight, status, verification_status, decay_rate, next_review_at, created_at, updated_at) VALUES
+    ('cross_sectional_momentum', 'naive-v3', '12m_skip1m', 'Jegadeesh & Titman (1993) 12-1 momentum', 'computed', '["contribution"]', 'backend/engine/factors/momentum_v3.py', NULL, 'active', 'registered_only', NULL, '2027-02-26', '2026-08-26T00:00:00Z', '2026-08-26T00:00:00Z');
+
+INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, label, value, unit, status, window_label, as_of, description, sort_order) VALUES
+    ('cross_sectional_momentum', 'naive-v3', 'decay_rate', 'Signal decay rate', NULL, 'fraction_per_period', 'not_computed', NULL, NULL,
+     'Not yet measured. Requires Milestone 4: decorrelation across all 4 horizons together and decay estimation over real forward returns.', 1),
+    ('cross_sectional_momentum', 'naive-v3', 'estimated_capacity_usd', 'Estimated capacity', NULL, 'usd', 'not_computed', NULL, NULL,
+     'Not yet measured. Requires liquidity/market-impact modeling not yet built.', 2);
+
+INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
+    ('naive-v3-cross_sectional_momentum-promoted', 'cross_sectional_momentum', '2026-08-26T00:00:00Z', 'active', 'active',
+     'Promoted naive-v2 -> naive-v3: 12m_skip1m (Jegadeesh & Titman 1993 12-1 momentum) flipped draft -> active and wired into the live IC-weighted blend as a 4th horizon (backend/engine/factors/momentum_v3.py), on the strength of standing evidence from 0.16 (diversifying, ENB 1.74 -> 2.11) and 0.26 (real, significant momentum predictor, r=+0.067) -- no new research run for this promotion.',
+     'naive-v3');
+
 -- Research results remain DB-indexed. Files are optional, reproducible output
 -- artifacts identified by repository-relative path and checksum; Markdown is
 -- never an engine input or the canonical result store.

@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Engine — 12-1 momentum promoted into the live cross-sectional blend as naive-v3
+
+- `12m_skip1m` (Jegadeesh & Titman 1993 "12-1" momentum) flipped `draft` → `active` and wired into the live IC-weighted blend as a 4th horizon — a registration decision on already-standing evidence (0.16: diversifying, ENB 1.74→2.11; 0.26: real significant predictor, r=+0.067), not a new research run.
+- New `backend/engine/factors/momentum_v3.py`: same significance-weighted blend mechanism as `momentum_v2.py`, generalized to 4 horizons with a per-horizon `skip_days` (21 for 12m_skip1m — the real 12-1 signal point is one month before the decision date, not the latest close). `cross_sectional_backtest.py` and `factor_engine.py` both repointed at v3 so "the real production ranking" stays an honest claim. 7 new tests. 168/168 backend tests passing.
+- Live-verified on a fresh real pipeline run: `factor_dimensions` shows the new horizon actually computed — `momentum_12m_skip1m`, 21,409 real paired samples, r=+0.059, significant, weight 0.31.
+
 ### Engine — short-term reversal entry engineered and wired in as naive-v3
 
 - New `backend/engine/timing/backtest_v3.py`: real entry when trailing 5-day return drops below -3% (disclosed, hand-picked, not fit), exit unchanged (RSI(14) >= 70). Same result shape and honest-failure behavior as `backtest_v2.py` — retiring either component degrades gracefully (open positions stay open, or `no_entry_signal_active`), never crashes or fabricates a rule. 5 new tests.
