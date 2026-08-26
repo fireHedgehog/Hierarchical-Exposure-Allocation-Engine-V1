@@ -17,7 +17,7 @@ class Bar:
 class HorizonReturn:
     horizon: str
     lookback_days: int
-    weight: float
+    weight: float  # signed: negative for a significantly reversal-shaped horizon, not just magnitude
     value: float | None  # None when history doesn't reach this horizon
 
 

@@ -42,17 +42,64 @@ def test_insufficient_history_falls_back_to_equal_weight_not_a_block() -> None:
 
 def test_weights_always_sum_to_one_even_when_mixed() -> None:
     """A significant horizon's |r|-proportional share and a non-significant
-    horizon's equal-weight fallback are on different scales -- the final
-    vector must still normalize to 1, matching v1's fixed-weight convention,
-    and must never collapse to a zero-weight (blocked) composite."""
+    horizon's equal-weight fallback are on different scales -- the
+    *magnitude* vector must still normalize to 1, matching v1's fixed-weight
+    convention, and must never collapse to a zero-weight (blocked)
+    composite. The signed weight itself is not guaranteed to sum to 1 (a
+    significantly reversal-shaped horizon's weight is negative -- see
+    test_significantly_reversal_shaped_horizon_gets_negative_weight), only
+    its magnitude is."""
 
     rng = random.Random(7)
     universe = {
         f"SYM{i}": _bars(_noisy_walk(600, seed=i, drift=rng.uniform(-0.0005, 0.0005))) for i in range(8)
     }
     weights = compute_horizon_weights(universe)
-    assert sum(item.weight for item in weights) == pytest.approx(1.0, abs=1e-9)
-    assert all(item.weight > 0.0 for item in weights)
+    assert sum(abs(item.weight) for item in weights) == pytest.approx(1.0, abs=1e-9)
+
+
+def test_significantly_reversal_shaped_horizon_gets_negative_weight() -> None:
+    """The sign bug this project shipped and later fixed (0.26 found it,
+    docs/engine-milestones.md later flagged and fixed it): weighting a
+    horizon by abs(correlation) alone blends a significantly reversal-shaped
+    horizon's positive trailing return in as if it were bullish, when the
+    real, validated evidence says the opposite. Construct a universe where
+    the 1-month horizon return has a real, strong NEGATIVE relationship with
+    the next 1-month return (mean reversion, by construction) -- the fix
+    must produce a negative weight for it, not just a small one."""
+
+    rng = random.Random(11)
+    universe: dict[str, list[Bar]] = {}
+    for i in range(40):
+        count = 400
+        prices = [100.0]
+        block = 21
+        drift = 0.0
+        for step in range(1, count):
+            if step % block == 0:
+                # Reverse direction each block: whatever this block does,
+                # the next one does the opposite -- real, constructed mean
+                # reversion, not persistence.
+                drift = -drift if drift != 0.0 else rng.choice([0.01, -0.01])
+            prices.append(prices[-1] * (1 + drift / block + rng.uniform(-0.002, 0.002)))
+        universe[f"SYM{i}"] = _bars(prices)
+
+    weights = compute_horizon_weights(universe)
+    by_horizon = {item.horizon: item for item in weights}
+    assert by_horizon["1m"].status == "ok"
+    assert by_horizon["1m"].significant is True
+    assert by_horizon["1m"].correlation is not None and by_horizon["1m"].correlation < 0
+    assert by_horizon["1m"].weight < 0.0
+
+    # The composite must actually apply that sign: a symbol with a strong
+    # recent positive 1-month return, on this reversal-shaped horizon,
+    # should NOT be scored more bullish than one with a flat recent return
+    # -- the exact behavior the bug produced.
+    strong_recent_gain = _bars([100.0] * 379 + [100.0 * (1.05**i) for i in range(21)])
+    flat_recent = _bars([100.0] * 400)
+    ranked, _ = compute_cross_section_v2({"GAINER": strong_recent_gain, "FLAT": flat_recent, **universe})
+    scores = {item.symbol: item.composite_score for item in ranked}
+    assert scores["GAINER"] < scores["FLAT"]
 
 
 def test_predictive_horizon_gets_more_weight_than_random_ones() -> None:

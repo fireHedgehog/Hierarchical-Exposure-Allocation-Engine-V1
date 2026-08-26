@@ -47,7 +47,7 @@ def _clamp(value: float, low: float = -1.0, high: float = 1.0) -> float:
 class HorizonWeightResult:
     horizon: str
     lookback_days: int
-    weight: float
+    weight: float  # signed: negative for a significantly reversal-shaped horizon, not just magnitude
     sample_size: int
     correlation: float | None
     p_value: float | None
@@ -150,11 +150,28 @@ def compute_horizon_weights(bars_by_symbol: dict[str, list[Bar]]) -> list[Horizo
     # A significant horizon's |r|-proportional share and a non-significant/
     # insufficient horizon's equal-weight fallback are drawn from different
     # scales (they can sum to more or less than 1 together) -- normalize the
-    # final vector so displayed weights are always directly comparable, same
-    # convention as v1's fixed 0.2/0.3/0.5 (and always > 0 in total, so the
-    # blend below can never hit a zero-weight, blocked composite).
+    # magnitude vector so it's always directly comparable, same convention as
+    # v1's fixed 0.2/0.3/0.5. Normalization operates on magnitude only, before
+    # sign is applied below, so it stays numerically stable regardless of how
+    # many horizons turn out to be significant and reversal-shaped.
     weight_total = sum(raw_weight_by_horizon.values())
-    weight_by_horizon = {horizon: value / weight_total for horizon, value in raw_weight_by_horizon.items()}
+    magnitude_by_horizon = {horizon: value / weight_total for horizon, value in raw_weight_by_horizon.items()}
+    # Sign the weight by the correlation's own real direction, not just its
+    # magnitude -- the bug flagged in 0.26 and left deliberately unfixed
+    # until now: a significantly reversal-shaped horizon (e.g. this
+    # universe's real 1m/3m result) was being blended as if a positive
+    # trailing return were bullish, when the validated evidence says the
+    # opposite. Only applied where real, corrected significance exists;
+    # every other horizon keeps today's naive positive-momentum assumption,
+    # since there's no validated evidence yet to justify overriding it.
+    sign_by_horizon = {
+        item["horizon"]: (-1.0 if item.get("correlation", 0) < 0 else 1.0)  # type: ignore[arg-type]
+        for item in testable
+        if item.get("significant")
+    }
+    weight_by_horizon = {
+        horizon: magnitude * sign_by_horizon.get(horizon, 1.0) for horizon, magnitude in magnitude_by_horizon.items()
+    }
 
     results: list[HorizonWeightResult] = []
     for item in raw:
@@ -211,7 +228,11 @@ def _horizon_returns_v2(
         returns.append(HorizonReturn(horizon, lookback_days, weight, value))
         if value is not None:
             weighted_sum += weight * value
-            weight_total += weight
+            # abs(weight): normalizes by magnitude, not the signed sum -- a
+            # significantly reversal-shaped horizon's negative weight must
+            # still count toward the total, not partially cancel it out and
+            # destabilize the final division.
+            weight_total += abs(weight)
     if weight_total == 0:
         raise InsufficientPriceDataError("no horizon had enough history to compute a return.")
     return weighted_sum / weight_total, returns

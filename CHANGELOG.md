@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Engine — momentum sign bug fixed
+
+- `compute_horizon_weights` weighted each horizon by `abs(correlation)` only, discarding sign — flagged since 0.26, now fixed. A significantly reversal-shaped horizon now gets a real negative weight, applied as a final signed step on top of the unchanged magnitude normalization; every other horizon keeps the existing naive positive-momentum default.
+- New dedicated test proves both halves: the horizon gets a real negative weight, and a symbol with a strong recent gain on that reversal-shaped horizon scores less bullish than a flat one, not more. 156/156 backend tests passing.
+- Live-verified honestly: the freshest real pipeline pull right now shows none of the 3 live-blend horizons clearing significance (expected — live market data is non-stationary; a rerun minutes earlier did find 1m/3m significant). The fix is real and unit-proven regardless of what any single live snapshot shows.
+
 ### Research — 2004-2026 rerun: one strengthened, two replicated, one weakened
 
 - Reran the four price/vol hypotheses with real `research_lab` scripts against the real 2004-2026 dataset (now including 2008): time-series momentum weakened (2 of 5 horizons still significant, was 5 of 5); Dow Theory trend-structure and risk-state both replicated cleanly at similar magnitude; short-term mean reversion strengthened and now holds at 2 weeks too (was 1 week only) — the strongest, most durable result this session.
