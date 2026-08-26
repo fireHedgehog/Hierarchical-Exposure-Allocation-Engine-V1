@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Engine — MACD entry retired, short-term reversal registered as its draft replacement
+
+- `macd_crossover`'s status flipped to `retired` (fresh-clone-safe UPDATE, effective on the existing dev DB with no reset) — a real event study found no edge (0.29). It was the only registered entry trigger, so the pipeline now honestly reports `no_entry_signal_active` and zero trades — live-verified on a real pipeline run.
+- New `short_term_reversal_entry` component registered as `draft`, `code_reference=NULL` — real, cost-checked evidence exists (H-STREV01/H-STREV02) but the entry rule itself hasn't been engineered or wired in yet. `verification_status` stays `registered_only`, not `verified` — research evidence and a production-ready rule are different bars.
+- Two new lifecycle events record both changes with real reasons. 156/156 backend tests passing.
+
 ### Research — short-term reversal's cost/turnover robustness: real, cost-sensitive
 
 - New H-STREV02 (`short-term-reversal-cost-robustness.md`): a real, tradable weekly walk-forward strategy on H-STREV01's confirmed signal (buy the 5 biggest trailing-5-day losers, hold a week), gross vs. net at four disclosed real cost assumptions (5/10/25/50bps), scaled by actually-measured turnover (mean 148.7%/period).

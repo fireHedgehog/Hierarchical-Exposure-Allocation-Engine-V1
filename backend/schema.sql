@@ -1275,6 +1275,46 @@ INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurre
      'Promoted naive-v1 -> naive-v2: split into 2 independently registered, independently retireable strategy_components (macd_crossover, rsi_overbought_exit) instead of one fused function -- proves an engine algorithm can be revised and isolation-tested standalone, then swapped in as a small diff, without breaking the pipeline or existing tests. Trading logic unchanged when both components are active.',
      'naive-v2');
 
+-- Retirement (2026-08-26): a real event study (docs/hypotheses -- see
+-- docs/engine-milestones.md 0.29) found MACD's bullish crossover has no
+-- real edge as an entry trigger (r~=0.002, p~=0.66, statistically
+-- indistinguishable from a random day). It is the ONLY registered entry
+-- trigger for this strategy, so retiring it is a real structural
+-- consequence, not a bug: the pipeline degrades to the honest
+-- 'no_entry_signal_active' status and zero trades (engine/timing/
+-- backtest_v2.py, proven live in 0.13's retirement test), never a crash or
+-- a fabricated rule. rsi_overbought_exit's own exit role was never tested
+-- and is untouched -- it simply has nothing to exit from until a real entry
+-- trigger is registered again. UPDATE, not a fresh INSERT OR IGNORE row,
+-- because this corrects an already-seeded value on existing databases too.
+UPDATE strategy_components SET status = 'retired', updated_at = '2026-08-26T00:00:00Z'
+WHERE strategy_key = 'macd_rsi_single_name_timing' AND component_key = 'macd_crossover' AND status != 'retired';
+
+-- Candidate replacement, registered honestly as draft -- NOT wired into the
+-- pipeline yet (code_reference is NULL: the entry-trigger function itself
+-- has not been engineered, only researched). Real, replicated, cost-checked
+-- evidence exists (docs/hypotheses/short-term-mean-reversion.md,
+-- short-term-reversal-cost-robustness.md): trailing 5-day return vs. 5-day
+-- forward return, r=-0.057 (adjusted p<0.0001) on the real 2004-2026
+-- dataset, and a real tradable weekly walk-forward version of it survives
+-- realistic transaction costs for this specific liquid universe (net Sharpe
+-- 0.96 at 5bps, 0.77 at 10bps) but not more conservative cost assumptions
+-- (0.21 at 25bps, negative at 50bps) -- cost-sensitive, not universally
+-- tradable. verification_status stays 'registered_only', not 'verified':
+-- real research evidence is not the same bar as an engineered, pipeline-
+-- wired, regression-tested entry rule -- graduating this from a draft
+-- registry row into real code is separate, deliberate future work.
+INSERT OR IGNORE INTO strategy_components (strategy_key, version, component_key, name, component_type, roles_json, code_reference, base_weight, status, verification_status, decay_rate, next_review_at, created_at, updated_at) VALUES
+    ('macd_rsi_single_name_timing', 'naive-v2', 'short_term_reversal_entry', 'Short-term reversal entry (5-day)', 'computed', '["entry"]', NULL, NULL, 'draft', 'registered_only', NULL, '2026-11-26', '2026-08-26T00:00:00Z', '2026-08-26T00:00:00Z');
+
+INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
+    ('macd_crossover-retired-2026-08-26', 'macd_rsi_single_name_timing', '2026-08-26T00:00:00Z', 'active', 'retired',
+     'macd_crossover retired as an entry trigger: a real event study found no real edge (r~=0.002, p~=0.66). The only registered entry trigger for this strategy, so the pipeline now honestly reports no_entry_signal_active with zero trades rather than a fabricated rule -- a real, disclosed consequence, not a bug.',
+     'naive-v2'),
+    ('short_term_reversal_entry-registered-2026-08-26', 'macd_rsi_single_name_timing', '2026-08-26T00:00:00Z', NULL, 'draft',
+     'short_term_reversal_entry registered as a draft candidate replacement for the retired macd_crossover entry trigger: real, replicated, cost-checked evidence exists (docs/hypotheses/), but the entry-trigger function itself has not been engineered or wired into the pipeline yet -- research evidence and a production-ready rule are different bars.',
+     'naive-v2');
+
 -- Research results remain DB-indexed. Files are optional, reproducible output
 -- artifacts identified by repository-relative path and checksum; Markdown is
 -- never an engine input or the canonical result store.
