@@ -4,6 +4,15 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Frontend — chart volume promoted to its own pane; a real hover tooltip
+
+- `PriceChart.tsx`: volume moved from a bottom-of-price-pane overlay into its own real pane (price, volume, RSI, MACD, in order). New crosshair-driven hover tooltip: OHLC, real volume, and close × volume as an honestly-labeled turnover *approximation* (no float data exists for a real figure). Built with `textContent`, not `innerHTML`. `tsc`, 52 frontend tests, and the build all clean; could not visually confirm in a browser — no automation tool available in this environment, disclosed rather than assumed.
+
+### Research — orthogonality check on the "four independent tests" claim; partly wrong, corrected
+
+- New `research_lab/orthogonality_check.py`: real pairwise correlation across all five price/vol signals tested this session, triggered by the user's own suspicion that the Dow Theory test might just be re-measuring the same recent-drawdown condition as the other rejections.
+- Result: `low_vol_63d` and `max_return_21d` are r=+0.78 — genuinely the same bet, not independent. But `dow_structure_intact` and `ts_momentum_12m` correlate weakly with everything else; effective number of bets across all 5 = 3.84. Corrected claim: not four independent tests, not one test four times — roughly four real, mostly-independent signals with one genuinely redundant pair. Both affected papers updated rather than left overstated.
+
 ### Research — Dow Theory swing structure rejected; four-for-four on the same signature
 
 - New `research_lab/dow_theory_trend_structure.py`: a mechanical, non-discretionary fractal swing detector (real OHLC, point-in-time confirmed, no look-ahead) tests whether an intact Higher-High/Higher-Low structure predicts higher forward returns than a broken one. Split from volume confirmation (a separate, later hypothesis) per single-ingredient discipline.

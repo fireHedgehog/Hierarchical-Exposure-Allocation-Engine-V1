@@ -1918,7 +1918,23 @@ summary:focus-visible,
 .chart-legend__exit { border: 1px solid var(--red); transform: rotate(45deg); }
 .chart-legend__signal { border: 1px solid var(--blue); border-radius: 50% !important; background: var(--blue-soft); }
 .chart-legend__pattern { border: 1px solid var(--amber); background: var(--amber-soft); }
+.price-chart-wrap { position: relative; }
 .price-chart { width: 100%; min-height: 620px; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; }
+.price-chart-tooltip {
+  display: none;
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  white-space: pre-line;
+  background: #0f221d;
+  border: 1px solid rgba(105, 232, 198, 0.28);
+  border-radius: 6px;
+  padding: 6px 9px;
+  font-size: 10px;
+  line-height: 1.55;
+  color: var(--text);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
 .chart-footnote { margin: 8px 2px 0; color: var(--faint); font-size: 8px; line-height: 1.5; }
 
 .trace-flow { display: grid; }

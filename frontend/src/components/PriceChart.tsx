@@ -14,7 +14,7 @@ import {
 } from "lightweight-charts";
 import type { PriceBar, SymbolEvent } from "../types";
 import { computeMacd, computeRsi } from "../utils/indicators";
-import { formatDate, NOT_AVAILABLE } from "../utils/format";
+import { formatDate, formatNumber, NOT_AVAILABLE } from "../utils/format";
 import { Unavailable } from "./Ui";
 
 const TIMEFRAMES = [
@@ -41,6 +41,7 @@ export function PriceChart({
   currency?: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const [timeframe, setTimeframe] = useState<TimeframeKey>("1y");
   const allBars = useMemo(() => sanitizeBars(bars ?? []), [bars]);
   const cleanBars = useMemo(() => windowBars(allBars, timeframe), [allBars, timeframe]);
@@ -109,12 +110,9 @@ export function PriceChart({
           lastValueVisible: false,
           priceLineVisible: false,
         },
-        0,
+        1,
       );
-      chart.priceScale("volume").applyOptions({
-        scaleMargins: { top: 0.82, bottom: 0 },
-        borderVisible: false,
-      });
+      chart.priceScale("volume").applyOptions({ borderVisible: false });
       volumeSeries.setData(volumeData);
     }
 
@@ -158,7 +156,7 @@ export function PriceChart({
       const rsiSeries = chart.addSeries(
         LineSeries,
         { color: "#78a9ef", lineWidth: 1, priceScaleId: "rsi", lastValueVisible: true, title: "RSI(14)" },
-        1,
+        2,
       );
       rsiSeries.setData(rsiPoints);
       rsiSeries.createPriceLine({ price: 70, color: "rgba(239,107,115,0.4)", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "70" });
@@ -184,20 +182,55 @@ export function PriceChart({
       )
       .filter((point): point is { time: Time; value: number; color: string } => point !== null);
     if (macdPoints.length) {
-      const histogramSeries = chart.addSeries(HistogramSeries, { priceScaleId: "macd", lastValueVisible: false, priceLineVisible: false }, 2);
+      const histogramSeries = chart.addSeries(HistogramSeries, { priceScaleId: "macd", lastValueVisible: false, priceLineVisible: false }, 3);
       histogramSeries.setData(histogramPoints);
-      const macdSeries = chart.addSeries(LineSeries, { color: "#67e4bf", lineWidth: 1, priceScaleId: "macd", title: "MACD" }, 2);
+      const macdSeries = chart.addSeries(LineSeries, { color: "#67e4bf", lineWidth: 1, priceScaleId: "macd", title: "MACD" }, 3);
       macdSeries.setData(macdPoints);
-      const signalSeries = chart.addSeries(LineSeries, { color: "#e5b15d", lineWidth: 1, priceScaleId: "macd", title: "Signal" }, 2);
+      const signalSeries = chart.addSeries(LineSeries, { color: "#e5b15d", lineWidth: 1, priceScaleId: "macd", title: "Signal" }, 3);
       signalSeries.setData(signalPoints);
     }
 
     const panes = chart.panes();
     if (panes[0]) panes[0].setStretchFactor(4);
-    if (panes[1]) panes[1].setStretchFactor(1.1);
+    if (panes[1]) panes[1].setStretchFactor(0.9);
     if (panes[2]) panes[2].setStretchFactor(1.1);
+    if (panes[3]) panes[3].setStretchFactor(1.1);
 
     chart.timeScale().fitContent();
+
+    // Hover tooltip: OHLC, real volume, and an approximate turnover
+    // (close x volume -- a dollar-volume proxy, not float-based turnover,
+    // since no shares-outstanding/float data exists in this project).
+    // textContent only, never innerHTML, even though every value here is a
+    // formatted number, not user input.
+    const barByTime = new Map(cleanBars.map((bar) => [String(bar.time), bar]));
+    const tooltipEl = tooltipRef.current;
+    chart.subscribeCrosshairMove((param) => {
+      if (!tooltipEl) return;
+      if (!param.point || param.time === undefined || param.point.x < 0 || param.point.y < 0) {
+        tooltipEl.style.display = "none";
+        return;
+      }
+      const bar = barByTime.get(String(param.time));
+      if (!bar) {
+        tooltipEl.style.display = "none";
+        return;
+      }
+      const turnover = typeof bar.volume === "number" ? bar.close * bar.volume : null;
+      tooltipEl.textContent = [
+        formatDate(timeToDisplay(bar.time)),
+        `O ${bar.open.toFixed(2)}  H ${bar.high.toFixed(2)}  L ${bar.low.toFixed(2)}  C ${bar.close.toFixed(2)}`,
+        `Vol ${typeof bar.volume === "number" ? formatNumber(bar.volume, { notation: "compact" }) : NOT_AVAILABLE}`,
+        `Turnover (approx.) ${turnover !== null ? formatNumber(turnover, { notation: "compact" }) : NOT_AVAILABLE}`,
+      ].join("\n");
+      tooltipEl.style.display = "block";
+      const containerWidth = container.clientWidth;
+      const tooltipWidth = tooltipEl.offsetWidth || 170;
+      const left =
+        param.point.x + 16 + tooltipWidth > containerWidth ? param.point.x - tooltipWidth - 16 : param.point.x + 16;
+      tooltipEl.style.left = `${Math.max(4, left)}px`;
+      tooltipEl.style.top = `${Math.max(4, param.point.y - 10)}px`;
+    });
 
     const resizeObserver = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width;
@@ -255,14 +288,17 @@ export function PriceChart({
           </button>
         ))}
       </div>
-      <div
-        className="price-chart"
-        ref={containerRef}
-        role="img"
-        aria-label={`${symbol} candlestick chart with ${cleanBars.length} database bars, RSI and MACD panes, and ${chartEvents.length} persisted annotations`}
-      />
+      <div className="price-chart-wrap">
+        <div
+          className="price-chart"
+          ref={containerRef}
+          role="img"
+          aria-label={`${symbol} candlestick chart with ${cleanBars.length} database bars, volume, RSI, and MACD panes, and ${chartEvents.length} persisted annotations`}
+        />
+        <div className="price-chart-tooltip" ref={tooltipRef} aria-hidden="true" />
+      </div>
       <p className="chart-footnote">
-        Executed or backtest entry/exit history, signal observations, and price patterns are distinct. Proposals and candidates are excluded from chart markers. RSI/MACD panes are computed in the browser from the same bars for display only; the backtest's actual trades were decided once, on the server, over full history.
+        Executed or backtest entry/exit history, signal observations, and price patterns are distinct. Proposals and candidates are excluded from chart markers. RSI/MACD panes are computed in the browser from the same bars for display only; the backtest's actual trades were decided once, on the server, over full history. Turnover in the hover tooltip is close x volume, an approximation — no shares-outstanding/float data exists in this project for a real float-based turnover figure.
       </p>
     </div>
   );
