@@ -52,13 +52,14 @@ gate before research even reaches the DB.
 | [MAX effect / lottery demand](max-effect-lottery-demand.md) | continuous (IC vs. real forward return) | concluded-rejected | 2 |
 | [Dow Theory trend structure](dow-theory-trend-structure.md) | binary (intact/broken) vs. real forward return | concluded-rejected (opposite direction) | 2 |
 | [Dow Theory risk-state](dow-theory-risk-state.md) | binary (intact/broken) vs. real forward volatility | concluded-confirmed | 1 |
+| [Vol-scaled cross-sectional momentum](vol-scaled-cross-sectional-momentum.md) | walk-forward equity curve comparison (Sharpe/drawdown) | concluded-inconclusive | 1 |
 
 ## Template for a new hypothesis
 
 ```markdown
 # <Name> (H-<slug>)
 
-Status: preregistered | observing | concluded-confirmed | concluded-rejected | archived
+Status: preregistered | observing | concluded-confirmed | concluded-rejected | concluded-inconclusive | archived
 Version: v0.1
 Registered: <date>
 

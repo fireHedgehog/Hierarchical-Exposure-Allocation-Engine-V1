@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — vol-scaling integration test: honest, inconclusive, attribution-checked
+
+- New H-VOLSCALE01 (`vol-scaled-cross-sectional-momentum.md`), preregistered before running: real vol-scaled vs. constant-exposure comparison on `cross_sectional_momentum`'s already-validated strategy backtest (not `macd_rsi_single_name_timing`, whose entry has no proven edge — external review's correction).
+- Against the naive 100%-exposure baseline, the vol-scaled version looked like a clean win (max drawdown -25.9% → -19.9%, Sharpe flat). An attribution check (constant 77.2% exposure, zero timing) produced nearly identical numbers — most of the improvement is just being less invested on average, not the timing mechanism. Recorded `concluded-inconclusive` (new status) rather than forced into confirmed/rejected.
+
 ### Engine — staging universe now fetched from a fixed 2004-12-01 anchor
 
 - New `STAGING_UNIVERSE_START_DATE = "2004-12-01"` (GLD's real, empirically-verified launch day) replaces the rolling 10-year `PRICE_FETCH_RANGE` for the staging price fetch. Every symbol aligns to the same real calendar window (a controlled cross-asset comparison, e.g. gold vs. an equity index across 2008) instead of each reaching back as far as its own history allows; dot-com coverage is deliberately traded away since GLD didn't exist yet, 2008 is kept.
