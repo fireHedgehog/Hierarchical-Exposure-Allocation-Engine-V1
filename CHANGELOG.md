@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — risk-state reframing validated: a rejected signal confirmed as a real volatility signal
+
+- New H-DOW02 (`dow-theory-risk-state.md`), prompted by external review naming a real gap: every price/volume hypothesis this session was tested only as `factor → E[r]`, never against volatility/risk. Not a revival of the rejected H-DOW01a (return-direction) — a genuinely different claim, same structure-state indicator against forward realized volatility instead.
+- New `research_lab/dow_theory_risk_state.py`. Confirmed: r=-0.039 (adjusted p=0.0001, n=10,219) — broken structure predicts higher forward volatility (1.24% vs. 1.17% mean daily stdev). First clean demonstration this session that a signal can fail as a return predictor and succeed as a risk-state one. Four more analogous sub-hypotheses proposed and queued, not built all at once.
+
 ### Frontend — chart volume promoted to its own pane; a real hover tooltip
 
 - `PriceChart.tsx`: volume moved from a bottom-of-price-pane overlay into its own real pane (price, volume, RSI, MACD, in order). New crosshair-driven hover tooltip: OHLC, real volume, and close × volume as an honestly-labeled turnover *approximation* (no float data exists for a real figure). Built with `textContent`, not `innerHTML`. `tsc`, 52 frontend tests, and the build all clean; could not visually confirm in a browser — no automation tool available in this environment, disclosed rather than assumed.
