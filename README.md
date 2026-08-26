@@ -21,7 +21,7 @@ Each decision passes through a hierarchy:
 
 Research validity, simulation readiness, and live execution are separate gates. Every promoted conclusion is expected to reference point-in-time inputs and explicit strategy or factor revisions, with unavailable evidence remaining visibly unavailable.
 
-The original product thesis is preserved in [Edition V1](docs/editions/edition-v1.md); [Edition V2](docs/editions/edition-v2.md) is the current design record, covering the free-data engine build described below.
+The original product thesis is preserved in [Edition V1](docs/editions/edition-v1.md); [Edition V2](docs/editions/edition-v2.md) is the current design record, covering the free-data engine build described below. The [developer's letter](docs/developer-letter.md) explains why research and production are kept deliberately separate — disposable, isolated experiments in `docs/hypotheses/` and `backend/research_lab/`, versus a stable, database-driven staging application that keeps running end to end no matter what research finds.
 
 ## What the current draft provides
 

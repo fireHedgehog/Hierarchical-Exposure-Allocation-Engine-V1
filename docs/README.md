@@ -52,6 +52,7 @@ Each stage follows the same contract proven since `regime_filter`: a real functi
 ## Document map
 
 - [Root README](../README.md): product identity and quick start.
+- [Developer's letter](developer-letter.md): why research and production stay separate — the isolation boundary, the polytherapy/single-ingredient framing, and why the staging application must keep running even when every research factor fails.
 - [Edition V2](editions/edition-v2.md): current design record — the six compute stages made real over free-tier data.
 - [Edition V1](editions/edition-v1.md): archived initial product thesis, hierarchy, and operating principles.
 - [Roadmap](roadmap.md): durable demo-to-real sequence, completion evidence, and the UI surface unlocked by each phase.
