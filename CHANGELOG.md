@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — Dow Theory swing structure rejected; four-for-four on the same signature
+
+- New `research_lab/dow_theory_trend_structure.py`: a mechanical, non-discretionary fractal swing detector (real OHLC, point-in-time confirmed, no look-ahead) tests whether an intact Higher-High/Higher-Low structure predicts higher forward returns than a broken one. Split from volume confirmation (a separate, later hypothesis) per single-ingredient discipline.
+- Rejected, opposite direction: r=-0.039 (adjusted p=0.0001, n=10,219); mean forward return during intact structure (+1.19%) was lower than during broken structure (+1.71%).
+- Fourth independently-specified rejection this session with the identical directional signature (low-volatility anomaly, time-series momentum, MAX effect, now this) — four unrelated mechanisms converging the same way, named as this session's strongest real finding, still kept entirely in `docs/hypotheses/` per the developer's letter.
+
 ### Research — MAX effect rejected; a third test lands on the same regime signature
 
 - New `research_lab/max_effect.py`: real IC test, trailing max single-day return vs. forward return — a deliberately orthogonal candidate (tail/skewness, not trend or variance). Rejected: r=-0.18 (adjusted p<0.0001, n=10,283), opposite of the predicted direction.
