@@ -4,6 +4,13 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — thematic beta selection process preregistered (H-BETA01)
+
+- New `docs/hypotheses/thematic-beta-selection-process.md`: not a new price/volume anomaly (every prior paper in the folder already covers single-name ground) — a decision-process hypothesis, prompted directly by the user's own trading history (thematic-beta riding, not stock-picking) and their own stated bottleneck: "I cannot always rely on the market story then believe it will be long term beta, that is purely luck."
+- Split into 6 minimum ingredients per this project's single-ingredient discipline: price leadership, leadership duration, breadth confirmation, and a leader-specific deterioration signal are all real and buildable now from the existing 2004-2026 staging dataset with no new data; fundamental/positioning confirmation is named as a real, honest gap (no data provider exists yet); theme identification itself is inherently qualitative and real-time, tracked (not statistically tested) via a new R0-R10 theme-lifecycle ladder, the same shape as `warsh-reaction-function.md`'s response ladder.
+- Three companion papers named and queued, not yet built (H-BETA02 leadership-duration distribution, H-BETA03 breadth-confirmation value, H-BETA04 leader-specific deterioration signal reusing H-DOW02's validated detector) — the fast-accumulating half of this program, answerable now against real historical data rather than waiting on new real-time episodes.
+- Observation log seeded with one real, retrospective, explicitly pre-process entry (AI infrastructure capex, R1) — logged honestly as the prior that motivated the paper, not evidence the process works.
+
 ### Engine — 12-1 momentum promoted into the live cross-sectional blend as naive-v3
 
 - `12m_skip1m` (Jegadeesh & Titman 1993 "12-1" momentum) flipped `draft` → `active` and wired into the live IC-weighted blend as a 4th horizon — a registration decision on already-standing evidence (0.16: diversifying, ENB 1.74→2.11; 0.26: real significant predictor, r=+0.067), not a new research run.
