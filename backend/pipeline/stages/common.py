@@ -32,6 +32,31 @@ SERIES_METADATA: dict[str, dict[str, Any]] = {
     "NFCI": {"frequency": "weekly", "max_age_days": 21, "label": "Chicago Fed national financial conditions index"},
     "VIXCLS": {"frequency": "daily", "max_age_days": 10, "label": "CBOE volatility index"},
     "DGS10": {"frequency": "daily", "max_age_days": 10, "label": "10-year Treasury constant maturity rate"},
+    # docs/hypotheses/macro-research/ layer-1 input signals, added 2026-08-27.
+    # All 14 verified live against the real FRED API before being wired in
+    # here (a wrong series_id returns zero observations, which hard-fails
+    # this stage's entire fetch, not just this one series). Real start dates
+    # vary by series (SOFR: 2018, IORB: 2021 under this name, others reach
+    # back decades) -- naming here does not claim a common history length,
+    # only that real data exists somewhere in the fetch window.
+    "WALCL": {"frequency": "weekly", "max_age_days": 21, "label": "Fed total assets (H.4.1)"},
+    "WTREGEN": {"frequency": "weekly", "max_age_days": 21, "label": "Treasury General Account balance"},
+    "DGS30": {"frequency": "daily", "max_age_days": 10, "label": "30-year Treasury constant maturity rate"},
+    # BEA's GDP release is quarterly; a real live fetch on 2026-08-27 found
+    # the freshest print (Q1 2026, period-dated 2026-04-01) already 147 days
+    # old with no newer quarter available yet -- empirically corrected from
+    # an initial 120-day guess, same pattern as PCEPILFE's own correction.
+    "GDPC1": {"frequency": "quarterly", "max_age_days": 160, "label": "Real GDP"},
+    "MTSDS133FMS": {"frequency": "monthly", "max_age_days": 60, "label": "Federal surplus or deficit (Monthly Treasury Statement)"},
+    "ICSA": {"frequency": "weekly", "max_age_days": 21, "label": "Initial unemployment claims"},
+    "T10YIE": {"frequency": "daily", "max_age_days": 10, "label": "10-year breakeven inflation rate"},
+    "T5YIE": {"frequency": "daily", "max_age_days": 10, "label": "5-year breakeven inflation rate"},
+    "DFII10": {"frequency": "daily", "max_age_days": 10, "label": "10-year TIPS real yield"},
+    "DFII30": {"frequency": "daily", "max_age_days": 10, "label": "30-year TIPS real yield"},
+    "BAMLH0A0HYM2": {"frequency": "daily", "max_age_days": 10, "label": "ICE BofA US high-yield OAS spread"},
+    "BAMLC0A0CM": {"frequency": "daily", "max_age_days": 10, "label": "ICE BofA US corporate (IG) OAS spread"},
+    "SOFR": {"frequency": "daily", "max_age_days": 10, "label": "Secured Overnight Financing Rate"},
+    "IORB": {"frequency": "daily", "max_age_days": 10, "label": "Interest rate on reserve balances"},
 }
 
 PRICE_SOFT_MAX_AGE_DAYS = 5

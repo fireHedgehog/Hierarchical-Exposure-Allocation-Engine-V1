@@ -76,10 +76,37 @@ cross-sectional factor set.
 | --- | --- | --- |
 | [Warsh Fed reaction function](warsh-reaction-function.md) (H-W01) | observing | Layers 1-3, chair-specific |
 
-**Queued, not yet built:** an input-signal panel with research cards for
-auction tail, bid-to-cover, MOVE, SOFR-IORB, HY/IG spread, breakevens, real
-yields, initial claims, NFCI; extending the raw macro factor list with free
-FRED series (Fed balance sheet, TGA, 30Y yield, real GDP, federal deficit);
-a debt-ceiling-raise event study; regime-duration ("higher for longer, how
-long"); regime-conditional cross-sectional performance (connects this folder
-to `cross_sectional_momentum`).
+## Fetched, not yet tested
+
+14 new real FRED series verified live and now fetched by every real pipeline
+run (`SERIES_METADATA`, `backend/pipeline/stages/common.py`), alongside the
+existing 8 — no schema change needed, `fred_observations` is already
+series-agnostic. Real usable history, checked directly against the API, not
+assumed:
+
+| Series | What | Real history in this project |
+| --- | --- | --- |
+| `WALCL` | Fed total assets | 2004-2026 |
+| `WTREGEN` | TGA balance | 2004-2026 |
+| `DGS30` | 30Y yield | 2004-2026 |
+| `GDPC1` | Real GDP | 2004-2026 (quarterly; freshest print can be ~150 days old — corrected from an initial 120-day guess after a real fetch found 147) |
+| `MTSDS133FMS` | Federal deficit | 2004-2026 |
+| `ICSA` | Initial claims | 2004-2026 |
+| `T10YIE` / `T5YIE` | Breakeven inflation | 2004-2026 |
+| `DFII10` | 10Y TIPS real yield | 2004-2026 |
+| `DFII30` | 30Y TIPS real yield | 2010-2026 |
+| `SOFR` | Overnight funding rate | 2018-2026 (real start; SOFR didn't exist before) |
+| `IORB` | Interest on reserve balances | 2021-2026 (real start; renamed from IOER) |
+| `BAMLH0A0HYM2` | HY OAS spread | **2023-2026 only** — real, verified: this project's point-in-time-correct fetch (pinned `realtime_start`) only reaches ICE's real-time vintage archive, which doesn't extend as far back as the series' current/non-vintage display |
+| `BAMLC0A0CM` | IG OAS spread | **2023-2026 only** — same real vintage-archive limit |
+
+Still missing, real free source exists but needs new provider code (not
+FRED — `fiscaldata.treasury.gov`, keyless): Treasury auction tail,
+bid-to-cover. **Not free anywhere found:** MOVE index.
+
+**Queued, not yet built:** research cards per indicator (hypothesis,
+expected vs. observed, incremental value); extending
+`macro_regime_composite`'s own significance-test extraction to include these
+14; a debt-ceiling-raise event study; regime-duration ("higher for longer,
+how long"); regime-conditional cross-sectional performance (connects this
+folder to `cross_sectional_momentum`).

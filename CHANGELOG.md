@@ -4,6 +4,13 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Engine — 14 new free FRED series fetched into production, live-verified
+
+- `SERIES_METADATA` (`common.py`) extended from 8 to 22 series — `fred_observations` is already series-agnostic, so no schema change. Every candidate verified live against the real FRED API before being wired in (a wrong ID hard-fails the whole fetch stage).
+- Real, live pipeline run: 50,196 FRED observations across 22 series (was 13,793/8). One real freshness-threshold miss caught and corrected: GDPC1's freshest print was 147 days old, not ≤120 as guessed — bumped to 160 based on the real observed value, same pattern as PCEPILFE's earlier correction.
+- Real, disclosed data-quality finding: `BAMLH0A0HYM2`/`BAMLC0A0CM` (HY/IG OAS spreads) only have ~3 years of real point-in-time vintage history in this project's pinned-`realtime_start` fetch, even though their current/non-vintage display goes back further — a genuine ALFRED vintage-archive limit on these vendor-licensed series, verified directly against the API, not a bug.
+- `macro_regime_composite` untouched — these 14 are fetched and available, not yet used by the live composite, per the explicit freeze.
+
 ### Research — macro research subfolder + 3-layer framework
 
 - New `docs/hypotheses/macro-research/`: user-designed 3-layer structure (input signal / Fed response, decomposed into independent Rate-Balance sheet-Liquidity-Guidance dimensions / market outcome, kept separate from the response layer) replacing "does X predict QE/hike/risk-on" single-scalar questions. Per-indicator research card template; redundancy/incremental-value check reuses the existing `signal_validation.py` effective-number-of-bets machinery already proven on the 8 macro factors.

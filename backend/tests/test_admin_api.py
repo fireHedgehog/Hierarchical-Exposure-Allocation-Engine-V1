@@ -84,6 +84,21 @@ def make_fred_fetcher(
         "NFCI": (0.1, -0.2),
         "VIXCLS": (22.0, 16.0),
         "DGS10": (4.3, 4.1),
+        # docs/hypotheses/macro-research/ layer-1 input signals, added 2026-08-27.
+        "WALCL": (6700000.0, 6745699.0),
+        "WTREGEN": (800000.0, 953612.0),
+        "DGS30": (4.9, 5.17),
+        "GDPC1": (23500.0, 24269.613),
+        "MTSDS133FMS": (-400000.0, -432307.87),
+        "ICSA": (200000.0, 206000.0),
+        "T10YIE": (2.2, 2.32),
+        "T5YIE": (2.2, 2.31),
+        "DFII10": (2.2, 2.32),
+        "DFII30": (2.8, 2.92),
+        "BAMLH0A0HYM2": (3.0, 2.7),
+        "BAMLC0A0CM": (0.9, 0.81),
+        "SOFR": (3.8, 3.66),
+        "IORB": (3.8, 3.65),
     }
     calls: list[tuple[Any, ...]] = []
 
