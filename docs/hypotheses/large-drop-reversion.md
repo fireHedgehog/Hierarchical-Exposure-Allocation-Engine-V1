@@ -1,6 +1,6 @@
 # Large one-day drop reversion (H-CRASHREV01)
 
-Status: preregistered
+Status: concluded-rejected
 Version: v0.1
 Registered: 2026-08-26
 
@@ -82,3 +82,4 @@ sharp one — stated as such, not forced into false precision.
 
 | Date | Checkpoint | Reading | Note |
 | --- | --- | --- | --- |
+| 2026-08-27 | `research_lab/large_drop_reversion.py`, SPY, 2004-2026, n=78 real >=3% drop days | **Rejected — opposite direction on the strict check, no signal on the loose one.** Close-based recovery is significantly *lower* than baseline at every window: 28.2% vs. 82.8% (5d), 51.3% vs. 89.7% (10d), 60.3% vs. 93.7% (20d), all p<0.0001 — a big drop closes back above its pre-drop level *slower* than an ordinary day, not faster. Intraday-high-based recovery is ~99-100% for both conditional and baseline, not significantly different (p=0.06-1.0) — both near the ceiling, no real distinguishing power either way. | Consistent with, not contradicted by, H-STREV01 (confirmed, r=-0.057 average reversal): an average tilt toward positive forward return after a down move is real, but "definitely fills back within days" overclaims it — on the strict (close) measure the honest finding is the opposite of the informal claim; on the loose (high) measure the claim is simply untestable/uninformative because almost every day passes it regardless. n=78 is a real but small sample (rare event by construction, as disclosed at preregistration). |

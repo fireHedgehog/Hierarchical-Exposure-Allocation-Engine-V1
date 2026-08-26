@@ -62,8 +62,8 @@ noted otherwise.
 | [Vol-scaled cross-sectional momentum](vol-scaled-cross-sectional-momentum.md) | walk-forward equity curve comparison (Sharpe/drawdown) | concluded-inconclusive | Drawdown improvement vs. naive baseline is mostly just lower average exposure, not the timing mechanism | 2004+ |
 | [Short-term reversal cost robustness](short-term-reversal-cost-robustness.md) | walk-forward equity curve, gross vs. net-of-cost at 4 cost levels | concluded-confirmed (cost-sensitive) | Sharpe 1.15 gross; survives to Sharpe 0.77 at 10bps, breaks down by 25-50bps; 148.7% mean turnover | 2018+ (shortest-symbol-constrained) |
 | [Thematic beta selection process](thematic-beta-selection-process.md) | graduated ladder (R0-R10) per real theme episode + 3 queued quantitative companion papers | preregistered | 1 real, retrospective, pre-process log entry (AI infra capex, R1) — no conclusion possible yet | n/a |
-| [Opening gap-down fill](gap-down-fill.md) | conditional vs. unconditional fill-rate comparison (SPY/QQQ) | preregistered | Not yet run | 2004+ |
-| [Large one-day drop reversion](large-drop-reversion.md) | conditional vs. unconditional recovery-rate comparison (SPY, >=3% drops) | preregistered | Not yet run | 2004+ |
+| [Opening gap-down fill](gap-down-fill.md) | conditional vs. unconditional fill-rate comparison (SPY/QQQ) | concluded-rejected (opposite direction) | Fill rate is high in absolute terms (72-93%) but *lower* than the unconditional baseline (~99.9%) at every spec | 2004+ |
+| [Large one-day drop reversion](large-drop-reversion.md) | conditional vs. unconditional recovery-rate comparison (SPY, >=3% drops) | concluded-rejected | Close-based recovery is significantly *slower* than baseline at every window; loose (high-based) check is uninformative, ~ceiling either way | 2004+ |
 
 ## Template for a new hypothesis
 

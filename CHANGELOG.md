@@ -4,11 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
-### Research — two informal claims preregistered, not run (H-GAPFILL01, H-CRASHREV01)
+### Research — two informal claims run and rejected (H-GAPFILL01, H-CRASHREV01)
 
-- New `docs/hypotheses/gap-down-fill.md`: SPY/QQQ opening gap-downs fill within a short window — an informal claim, not literature, checked against a real, disclosed spec (real OHLC, primary/secondary gap-size and window thresholds) with a non-negotiable unconditional-baseline comparison (SPY's real upward drift means a high raw fill rate alone would be spurious).
-- New `docs/hypotheses/large-drop-reversion.md`: SPY recovers within a few days after a >=3% single-day drop — a genuinely different, stronger claim than the already-confirmed H-STREV01 (average weekly reversal, r=-0.057), not reused as evidence here since that would overclaim what H-STREV01 actually showed. Same baseline-comparison discipline; small real sample size (rare >=3% days) disclosed up front, not discovered later.
-- Both preregistered only, per explicit instruction — not run this pass.
+- `research_lab/gap_down_fill.py`: SPY/QQQ gap-down fill rate is high in absolute terms (72-93%) but *lower* than the unconditional baseline (~99.9%) at every spec, both symbols — the opposite of the claim. Rejected.
+- `research_lab/large_drop_reversion.py`: after a real SPY >=3% single-day drop, close-based recovery is significantly *slower* than baseline at every window (5/10/20d); the loose intraday-high check is ~ceiling for both conditional and baseline, uninformative. Rejected; not a contradiction of the already-confirmed H-STREV01 (a much weaker, differently-specified claim).
+- Data caveat disclosed in both: SPY's free-tier daily `open` rarely differs from the prior close in this data source, understating true overnight gaps (doesn't change either result's direction).
 
 ### Research — thematic beta selection process preregistered (H-BETA01)
 

@@ -1,6 +1,6 @@
 # Opening gap-down fill (H-GAPFILL01)
 
-Status: preregistered
+Status: concluded-rejected
 Version: v0.1
 Registered: 2026-08-26
 
@@ -70,3 +70,4 @@ such rather than rounded up.
 
 | Date | Checkpoint | Reading | Note |
 | --- | --- | --- | --- |
+| 2026-08-27 | `research_lab/gap_down_fill.py`, SPY+QQQ, 2004-2026, 4 specs each | **Rejected — opposite direction.** Fill rate is high in absolute terms (72-93%) but *lower* than the unconditional baseline (~99.9%) at every spec, both symbols, p<0.001 throughout. e.g. SPY any-gap/5d: 83.3% vs. 99.9% baseline. A gap down is not a special "snaps back fast" event — SPY/QQQ nearly always retrace to any given recent level within days regardless of a gap; a gap down is if anything mildly *slower* to fill than a random day, not faster. | Exactly why the baseline comparison was required: the raw fill rate alone (72-93%) looks like it confirms the claim; only against the true base rate does it invert. Data caveat: SPY's real `open` is at/above the prior close on 99.1% of days in this free-tier daily source (open<prev-close n=48/5466) — genuine overnight gaps are likely understated here, not a script bug (confirmed: 0 days with open==prev-close exactly). QQQ shows more gap days (n=119), suggesting this data-quality effect is symbol-dependent. Result direction is unaffected either way (baseline still far exceeds conditional), but the small SPY sample size should be read with this in mind. |
