@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — hypothesis index gains a dataset column and real-finding recap
+
+- `docs/hypotheses/README.md`'s index: new `Dataset` column (`2016+` vs. `2004+`) flagging that 8 of this session's 11 hypothesis tests predate the 2004 data extension and one (H-VOLSCALE01) doesn't — not apples-to-apples. Checkpoint-count column replaced with a one-line real-finding summary per paper, for self-serve recap as the hypothesis count grows.
+- Named, queued: re-running the 8 pre-extension hypotheses against the real 2004-2026 data (now including 2008) — the highest-value next step, testing whether the session's repeated "disruption beats order" pattern is durable or a bull-decade artifact, before broadening to new candidate factors.
+
 ### Research — vol-scaling integration test: honest, inconclusive, attribution-checked
 
 - New H-VOLSCALE01 (`vol-scaled-cross-sectional-momentum.md`), preregistered before running: real vol-scaled vs. constant-exposure comparison on `cross_sectional_momentum`'s already-validated strategy backtest (not `macd_rsi_single_name_timing`, whose entry has no proven edge — external review's correction).

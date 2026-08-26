@@ -43,16 +43,23 @@ gate before research even reaches the DB.
 
 ## Index
 
-| Hypothesis | Type of evidence | Status | Checkpoints so far |
-| --- | --- | --- | --- |
-| [Warsh Fed reaction function](warsh-reaction-function.md) | categorical (hawkish/dovish/neutral/inconclusive) per FOMC/speech event | observing | 1 |
-| [Time-series momentum](time-series-momentum.md) | continuous (IC vs. real forward return) | concluded-rejected | 2 |
-| [Low-volatility anomaly](low-volatility-anomaly.md) | continuous (IC vs. real forward return) | concluded-rejected (raw return) | 1 |
-| [Short-term mean reversion](short-term-mean-reversion.md) | continuous (IC vs. real forward return) | concluded-confirmed (1-week window) | 1 |
-| [MAX effect / lottery demand](max-effect-lottery-demand.md) | continuous (IC vs. real forward return) | concluded-rejected | 2 |
-| [Dow Theory trend structure](dow-theory-trend-structure.md) | binary (intact/broken) vs. real forward return | concluded-rejected (opposite direction) | 2 |
-| [Dow Theory risk-state](dow-theory-risk-state.md) | binary (intact/broken) vs. real forward volatility | concluded-confirmed | 1 |
-| [Vol-scaled cross-sectional momentum](vol-scaled-cross-sectional-momentum.md) | walk-forward equity curve comparison (Sharpe/drawdown) | concluded-inconclusive | 1 |
+Dataset column flags which real dataset window a paper's evidence came
+from — `2016+` (the pre-0.38 rolling window) or `2004+` (post-0.38, GLD-
+anchored, includes 2008) — since the two aren't apples-to-apples and most
+of this table predates the longer window. Re-running a `2016+` paper
+against `2004+` data is real, queued follow-up work, not yet done, unless
+noted otherwise.
+
+| Hypothesis | Type of evidence | Status | Real finding | Dataset |
+| --- | --- | --- | --- | --- |
+| [Warsh Fed reaction function](warsh-reaction-function.md) | categorical (hawkish/dovish/neutral/inconclusive) per FOMC/speech event | observing | 1 real checkpoint (Jul 2026 FOMC, hawkish); awaiting Jackson Hole | n/a |
+| [Time-series momentum](time-series-momentum.md) | continuous (IC vs. real forward return) | concluded-rejected | Opposite direction at every horizon (1m-12m, incl. 12-1 spec) — real reversal, not momentum, on this window | 2016+ |
+| [Low-volatility anomaly](low-volatility-anomaly.md) | continuous (IC vs. real forward return) | concluded-rejected (raw return) | Opposite direction — volatile beat calm | 2016+ |
+| [Short-term mean reversion](short-term-mean-reversion.md) | continuous (IC vs. real forward return) | concluded-confirmed (1-week window) | Real reversal at 1 week (r=-0.02, p=0.002); gone by 2 weeks | 2016+ |
+| [MAX effect / lottery demand](max-effect-lottery-demand.md) | continuous (IC vs. real forward return) | concluded-rejected | Opposite direction — extreme-max beat calm-max; r=+0.78 with low-vol above, not independent | 2016+ |
+| [Dow Theory trend structure](dow-theory-trend-structure.md) | binary (intact/broken) vs. real forward return | concluded-rejected (opposite direction) | Broken structure beat intact structure on forward return | 2016+ |
+| [Dow Theory risk-state](dow-theory-risk-state.md) | binary (intact/broken) vs. real forward volatility | concluded-confirmed | Broken structure really does predict higher forward volatility (r=-0.04, p=0.0001) | 2016+ |
+| [Vol-scaled cross-sectional momentum](vol-scaled-cross-sectional-momentum.md) | walk-forward equity curve comparison (Sharpe/drawdown) | concluded-inconclusive | Drawdown improvement vs. naive baseline is mostly just lower average exposure, not the timing mechanism | 2004+ |
 
 ## Template for a new hypothesis
 
