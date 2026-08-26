@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — short-term reversal's cost/turnover robustness: real, cost-sensitive
+
+- New H-STREV02 (`short-term-reversal-cost-robustness.md`): a real, tradable weekly walk-forward strategy on H-STREV01's confirmed signal (buy the 5 biggest trailing-5-day losers, hold a week), gross vs. net at four disclosed real cost assumptions (5/10/25/50bps), scaled by actually-measured turnover (mean 148.7%/period).
+- Real result: gross Sharpe 1.15; net Sharpe 0.96 at 5bps, 0.77 at 10bps, 0.21 at 25bps, -0.73 at 50bps — the edge survives cost levels plausible for this liquid universe, fully destroyed by 50bps. Recorded `concluded-confirmed (cost-sensitive)` rather than a forced binary call. Caveat disclosed: this covers ~2018-2026 (shortest-symbol-constrained by XLC), not the full 2004-2026 window.
+
 ### Engine — momentum sign bug fixed
 
 - `compute_horizon_weights` weighted each horizon by `abs(correlation)` only, discarding sign — flagged since 0.26, now fixed. A significantly reversal-shaped horizon now gets a real negative weight, applied as a final signed step on top of the unchanged magnitude normalization; every other horizon keeps the existing naive positive-momentum default.

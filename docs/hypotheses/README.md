@@ -60,6 +60,7 @@ noted otherwise.
 | [Dow Theory trend structure](dow-theory-trend-structure.md) | binary (intact/broken) vs. real forward return | concluded-rejected (opposite direction) | Broken beat intact on forward return, replicated on 2004-26 at similar magnitude | 2016+, 2004+ |
 | [Dow Theory risk-state](dow-theory-risk-state.md) | binary (intact/broken) vs. real forward volatility | concluded-confirmed | Broken predicts higher forward volatility, replicated and slightly stronger on 2004-26 | 2016+, 2004+ |
 | [Vol-scaled cross-sectional momentum](vol-scaled-cross-sectional-momentum.md) | walk-forward equity curve comparison (Sharpe/drawdown) | concluded-inconclusive | Drawdown improvement vs. naive baseline is mostly just lower average exposure, not the timing mechanism | 2004+ |
+| [Short-term reversal cost robustness](short-term-reversal-cost-robustness.md) | walk-forward equity curve, gross vs. net-of-cost at 4 cost levels | concluded-confirmed (cost-sensitive) | Sharpe 1.15 gross; survives to Sharpe 0.77 at 10bps, breaks down by 25-50bps; 148.7% mean turnover | 2018+ (shortest-symbol-constrained) |
 
 ## Template for a new hypothesis
 
