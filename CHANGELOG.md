@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — MAX effect rejected; a third test lands on the same regime signature
+
+- New `research_lab/max_effect.py`: real IC test, trailing max single-day return vs. forward return — a deliberately orthogonal candidate (tail/skewness, not trend or variance). Rejected: r=-0.18 (adjusted p<0.0001, n=10,283), opposite of the predicted direction.
+- Third rejection this session with the identical directional signature (calm/low-extreme underperforms, volatile/extreme outperforms) — real evidence about this window's character, named as a pattern, not treated as proof or quietly adapted into the staging pipeline.
+
 ### Research — short-term mean reversion confirmed, the first non-rejected factor this session
 
 - New `research_lab/short_term_mean_reversion.py`: a fresh test at Jegadeesh (1990)'s original window (trailing ~1 week), not reused from the two rejected papers' reversal-shaped side effects — avoids hypothesizing after the results were known, disclosed explicitly in the new paper.
