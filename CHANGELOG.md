@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Engine — staging universe now fetched from a fixed 2004-12-01 anchor
+
+- New `STAGING_UNIVERSE_START_DATE = "2004-12-01"` (GLD's real, empirically-verified launch day) replaces the rolling 10-year `PRICE_FETCH_RANGE` for the staging price fetch. Every symbol aligns to the same real calendar window (a controlled cross-asset comparison, e.g. gold vs. an equity index across 2008) instead of each reaching back as far as its own history allows; dot-com coverage is deliberately traded away since GLD didn't exist yet, 2008 is kept.
+- Real discovery made while implementing: Yahoo's `range=max` silently degrades `interval=1d` to a coarser real resolution over multi-decade spans (verified: 262 bars instead of the real 5,467). `fetch_daily_bars()` gained a `start_date` parameter using explicit `period1`/`period2` to get genuine daily granularity; `range_` still works for relative-window callers.
+- `FRED_OBSERVATION_WINDOW_DAYS` extended to match (7,950 days). Live-verified: a real pipeline run now fetches 113,026 real daily bars (was 55,950) and 13,793 real FRED observations (was 6,330); GLD/SPY/QQQ/IGV align to 2004-12-01, while XLC (real 2018 listing) correctly keeps its own later start date.
+
 ### Research — `proportion_significance()`: the statistical primitive for probability-shaped hypotheses
 
 - New, real, hypothesis-agnostic addition to `backend/engine/research/significance.py`: a real Fisher's exact test between two groups' hit-rates — answers "is P(event) actually different between two states," which `pearson_significance` cannot. Chosen over a naive two-proportion z-test for validity on small/imbalanced samples. 5 new tests, 155/155 passing.

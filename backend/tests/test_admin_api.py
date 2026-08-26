@@ -142,10 +142,10 @@ def make_price_fetcher(as_of: date, *, count: int = 260):
     test uses, with a small symbol-dependent drift so cross-sectional ranks
     aren't all tied. No real network call is ever made."""
 
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[str, str | None]] = []
 
-    def fetcher(symbol: str, *, range_: str = "1y") -> list[PriceBar]:
-        calls.append((symbol, range_))
+    def fetcher(symbol: str, *, range_: str = "1y", start_date: str | None = None) -> list[PriceBar]:
+        calls.append((symbol, start_date or range_))
         seed = sum(ord(character) for character in symbol) % 11
         drift = 0.0003 * (seed - 5)
         price = 50.0 + seed * 10.0

@@ -40,14 +40,36 @@ PRICE_HARD_MAX_AGE_DAYS = 10
 # gives the per-symbol backtest a real multi-cycle window to trade, in one
 # fetch per symbol (Yahoo returns the requested range in a single response,
 # so this isn't N times slower than a 1-year fetch, just a bigger payload).
+# Superseded for fetch_data's actual price fetch by STAGING_UNIVERSE_START_DATE
+# below (2026-08-26) -- kept as the range_ fallback fetch_daily_bars still
+# supports for any caller that wants a relative window instead of a fixed one.
 PRICE_FETCH_RANGE = "10y"
+# GLD's real, empirically-verified first trading day (fetched directly,
+# 2026-08-26: earliest real bar from a full-history pull) -- the fixed
+# common start date every staging symbol is fetched from, deliberately
+# *not* each symbol's own longest available history. A controlled
+# cross-asset comparison (e.g. gold's regime behavior vs. an equity index's,
+# across 2008) needs every symbol aligned to the same real calendar window;
+# letting older symbols (SPY, QQQ) reach further back than GLD can would
+# produce an unaligned panel. This trades away real dot-com-era coverage
+# (GLD didn't exist yet) for a clean, aligned comparison group from 2008
+# onward -- an accepted, deliberate choice, not an oversight.
+#
+# fetch_daily_bars must be called with start_date=, not range_="max", to get
+# genuine daily bars over this span: verified directly (2026-08-26) that
+# Yahoo's range=max silently degrades interval=1d to a coarser real
+# resolution once the span is many years (GLD's real full history via
+# range=max returned only 262 bars; the identical span via explicit
+# period1/period2 returned the real 5,467 true daily bars).
+STAGING_UNIVERSE_START_DATE = "2004-12-01"
 # Was 400 days (enough for regime_filter's trailing-12-month YoY calc, no
-# more). Too short for engine/research/'s significance testing: a monthly
-# series like CPIAUCSL only yields ~11 observations in 400 days, well below
-# MIN_SAMPLES. 10 years matches PRICE_FETCH_RANGE so factor observations and
-# symbol bars cover the same real window (discovered 2026-08-24, first real
-# significance run; see docs/engine-milestones.md).
-FRED_OBSERVATION_WINDOW_DAYS = 365 * 10
+# more), then 10 years (too short for engine/research/'s significance
+# testing at first: a monthly series like CPIAUCSL only yields ~11
+# observations in 400 days, well below MIN_SAMPLES). Now matches
+# STAGING_UNIVERSE_START_DATE (2026-08-26) so FRED macro observations and
+# Yahoo symbol bars cover the same real window for genuine cross-regime
+# (dot-com-excluded, 2008-included) comparison work.
+FRED_OBSERVATION_WINDOW_DAYS = 7950
 
 
 def _json(value: Any) -> str:

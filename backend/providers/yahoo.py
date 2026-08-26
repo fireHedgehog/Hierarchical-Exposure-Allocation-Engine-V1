@@ -29,7 +29,25 @@ class PriceFetchError(RuntimeError):
 CHART_ENDPOINT = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 
 
-def fetch_daily_bars(symbol: str, *, range_: str = "1y") -> list[PriceBar]:
+def fetch_daily_bars(symbol: str, *, range_: str = "1y", start_date: str | None = None) -> list[PriceBar]:
+    """start_date (an ISO date), when given, requests an explicit
+    period1..now window instead of a relative range and takes priority over
+    range_. This is not cosmetic: Yahoo's chart endpoint silently degrades
+    interval=1d to a coarser real resolution once a relative range (e.g.
+    range=max) spans many years -- verified directly (2026-08-26): GLD's
+    real full history via range=max returned only 262 bars (weekly/monthly
+    resolution in daily's clothing), while the identical span requested via
+    explicit period1/period2 returned the real 5,467 true daily bars. A
+    fixed-date-anchored fetch is required for genuine daily granularity over
+    a multi-decade window, not just a style preference."""
+
+    params: dict[str, str | int] = {"interval": "1d"}
+    if start_date is not None:
+        period1 = int(datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
+        params["period1"] = period1
+        params["period2"] = int(datetime.now(timezone.utc).timestamp())
+    else:
+        params["range"] = range_
     try:
         with httpx.Client(
             timeout=httpx.Timeout(15.0, connect=5.0),
@@ -42,7 +60,7 @@ def fetch_daily_bars(symbol: str, *, range_: str = "1y") -> list[PriceBar]:
         ) as client:
             response = client.get(
                 CHART_ENDPOINT.format(symbol=symbol),
-                params={"range": range_, "interval": "1d"},
+                params=params,
             )
     except httpx.HTTPError as error:
         raise PriceFetchError(

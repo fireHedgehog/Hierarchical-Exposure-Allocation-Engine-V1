@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 
 from backend.pipeline.stages.common import (
     FRED_OBSERVATION_WINDOW_DAYS,
-    PRICE_FETCH_RANGE,
     PRICE_SOFT_MAX_AGE_DAYS,
+    STAGING_UNIVERSE_START_DATE,
     SERIES_METADATA,
     StageOutcome,
     FredFetcher,
@@ -100,7 +100,7 @@ def run_fetch_data_stage(
     fetched_bars: dict[str, list[PriceBar]] = {}
     for row in staging_rows:
         try:
-            bars = price_fetcher(row["symbol"], range_=PRICE_FETCH_RANGE)
+            bars = price_fetcher(row["symbol"], start_date=STAGING_UNIVERSE_START_DATE)
         except PriceFetchError as error:
             return StageOutcome(
                 status="failed",
@@ -125,7 +125,7 @@ def run_fetch_data_stage(
             "engine_mode": engine_mode,
             "observation_window": {"start": observation_start, "end": observation_end},
             "realtime_vintage": realtime,
-            "price_fetch_range": PRICE_FETCH_RANGE,
+            "price_fetch_start_date": STAGING_UNIVERSE_START_DATE,
         }
     )
     connection.execute(
