@@ -76,6 +76,7 @@ export interface ContributionDatum {
 export interface Regime extends Provenance {
   label?: Nullable<string>;
   confidence?: Nullable<number>;
+  percentile_rank?: Nullable<number>;
   as_of?: Nullable<string>;
   summary?: Nullable<string>;
   filters?: Nullable<RegimeFilter[]>;

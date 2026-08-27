@@ -1120,6 +1120,71 @@ summary:focus-visible,
   font-size: 20px;
 }
 
+.regime-gauge {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.regime-gauge__track {
+  position: relative;
+  display: flex;
+  height: 10px;
+  overflow: visible;
+  border-radius: 99px;
+}
+
+.regime-gauge__zone {
+  height: 100%;
+}
+.regime-gauge__zone:first-child { border-radius: 99px 0 0 99px; }
+.regime-gauge__zone:last-child { border-radius: 0 99px 99px 0; }
+.regime-gauge__zone--off { background: var(--red-soft); }
+.regime-gauge__zone--neutral { background: var(--amber-soft); }
+.regime-gauge__zone--on { background: var(--mint-soft); }
+
+.regime-gauge__marker {
+  position: absolute;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.regime-gauge__marker span {
+  color: var(--bg);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 7px;
+  font-weight: 750;
+}
+
+.regime-gauge__zone-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  color: var(--faint);
+  font-size: 8px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.regime-gauge__zone-labels span:first-child { color: var(--red); }
+.regime-gauge__zone-labels span:last-child { color: var(--mint); }
+
+.regime-gauge__readout {
+  max-width: 640px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+.regime-gauge__readout strong { color: var(--text-soft); }
+
 .hierarchy-observations__title,
 .philosophy-principles__title {
   display: flex;

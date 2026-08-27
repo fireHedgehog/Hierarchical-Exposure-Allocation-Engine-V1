@@ -191,6 +191,11 @@ def _install_compatible_columns(connection: sqlite3.Connection) -> None:
             "ALTER TABLE desk_snapshots ADD COLUMN engine_mode TEXT "
             "CHECK (engine_mode IS NULL OR engine_mode IN ('pilot', 'production'))"
         )
+    if "regime_percentile_rank" not in desk_columns:
+        connection.execute(
+            "ALTER TABLE desk_snapshots ADD COLUMN regime_percentile_rank REAL "
+            "CHECK (regime_percentile_rank IS NULL OR (regime_percentile_rank >= 0 AND regime_percentile_rank <= 100))"
+        )
 
     event_columns = {
         row["name"]

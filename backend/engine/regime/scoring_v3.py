@@ -67,6 +67,40 @@ HISTORICAL_DRAWDOWN_RATE_STRESSED = 0.345
 HISTORICAL_DRAWDOWN_RATE_MIDDLE = 0.238
 HISTORICAL_DRAWDOWN_RATE_CALM = 0.071
 
+# Real (composite score, percentile) checkpoints, computed once from the
+# same 2004-2026 backtest (n=252) -- linear-interpolated between points for
+# a real, exact percentile *position*, never estimated. This positioning is
+# real and precise by construction (it is just a rank, not a probability
+# estimate); it is NOT a claim that fine-grained position within a zone
+# carries further-tested predictive precision -- a real decile-level check
+# (docs/hypotheses/macro-research/composite-forward-risk.md's own follow-up)
+# found the forward-drawdown gradient genuinely noisy at that granularity
+# (small per-bucket samples, ~25). Only the 3 broad zones (stressed/middle/
+# calm, the tercile cutoffs above) carry a real, out-of-sample-tested
+# predictive claim -- the percentile number itself is honest positioning,
+# not a validated finer-grained forecast.
+PERCENTILE_CHECKPOINTS: tuple[tuple[float, float], ...] = (
+    (-2.78, 0.0), (-1.2367, 5.0), (-1.0010, 10.0), (-0.6919, 20.0),
+    (-0.5111, 25.0), (-0.3359, 33.0), (-0.1972, 40.0), (0.0106, 50.0),
+    (0.1576, 60.0), (0.3271, 67.0), (0.4994, 75.0), (0.5799, 80.0),
+    (0.8162, 90.0), (1.0378, 95.0), (1.7306, 100.0),
+)
+
+
+def _percentile_rank(composite: float) -> float:
+    points = PERCENTILE_CHECKPOINTS
+    if composite <= points[0][0]:
+        return points[0][1]
+    if composite >= points[-1][0]:
+        return points[-1][1]
+    for (score_lo, pct_lo), (score_hi, pct_hi) in zip(points, points[1:]):
+        if score_lo <= composite <= score_hi:
+            if score_hi == score_lo:
+                return pct_lo
+            fraction = (composite - score_lo) / (score_hi - score_lo)
+            return pct_lo + fraction * (pct_hi - pct_lo)
+    return 50.0  # unreachable given the bounds checks above; a safe, honest fallback
+
 
 def _clamp(value: float, low: float = -1.0, high: float = 1.0) -> float:
     return max(low, min(high, value))
@@ -250,6 +284,7 @@ def compute_regime_v3(series: dict[str, list[SeriesObservation]], as_of: date) -
         historical_rate = HISTORICAL_DRAWDOWN_RATE_MIDDLE
         tercile = "middle"
     confidence = historical_rate
+    percentile_rank = _percentile_rank(composite)
 
     if composite >= 0.15:
         label = "Risk-on / expansion-leaning"
@@ -262,11 +297,14 @@ def compute_regime_v3(series: dict[str, list[SeriesObservation]], as_of: date) -
         f"{name} {statistics.fmean(scores):+.2f}" for name, scores in cluster_scores.items()
     )
     summary = (
-        f"naive-v3 real z-score composite {composite:+.2f} ({cluster_summary}). Real historical calibration "
-        f"(out-of-sample validated, see docs/hypotheses/macro-research/): a reading in the '{tercile}' "
-        f"tercile has preceded a real SPY drawdown of 10% or more within 6 months {historical_rate:.0%} of "
-        "the time, 2004-2026. This is a risk-context read, not a timing signal -- it does not say when, "
-        "and nothing here executes a trade."
+        f"naive-v3 real z-score composite {composite:+.2f} ({cluster_summary}) -- {percentile_rank:.0f}th "
+        "percentile of its own real 2004-2026 history. Real historical calibration (out-of-sample validated, "
+        f"see docs/hypotheses/macro-research/): a reading in the '{tercile}' tercile has preceded a real SPY "
+        f"drawdown of 10% or more within 6 months {historical_rate:.0%} of the time. This is a risk-context "
+        "read, not a timing signal -- it does not say when, and nothing here executes a trade."
     )
 
-    return RegimeResult(label=label, confidence=confidence, summary=summary, factors=factors, weights=weights)
+    return RegimeResult(
+        label=label, confidence=confidence, summary=summary, factors=factors, weights=weights,
+        percentile_rank=percentile_rank,
+    )

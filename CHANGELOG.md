@@ -4,6 +4,13 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Engine + Frontend — real 0-100 risk-regime gauge, backed by the actual backtest distribution
+
+- User asked directly whether the tercile scale had ever been tested as a real 0-100 gauge (like their original "[0-35][35-65][65-100]" sketch). Checked, not assumed: real terciles (33/67, from H-MACRO09) map closely, but a smooth 0-100 gauge implies more precision than a real decile-granularity check (`composite-forward-risk.md`, new observation log entry) turned out to support — non-monotonic at that resolution, small per-bucket samples.
+- Resolved honestly rather than either skipping the gauge or overclaiming: gauge *position* is a real, exact percentile rank against the actual 2004-2026 composite distribution (`scoring_v3.py`'s new `PERCENTILE_CHECKPOINTS`, linear-interpolated); only the 3 tercile *zones* carry a further-tested forward-drawdown claim.
+- New `RegimeResult.percentile_rank` (optional, `None` for v1/v2), `desk_snapshots.regime_percentile_rank` (additive migration, existing databases unaffected), threaded through `regime_filter.py` and the `/api/v1/desk/latest` response.
+- New `RegimePercentileGauge` component: a real 0-100 bar with 3 colored zones and today's exact marker position, rendered inside `RegimeConsole` (both its top and bottom occurrences). 21 backend tests (2 new), `tsc` clean, 52 frontend tests, production build all passing. Live-verified end to end: a real pipeline run published percentile_rank=49.3, matching the composite's real historical median.
+
 ### Frontend — Methodology page stale-content fix; compact regime factor accordion
 
 - Real, user-caught bug: `MethodologyPage.tsx`'s cross-sectional-momentum and single-name-timing cards still described the retired naive-v2 code (`momentum_v2.py`, MACD entry) even though both were promoted to naive-v3 earlier this session (12-1 momentum, short-term reversal entry) — the page was never updated when the backend changed. Both cards rewritten to describe what's actually live.

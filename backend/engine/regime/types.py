@@ -46,3 +46,7 @@ class RegimeResult:
     summary: str
     factors: list[RegimeFactor]
     weights: dict[str, float]
+    # Real historical percentile rank (0-100) of the composite score against
+    # its own real backtest distribution -- naive-v3 only; None for v1/v2,
+    # which have no such distribution computed. See scoring_v3.py.
+    percentile_rank: float | None = None

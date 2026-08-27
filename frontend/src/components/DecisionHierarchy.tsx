@@ -30,12 +30,59 @@ export function RegimeConsole({ regime }: { regime?: Regime | null }) {
         </div>
       </div>
 
+      <RegimePercentileGauge percentileRank={regime?.percentile_rank} />
+
       <RegimeFactorDetail
         filters={regime?.filters}
         weights={regime?.weights}
         contributions={regime?.contributions}
       />
       <ProvenanceStrip provenance={regime} compact />
+    </div>
+  );
+}
+
+// Real tercile cutoffs from the 2004-2026 backtest (composite-forward-risk.md,
+// its out-of-sample split, and threshold-sensitivity check) -- 33/67, not
+// rounded to a cleaner 35/65. Position on the 0-100 bar is a real, exact
+// percentile rank against that same history; only the 3 zone boundaries
+// carry a further-tested predictive claim (P(real drawdown) differs by
+// zone) -- fine position within a zone is honest positioning, not itself a
+// validated forecast (a real decile-level check found that gradient noisy
+// at finer granularity).
+const GAUGE_STRESSED_CUTOFF = 33;
+const GAUGE_CALM_CUTOFF = 67;
+
+function RegimePercentileGauge({ percentileRank }: { percentileRank?: number | null }) {
+  if (!isFiniteNumber(percentileRank)) {
+    return null;
+  }
+  const clamped = Math.max(0, Math.min(100, percentileRank));
+  const zoneLabel =
+    clamped <= GAUGE_STRESSED_CUTOFF ? "Risk-off" : clamped >= GAUGE_CALM_CUTOFF ? "Risk-on" : "Neutral";
+
+  return (
+    <div className="regime-gauge">
+      <div className="regime-gauge__track" role="img" aria-label={`${clamped.toFixed(0)}th percentile, ${zoneLabel}`}>
+        <div className="regime-gauge__zone regime-gauge__zone--off" style={{ width: `${GAUGE_STRESSED_CUTOFF}%` }} />
+        <div
+          className="regime-gauge__zone regime-gauge__zone--neutral"
+          style={{ width: `${GAUGE_CALM_CUTOFF - GAUGE_STRESSED_CUTOFF}%` }}
+        />
+        <div className="regime-gauge__zone regime-gauge__zone--on" style={{ width: `${100 - GAUGE_CALM_CUTOFF}%` }} />
+        <div className="regime-gauge__marker" style={{ left: `${clamped}%` }}>
+          <span>{clamped.toFixed(0)}</span>
+        </div>
+      </div>
+      <div className="regime-gauge__zone-labels">
+        <span>Risk-off</span>
+        <span>Neutral</span>
+        <span>Risk-on</span>
+      </div>
+      <p className="regime-gauge__readout">
+        Today: <strong>{clamped.toFixed(0)}th percentile</strong> of real 2004-2026 history ({zoneLabel}). Position
+        is exact; only the 3 zones carry a real, out-of-sample-tested forward-drawdown claim.
+      </p>
     </div>
   );
 }

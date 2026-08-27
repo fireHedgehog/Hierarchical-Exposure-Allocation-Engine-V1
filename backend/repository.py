@@ -407,6 +407,7 @@ def get_latest_desk(connection: sqlite3.Connection) -> dict[str, Any]:
         "regime": {
             "label": snapshot["regime_label"],
             "confidence": snapshot["regime_confidence"],
+            "percentile_rank": snapshot["regime_percentile_rank"],
             "as_of": snapshot["as_of"],
             "summary": snapshot["regime_summary"],
             "filters": [

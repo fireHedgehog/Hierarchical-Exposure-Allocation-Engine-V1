@@ -166,3 +166,40 @@ def test_confidence_is_a_real_historical_hit_rate_not_a_naive_linear_transform()
     assert result.confidence in {
         HISTORICAL_DRAWDOWN_RATE_STRESSED, HISTORICAL_DRAWDOWN_RATE_MIDDLE, HISTORICAL_DRAWDOWN_RATE_CALM,
     }
+
+
+def test_percentile_rank_is_real_bounded_and_monotonic() -> None:
+    """percentile_rank is a real, exact positioning against the 2004-2026
+    backtest distribution (0-100), not a further-validated forecast --
+    just checked here for the honest contract: bounded, and a more
+    negative composite always ranks lower than a less negative one."""
+
+    from backend.engine.regime.scoring_v3 import _percentile_rank
+
+    assert _percentile_rank(-5.0) == 0.0  # clamped at the real historical minimum
+    assert _percentile_rank(5.0) == 100.0  # clamped at the real historical maximum
+    assert _percentile_rank(0.0106) == pytest.approx(50.0, abs=0.5)  # the real historical median
+
+    result = compute_regime_v3(_full_series(), AS_OF)
+    assert result.percentile_rank is not None
+    assert 0.0 <= result.percentile_rank <= 100.0
+
+    steady_rank = result.percentile_rank
+    stressed_series = _full_series()
+    dates = _daily_dates(300)
+    noisy_values = [16.0 + (0.3 if i % 2 == 0 else -0.3) for i in range(299)]
+    stressed_series["VIXCLS"] = _observations(dates, noisy_values + [60.0])  # a real, extreme spike
+    stressed_result = compute_regime_v3(stressed_series, AS_OF)
+    assert stressed_result.percentile_rank < steady_rank
+
+
+def test_v1_v2_percentile_rank_defaults_to_none() -> None:
+    """RegimeResult.percentile_rank is a new, optional field -- v1/v2 never
+    set it, and must not be forced to fabricate a value."""
+
+    from backend.tests.test_regime_engine_v2 import _full_series as _v2_full_series
+
+    from backend.engine.regime import compute_regime_v2
+
+    result = compute_regime_v2(_v2_full_series(), AS_OF)
+    assert result.percentile_rank is None

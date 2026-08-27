@@ -80,12 +80,12 @@ def run_regime_filter_stage(
         INSERT INTO desk_snapshots (
             id, dataset_snapshot_id, as_of, created_at, mode, data_classification,
             is_live, is_demo, status, immutable, seed_revision, title, subtitle,
-            disclaimer, regime_label, regime_confidence, regime_summary,
+            disclaimer, regime_label, regime_confidence, regime_percentile_rank, regime_summary,
             recommendation_posture, recommendation_summary, recommendation_confidence,
             current_net_exposure, current_gross_exposure, target_net_exposure,
             target_gross_exposure, delta_net_exposure, delta_gross_exposure,
             change_summary, next_review_at, engine_mode
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             desk_id,
@@ -105,6 +105,7 @@ def run_regime_filter_stage(
             "No recommendation, weight, or trade should be treated as investment advice or an executable order.",
             regime.label,
             regime.confidence,
+            regime.percentile_rank,
             regime.summary,
             "not_available",
             "Allocation and instrument stages are not implemented yet; regime and cross-sectional symbol signals are real in this snapshot.",

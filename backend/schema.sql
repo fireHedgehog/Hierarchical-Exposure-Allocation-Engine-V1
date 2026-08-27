@@ -76,6 +76,10 @@ CREATE TABLE IF NOT EXISTS desk_snapshots (
     disclaimer TEXT NOT NULL,
     regime_label TEXT NOT NULL,
     regime_confidence REAL,
+    -- Real historical percentile rank (0-100) of today's composite score
+    -- against the 2004-2026 backtest distribution -- naive-v3 only, NULL
+    -- for v1/v2 snapshots. See backend/engine/regime/scoring_v3.py.
+    regime_percentile_rank REAL CHECK (regime_percentile_rank IS NULL OR (regime_percentile_rank >= 0 AND regime_percentile_rank <= 100)),
     regime_summary TEXT NOT NULL,
     recommendation_posture TEXT NOT NULL,
     recommendation_summary TEXT NOT NULL,
