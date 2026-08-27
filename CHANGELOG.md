@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-SECT07: sleeve dispersion / opportunity-set — real full-sample pattern, doesn't clear out-of-sample
+
+- New `research_lab/sleeve_dispersion_opportunity.py`: does currently-observable cross-sectional dispersion among the 12 sleeves (5 real state variables: dispersion, mean pairwise correlation, top3-minus-bottom3, leadership gap, sleeve breadth) predict how much real spread exists in the *forward* period — the "is there an opportunity to select at all" question, asked before "which sleeve wins" (already rejected at the trend level, H-SECT01).
+- Real, coherent full-sample result: 6 of 10 tests significant after correction (~0.5 expected by chance) — `dispersion`, `top3_minus_bottom3`, and `leadership_gap` all real-correlate with forward spread at both windows.
+- New `research_lab/sleeve_dispersion_opportunity_oos.py`, same 2019-01-01 split convention: 8/10 significant in-sample drops to **0/10 out-of-sample** — every correlation stays the same sign (no reversals), consistent with a real effect weakening on a smaller OOS sample rather than a spurious full-sample fluke, but it does not clear the bar H-MACRO09/H-SECT02's `XLU`/H-SECT05 cleared. Recorded `concluded-inconclusive`, explicitly not treated as a confirmed gate for the roadmap's next steps (regime velocity, conjunctive triggers) to build on unconditionally.
+
 ### Research — H-SECT06: gold reaction function, a cold-start event log — plus a new constraint-based-trigger idea recorded
 
 - New `asset-selection-research/gold-reaction-function.md` (H-SECT06), same cold-start event-log shape as `macro-research/warsh-reaction-function.md` — not a backtest. Thesis: `GLD` is decoupling from the textbook real-yield/Fed-dovish mechanic toward pricing fiscal-dominance/currency-debasement concerns. Grounded in two pieces of already-computed in-repo evidence, not just today's news: H-SECT03 never found a single driver explaining `GLD`'s composite sensitivity, and H-SECT02's OOS split found that sensitivity weakening post-2019 — both consistent with the old mechanic fading. First real checkpoint: a 2026-08-27 Reuters report (spot ~$4,630, +0.8%) of gold rising despite a firm dollar and rising Fed-hike odds, attributed by Reuters to fiscal-deficit/debasement concerns and Treasury long-bond purchases — one day ahead of Warsh's Jackson Hole keynote, cross-referenced from `warsh-reaction-function.md` since both papers are watching the same event.
