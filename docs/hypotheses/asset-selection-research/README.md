@@ -59,7 +59,7 @@ parked cross-reference.
 
 | Question | Note |
 | --- | --- |
-| Section leadership persistence, regime-conditional (#7 above, connected to macro state) | Recommended starting point — see above |
+| Section leadership persistence, regime-conditional (#7 above, connected to macro state) | **Designed:** [`section-leadership-persistence.md`](section-leadership-persistence.md) (H-SECT01), preregistered 2026-08-27. Universe already confirmed real in `data/desk.db` (9 sector ETFs, 2004-2026) — no fetch needed. Not run yet. |
 | Sector/industry relative strength vs. real forward return (#1) | Not started |
 | Cross-asset momentum ranking — equities vs. gold vs. bonds vs. commodities (#1, broader universe) | Not started |
 | Relative risk efficiency (#2) | Not started |
@@ -73,4 +73,4 @@ parked cross-reference.
 
 | Paper | Status | Covers |
 | --- | --- | --- |
-| _none yet_ | — | — |
+| [Section leadership persistence](section-leadership-persistence.md) (H-SECT01) | preregistered | Does sector leadership (top-tercile trailing-3-month return, 9-sector universe) persist longer than a real permutation-null predicts, and does that duration depend on the macro regime active at entry. Design only — not run yet. |
