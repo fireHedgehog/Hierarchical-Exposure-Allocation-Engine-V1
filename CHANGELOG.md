@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-MACRO09 out-of-sample split: replicates cleanly
+
+- New `research_lab/composite_forward_risk_oos.py`: chronological split at 2019-01-01 (disclosed before running), no refitting on either half. In-sample 2004-2018 (includes 2008); out-of-sample 2019-2026 (includes 2020 COVID crash and the 2022 hiking cycle).
+- Real replication: both windows stay significant out-of-sample despite a much smaller sample (28-29 per tercile vs. 55), and the 6-month effect *strengthens* out-of-sample (+42.9pp vs. +21.8pp in-sample, p=0.0004) — the opposite of what overfitting would produce.
+
 ### Research — H-MACRO09: composite forward risk — reframed from timing to "how likely"
 
 - User's own correction after the face-validity miss: not "does the composite match today's price label" but "how likely is a real forward drawdown, given today's reading" — risk-context, not timing. New `research_lab/composite_forward_risk.py`: same 3-cluster composite, tested pooled across ~255 real dates (2004-2026) against SPY's own real forward max drawdown, both continuous IC and a probability comparison (bottom vs. top composite tercile).

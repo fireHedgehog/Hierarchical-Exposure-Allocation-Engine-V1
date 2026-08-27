@@ -84,6 +84,7 @@ cross-sectional factor set.
 | [USD outcome predictors](usd-outcome-predictors.md) (H-MACRO07) | observing | 24 indicators vs. broad dollar index forward change (new series, `DTWEXBGS`). 15/24 significant; rate-mean-reversion group plausibly chains from H-MACRO06's own finding. |
 | [Indicator redundancy](indicator-redundancy.md) (H-MACRO08) | observing | **The prerequisite for any composite.** 17-23 raw indicators → only ~3.5-4.1 effective independent bets. Real factor structure: inflation/growth, rate level, market stress, policy operations — 4 clusters, not 17-26 signals. |
 | [Composite forward risk](composite-forward-risk.md) (H-MACRO09) | observing | Reframed composite test (risk-context, not timing): stressed reading is 5-7x more likely to precede a real ≥10% SPY drawdown within 3-6mo (p<0.0001 both windows). |
+| [Composite forward risk — out-of-sample](composite-forward-risk-oos.md) | observing | Chronological split at 2019-01-01. Replicates cleanly on held-out data; 6mo effect is *stronger* out-of-sample (+42.9pp vs. +21.8pp in-sample) — the opposite of overfitting. |
 
 **Layer 3 complete** — all 5 market-outcome dimensions (Equity, Credit,
 Volatility, Duration, USD) now have a real indicator-vs-target table.
