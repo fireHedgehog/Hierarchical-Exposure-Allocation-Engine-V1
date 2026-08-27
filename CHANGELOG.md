@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-TIME01 v2: compression-episode explosion event study — real direction, not yet decisive
+
+- User's own direct correction to v1's design: not a continuous IC over a long forward window, but a real event study matching the actual belief being tested (volatility can't stay compressed forever) — same reframe shape as `dow-theory-trend-structure.md` → `dow-theory-risk-state.md`.
+- New `research_lab/vix_compression_explosion.py`: a compression episode = the real day `VIXCLS` first completes 21 consecutive days below 15 (one event per stretch, not per day, avoiding pseudo-replication). Tested two ways: `VXX` day-over-day ≥+10% (bottlenecked by `VXX`'s short window, only 7 of 27 real episodes fall inside it), and `VIXCLS` itself reaching ≥1.5x its episode-start level (full 2004-2026 history, all 27 episodes — the more direct test, not bottlenecked by the proxy).
+- Real, honest result: all 4 tests (2 definitions × 2 forward windows) point the same direction — compression predicts a higher explosion rate — and the effect strengthens at the longer window every time. Closest: the full-history VIX-native 10-day test, 14.8% vs. 5.6% baseline, p=0.063 — a real near-miss, not significant at the conventional bar. Recorded honestly as a real, consistent signal that's most likely underpowered (27 episodes in 22 years) rather than genuinely absent — deliberately not re-tuned to force significance.
+
 ### Engine — `staging_symbols.research_scope`: a real, queryable label so narrow-scope proxies don't pollute general research
 
 - User's real concern: `staging_symbols` mixes everything into one flat table with no label distinguishing a general-purpose asset from a narrow, structurally-special proxy (like `VXX`, added last for H-TIME01) — a future broad sweep (an H-SECT-style study, or a future ML feature pipeline) could silently pool in an instrument that doesn't belong.
