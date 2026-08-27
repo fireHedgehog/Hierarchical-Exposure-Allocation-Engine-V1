@@ -1,4 +1,4 @@
-import { ArrowDown, Braces, CircleDot, Gauge, GitBranch } from "lucide-react";
+import { ArrowDown, Braces, ChevronDown, CircleDot, Gauge, GitBranch } from "lucide-react";
 import type { DecisionEdge, DecisionGraph, DecisionNode, Regime } from "../types";
 import {
   formatPercent,
@@ -259,6 +259,7 @@ function RegimeFactorDetail({
       <summary>
         <Braces aria-hidden="true" size={14} />
         <span>Factor detail ({rows.length})</span>
+        <ChevronDown aria-hidden="true" size={14} className="regime-factor-detail__chevron" />
       </summary>
       <div className="regime-factor-table-wrap">
         <table className="regime-factor-table">

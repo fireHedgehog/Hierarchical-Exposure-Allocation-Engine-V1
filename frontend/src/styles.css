@@ -1142,8 +1142,11 @@ summary:focus-visible,
 .regime-factor-detail > summary {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   width: fit-content;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
   color: var(--muted);
   cursor: pointer;
   font-size: 9px;
@@ -1151,9 +1154,22 @@ summary:focus-visible,
   letter-spacing: 0.08em;
   list-style: none;
   text-transform: uppercase;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 .regime-factor-detail > summary::-webkit-details-marker { display: none; }
-.regime-factor-detail[open] > summary { color: var(--blue); margin-bottom: 12px; }
+.regime-factor-detail > summary:hover {
+  border-color: rgba(120, 169, 239, 0.4);
+  background: rgba(120, 169, 239, 0.06);
+  color: var(--blue);
+}
+.regime-factor-detail[open] > summary {
+  border-color: rgba(120, 169, 239, 0.4);
+  background: rgba(120, 169, 239, 0.06);
+  color: var(--blue);
+  margin-bottom: 12px;
+}
+.regime-factor-detail__chevron { transition: transform 0.15s; }
+.regime-factor-detail[open] .regime-factor-detail__chevron { transform: rotate(180deg); }
 
 .regime-factor-table-wrap { overflow-x: auto; }
 
