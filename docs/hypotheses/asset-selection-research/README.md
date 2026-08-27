@@ -47,19 +47,21 @@ project applies everywhere: a raw rate alone proves nothing.
 | 4 | Theme leadership — which cluster currently carries the market's marginal capital flow | Matches this project's own thematic-beta trading style (see [`thematic-beta-selection-process.md`](../thematic-beta-selection-process.md)) |
 | 5 | Breadth / diffusion — is leadership concentrated in a few names or spreading | Distinguishes healthy leadership from late-stage narrow crowding |
 | 6 | Crowding / convexity — has the strongest section become a negative-convexity trade (upside needs continued inflow, a miss is a big downside) | A different axis from momentum itself |
-| 7 | Cross-section persistence — real duration distribution of leadership (median weeks in top-decile relative strength before it fades) | The actual testable version of "does leadership persist" |
+| 7 | Cross-section persistence — real duration distribution of leadership (median weeks in top-decile relative strength before it fades) | **Answered, rejected** (H-SECT01): at a quarterly, non-overlapping horizon, leadership persistence is indistinguishable from chance |
 
-**Recommended first question, if this gets picked up:** does section
-leadership persist, and does macro regime materially change that
-persistence — the one question that would connect this folder to
-`macro-research/` for the first time with real evidence, not just a
-parked cross-reference.
+**Next recommended question:** #1 (relative expected return) or #3
+(state sensitivity) — both reuse real data already in hand (sector
+closes, macro factor clusters) with no new source needed, same as
+H-SECT01 did. #7's rejection doesn't rule these out: "does leadership
+persist" and "is a section's excess return real, conditional on macro
+state" are different claims — #1/#3 test the state-conditioning
+directly instead of relying on trend continuation.
 
 ## Restart-here: open questions, none started yet
 
 | Question | Note |
 | --- | --- |
-| Section leadership persistence, regime-conditional (#7 above, connected to macro state) | **Designed:** [`section-leadership-persistence.md`](section-leadership-persistence.md) (H-SECT01), preregistered 2026-08-27. Universe already confirmed real in `data/desk.db` (9 sector ETFs, 2004-2026) — no fetch needed. Not run yet. |
+| Section leadership persistence, regime-conditional (#7 above, connected to macro state) | **Run, rejected:** [`section-leadership-persistence.md`](section-leadership-persistence.md) (H-SECT01). At a quarterly, non-overlapping horizon, real persistence is indistinguishable from chance (33.3% vs. 33.3%, p=0.52) — a daily overlapping-window test had appeared to confirm it, but that was a mechanical confound, caught before write-up. |
 | Sector/industry relative strength vs. real forward return (#1) | Not started |
 | Cross-asset momentum ranking — equities vs. gold vs. bonds vs. commodities (#1, broader universe) | Not started |
 | Relative risk efficiency (#2) | Not started |
@@ -73,4 +75,4 @@ parked cross-reference.
 
 | Paper | Status | Covers |
 | --- | --- | --- |
-| [Section leadership persistence](section-leadership-persistence.md) (H-SECT01) | preregistered | Does sector leadership (top-tercile trailing-3-month return, 9-sector universe) persist longer than a real permutation-null predicts, and does that duration depend on the macro regime active at entry. Design only — not run yet. |
+| [Section leadership persistence](section-leadership-persistence.md) (H-SECT01) | concluded-rejected | Real quarterly-horizon test: P(leader next quarter \| leader this quarter) = 33.3%, exactly chance (p=0.52). A same-session daily-overlapping-window test had appeared to confirm persistence (p=0.001) — turned out to be a mechanical rolling-window artifact, not a real effect; caught and superseded before promotion. |

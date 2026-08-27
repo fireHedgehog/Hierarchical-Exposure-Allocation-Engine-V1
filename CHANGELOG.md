@@ -4,6 +4,19 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-SECT01: section leadership persistence — rejected at the rigorous test, confirmed catch of a self-introduced confound
+
+- New `research_lab/section_leadership_persistence.py`: 9 sector SPDR ETFs, real 2004-2026 daily closes already in the database (no fetch needed). First test as designed (daily rolling-window rank, permutation null) appeared to confirm persistence (p=0.0010) — but a trailing-63-day window shares 62 of 63 days with the next day's, so daily rank stability is partly mechanical, not necessarily economic. Caught before writing up the result, not after.
+- Added a second, non-overlapping 63-day block test (independent windows, no shared days) in the same session: P(leader next quarter | leader this quarter) = 33.3%, *exactly* the 3-of-9 chance rate (p=0.52, not significant). Recorded honestly as `concluded-rejected` — the daily test's apparent confirmation was the confound, not a real finding. Regime-interaction sub-test not promoted either, since it shares the same confounded daily-episode definition.
+- `docs/hypotheses/asset-selection-research/section-leadership-persistence.md` (H-SECT01) updated with both checkpoints; folder README and parent index updated to match.
+
+### Research — H-SECT01 design, H-MACRO10, and a 4-layer research map across `docs/hypotheses/`
+
+- New `docs/hypotheses/asset-selection-research/` and `docs/hypotheses/timing-research/` folders (own README each, mirroring `macro-research/`'s structure) after confirming the user's own decomposition: macro regime (how much risk) / asset selection (where) / timing (when) / portfolio construction (how much per instrument) — now recorded as a table at the top of `docs/hypotheses/README.md` so new hypotheses get filed by which question they answer.
+- Asset-selection folder's framework rewritten in place with a 7-question breakdown (relative return, risk efficiency, state sensitivity, theme leadership, breadth, crowding, cross-section persistence); recommended first question (leadership persistence, regime-conditional) designed as H-SECT01 before any code ran — universe confirmed real in `data/desk.db` first.
+- Timing folder surfaced a real, previously unflagged gap while writing it out: `rsi_overbought_exit` (RSI(14)>=70) is live in production but `schema.sql`'s own comment admits its exit role "was never tested" as its own hypothesis.
+- New H-MACRO10 (`macro-research/exposure-policy-calibration.md`): papers a real conceptual gap an external review caught — `risk_envelope_allocation`'s `confidence * 2.0` gross-exposure multiplier is a separate, untested hypothesis from H-MACRO09's validated confidence-to-drawdown-probability finding. Design/documentation only, no code changed.
+
 ### Engine + Frontend — real 0-100 risk-regime gauge, backed by the actual backtest distribution
 
 - User asked directly whether the tercile scale had ever been tested as a real 0-100 gauge (like their original "[0-35][35-65][65-100]" sketch). Checked, not assumed: real terciles (33/67, from H-MACRO09) map closely, but a smooth 0-100 gauge implies more precision than a real decile-granularity check (`composite-forward-risk.md`, new observation log entry) turned out to support — non-monotonic at that resolution, small per-bucket samples.

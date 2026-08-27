@@ -1,8 +1,9 @@
 # Section leadership persistence (H-SECT01)
 
-Status: preregistered
-Version: v0.1
+Status: concluded-rejected (persistence, at the rigorous non-overlapping test — see Observation log); regime interaction not separately evaluated, its test shares the same confound
+Version: v0.2
 Registered: 2026-08-27
+Concluded: 2026-08-27
 
 Design-first, per direct instruction — every knob below is decided and
 disclosed before any `research_lab/` code runs, same discipline as
@@ -107,4 +108,6 @@ implied by a confirmed result here).
 
 | Date | Checkpoint | Reading |
 | --- | --- | --- |
-| _none yet — design only, per instruction_ | | |
+| 2026-08-27 | Real run, `research_lab/section_leadership_persistence.py`, dataset `real-macro-f7bd88ff-07eb-46d3-877f-701968666524`. 9 sectors, 5,468 real trading days (2004-2026), 1,480 real leadership episodes. | **Daily test (as designed): appeared to confirm.** Real median episode duration 3.0 trading days vs. permutation-null median 1.0 (1,000 reps) — empirical p=0.0010. But this test has a real confound not caught until after running it: a trailing-63-day window shares 62 of 63 days with the next day's window, so day-to-day rank stability is partly *mechanical*, not necessarily economic — the daily null breaks all cross-day correlation, which is a much weaker bar than genuine persistence needs to clear. |
+| 2026-08-27 | Same run, added mid-session after noticing the confound: non-overlapping 63-day block test — independent windows only, no shared days between consecutive rankings. 86 real blocks. | **Rejected at the rigorous test.** P(sector stays a leader in the next independent quarter, given it led this quarter) = 85/255 = 33.3% — *exactly* the 33.3% (3-of-9) chance rate. Binomial test vs. chance: p=0.5235, not significant. Sector leadership at a quarterly, non-overlapping horizon is statistically indistinguishable from random rotation. This is the real result — the daily test's apparent confirmation was the mechanical artifact, not a false alarm caught cheaply thanks to running both. |
+| 2026-08-27 | Regime interaction (Kruskal-Wallis across `macro_regime_composite` terciles at episode entry) | H=6.053, p=0.0485 — technically significant, but built on the daily-episode definition now known to be confound-dominated. Not promoted as a standalone finding: testing "does regime affect a mostly-mechanical duration statistic" isn't the same claim as "does regime affect real leadership persistence," and claim 1 (the thing regime would be conditioning) was rejected at the test that actually isolates it. Revisiting this properly would mean re-running the regime split on the block-level (quarterly) transition, not the daily episode list — real follow-up work, not done here. |
