@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-SECT04 v2: a proper Fundamental-Law-of-Active-Management test — real effective breadth is only ~2.4, not 12
+
+- User's own direct, correct methodological point: every test this session asked "is this one bet individually significant," never Grinold's actual question -- does combining many weak-but-real bets across real breadth (`IR ≈ IC × √BR`) produce portfolio-level value. H-SECT04 v1's binary tilt threw away all 8 non-"significant" sleeves' real (if weak) information, exactly the mistake the Fundamental Law warns against.
+- New `research_lab/breadth_weighted_allocation_backtest.py`: real per-sleeve IC (126d) computed for all 12 sleeves, walk-forward correct (learned only from the in-sample half, held fixed, applied unchanged to both halves -- no lookahead). IC-weighted continuous score, long-only, gross-preserving weights (isolating selection skill from the exposure-timing effect H-MACRO10 already tested). Real effective breadth via this project's own proven PCA machinery (`effective_number_of_bets`, the same tool behind H-MACRO08's ~4-cluster finding), not a naive count of 12.
+- Real, standalone-valuable finding: effective breadth among the 12 sleeves is only **~2.4** -- most of the apparent 12-way diversification was always illusory, the sleeves mostly move together. Grinold's own formula then predicts a real, meaningful IR improvement (~0.22); the realized improvement is real and positive in every window (full-sample/in-sample/OOS) but 15-40x smaller than predicted -- for three identifiable, real reasons (in-sample IC inflation vs. proven forward skill, the long-only constraint's known IR haircut, and uncosted turnover). Same net conclusion as v1 (this idea doesn't get engineered into the pipeline), reached by a properly rigorous route this time.
+
 ### Research — H-SECT02 v2: SPY-50MA trend-conditioned re-test — clean rejection, a real counter-narrative pattern noted
 
 - User's own follow-up, recalling H-SECT02's original design and asking for the same relative-return measure (`R_sleeve - R_SPY`) conditioned on a real, classic CTA-style filter instead of macro regime -- SPY vs. its own 50-day moving average, deliberately slow enough to ignore 5-10 day chop. Universe extended to include `SMH`/`IGV` ("strongest narrative in a bull market" is exactly their use case; neither was in the original 12-sleeve test).
