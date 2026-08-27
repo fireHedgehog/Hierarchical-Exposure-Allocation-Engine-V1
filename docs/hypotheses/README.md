@@ -15,6 +15,21 @@ matching folder, not by which indicator happens to be involved:
 | Timing | Given a position (or instrument), when do I act — enter/hold/trim/exit? | [`timing-research/`](timing-research/README.md) |
 | Portfolio construction | How much in each specific instrument? | Not a hypothesis folder yet — currently `backend/engine/instruments/` (conviction-scaled structure/sizing), naive-v1 |
 
+## Data sources, by type
+
+A second, orthogonal axis to the 4 layers above — what kind of data a
+hypothesis draws on, not which decision it answers. Recorded here so
+"expand the universe" has a real menu to pick from later, not a vague
+gesture. Currently in use: the first two rows only, by design — the
+project's current phase is deliberately price/volume (+ macro) only.
+
+| Type | Examples | Status |
+| --- | --- | --- |
+| Market numeric | OHLCV, returns, volatility, cross-sectional price behavior | In use — every paper outside `macro-research/` |
+| Macro numeric | FRED rates/inflation/liquidity/growth | In use — `macro-research/` |
+| Alternative structured | Flows, options, short interest | Not connected. Named as a real gap in `asset-selection-research/README.md`'s crowding/convexity question (#6) |
+| Unstructured | Text, earnings, themes, news | Not connected. `thematic-beta-selection-process.md` (H-BETA01) is parked specifically because it needs this tier |
+
 A hypothesis starts here, as a versioned working paper — not as a database row. This
 folder exists because research itself has a data-structure problem: one candidate
 idea's evidence is a nominal category (hawkish/dovish), another's is a continuous
@@ -69,7 +84,7 @@ noted otherwise.
 | --- | --- | --- | --- | --- |
 | [Macro research](macro-research/README.md) (subfolder) | 3-layer input/response/outcome framework, own index | in progress | 10 real papers (H-MACRO01-10 + Warsh). Composite (`macro_regime_composite`) live at naive-v3 with real out-of-sample-validated forward-drawdown evidence (H-MACRO09). H-MACRO10 flags the confidence→gross-exposure mapping as a separate, still-untested hypothesis. | n/a |
 | [Asset selection research](asset-selection-research/README.md) (subfolder) | 13-asset real sleeve universe (GLD-anchored), own index | in progress (H-SECT06 observing) | 9 papers. H-SECT01-05: leadership persistence rejected; regime-conditioned relative return confirmed then narrowed by beta-adjustment to just `XLU`+`XLY`; driver decomposition and allocation backtest both rejected. H-SECT06: gold reaction function, cold-start event log, observing. H-SECT07-09: dispersion (real full-sample, failed OOS), regime velocity (clean rejection), conjunctive `XLU` trigger (significant but fragile, 3-obs bucket) — the opportunity-set question this ETF layer can support is now largely mapped. | n/a |
-| [Timing research](timing-research/README.md) (subfolder) | action-layer framework, own index | scope only | When to enter/hold/trim/exit. Existing top-level papers already cover most of entry; RSI(14)>=70 exit flagged as a real gap — live in production, never independently tested. | n/a |
+| [Timing research](timing-research/README.md) (subfolder) | action-layer framework, own index | in progress | When to enter/hold/trim/exit. Regime-conditioned reversal edge run and confirmed (real in all 3 regimes at 1 week; 2-week reversal flips to mild continuation specifically in calm regimes — logged in `short-term-mean-reversion.md`). RSI(14)>=70 exit's general signal is real (0.29) — a `schema.sql` comment wrongly said "never tested," corrected 2026-08-27; the real open gap is narrower (its role conditional on an open reversal-entry position). | n/a |
 | [Time-series momentum](time-series-momentum.md) | continuous (IC vs. real forward return) | concluded-rejected | Opposite direction at every horizon; replicated on 2004-26 but weaker (only 2 of 5 horizons still significant, was 5 of 5) | 2016+, 2004+ |
 | [Low-volatility anomaly](low-volatility-anomaly.md) | continuous (IC vs. real forward return) | concluded-rejected (raw return) | Opposite direction — volatile beat calm | 2016+ |
 | [Short-term mean reversion](short-term-mean-reversion.md) | continuous (IC vs. real forward return) | concluded-confirmed (1-week window) | Confirmed and strengthened on 2004-26: r=-0.057 (was -0.02), and now significant at 2 weeks too (was not) | 2016+, 2004+ |

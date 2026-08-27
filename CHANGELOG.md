@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — regime-conditioned reversal edge confirmed; a real schema.sql/docs conflict on RSI fixed
+
+- New `research_lab/short_term_mean_reversion_regime_conditioned.py`: same universe, stride, and windows as `short_term_mean_reversion.py` (H-STREV01) — the "same H, different conditioning variable" case, kept as a new section in that same paper rather than a new file, per instruction to keep docs clean. Real result, all 6 cells significant (huge samples): the confirmed 1-week reversal effect holds in every regime, strongest when stressed (r=-0.069) weakest when calm (r=-0.052). The pooled 2-week result (r=-0.025) turns out to hide a real sign split this breakdown reveals: reversal persists to 2 weeks when stressed/neutral, but flips to mild continuation specifically when calm (r=+0.052) — new information the pooled test alone couldn't show.
+- Fixed a real factual conflict, not just staleness: a `schema.sql` comment claimed `rsi_overbought_exit`'s "own exit role was never tested," written in the same paragraph that cites milestone 0.29 — which *did* test it and found it real (r=-0.015, adjusted p=0.0012). Corrected the comment to state what 0.29 actually found, and narrowed the still-real gap to what's actually untested: RSI's role specifically as an exit conditional on an open `short_term_reversal_entry` position, not the unconditional signal 0.29 already validated. `timing-research/README.md` and the parent `docs/hypotheses/README.md`, which had both copied the incorrect claim this same session, corrected to match.
+- New "Data sources, by type" table in `docs/hypotheses/README.md` (market numeric / macro numeric / alternative structured / unstructured) — records the higher-level data taxonomy discussed, marking what's in use now vs. blocked, without acting on the blocked tiers yet.
+
 ### Research — H-SECT08/H-SECT09: regime velocity rejected cleanly, conjunctive XLU trigger fragile
 
 - New `research_lab/regime_velocity_opportunity.py`: does the composite's *direction* (velocity, acceleration, days since a tercile transition), not just its level, predict cross-sectional opportunity — a different mechanism than H-SECT04's already-rejected sector tilt. Clean result: 0 of 6 significant, all correlations trivially small (r=+0.01 to +0.07). No OOS check needed — a null full-sample result doesn't need out-of-sample validation the way a confirmed one does.

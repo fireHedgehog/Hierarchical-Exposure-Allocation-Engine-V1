@@ -1344,10 +1344,15 @@ INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurre
 -- consequence, not a bug: the pipeline degrades to the honest
 -- 'no_entry_signal_active' status and zero trades (engine/timing/
 -- backtest_v2.py, proven live in 0.13's retirement test), never a crash or
--- a fabricated rule. rsi_overbought_exit's own exit role was never tested
--- and is untouched -- it simply has nothing to exit from until a real entry
--- trigger is registered again. UPDATE, not a fresh INSERT OR IGNORE row,
--- because this corrects an already-seeded value on existing databases too.
+-- a fabricated rule. rsi_overbought_exit is untouched here -- that same
+-- 0.29 event study DID find its general predictive validity real
+-- (r=-0.015, adjusted p=0.0012, confirmed, +1.10% mean forward return on
+-- RSI>=70 days vs. +1.44% otherwise) -- but its specific role as an EXIT
+-- conditional on an open short_term_reversal_entry position (not the
+-- unconditional signal 0.29 tested) has not been separately isolated, so
+-- it simply has nothing real to exit from until a real entry trigger is
+-- registered again. UPDATE, not a fresh INSERT OR IGNORE row, because
+-- this corrects an already-seeded value on existing databases too.
 UPDATE strategy_components SET status = 'retired', updated_at = '2026-08-26T00:00:00Z'
 WHERE strategy_key = 'macd_rsi_single_name_timing' AND component_key = 'macd_crossover' AND status != 'retired';
 
