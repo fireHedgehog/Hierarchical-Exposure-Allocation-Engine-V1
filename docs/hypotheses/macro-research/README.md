@@ -75,7 +75,8 @@ cross-sectional factor set.
 | Paper | Status | Covers |
 | --- | --- | --- |
 | [Warsh Fed reaction function](warsh-reaction-function.md) (H-W01) | observing | Layers 1-3, chair-specific |
-| [Rate decision predictors](rate-decision-predictors.md) (H-MACRO01) | observing | All 22 layer-1 indicators vs. layer 2's Rate dimension (hike/cut only — holds not classified yet, no FOMC calendar) |
+| [Rate decision predictors](rate-decision-predictors.md) (H-MACRO01) | observing | All 22 layer-1 indicators vs. layer 2's Rate dimension (hike/cut only — holds not classified yet, no FOMC calendar). 4/22 significant. |
+| [Balance sheet predictors](balance-sheet-predictors.md) (H-MACRO02) | observing | All 23 layer-1 indicators vs. layer 2's Balance sheet dimension, continuous IC (not discrete events — see paper for why). 10/23 significant. |
 
 **One indicator-vs-target table per paper, by design** — each new layer-2/3
 target dimension (Balance sheet, Liquidity, Guidance, Equity, Credit, ...)
@@ -113,12 +114,17 @@ Still missing, real free source exists but needs new provider code (not
 FRED — `fiscaldata.treasury.gov`, keyless): Treasury auction tail,
 bid-to-cover. **Not free anywhere found:** MOVE index.
 
-**Queued, not yet built:** the same table against Balance sheet, Liquidity,
-and Guidance (layer 2's remaining dimensions — Balance sheet is likely
-derivable the same data-only way as Rate, from `WALCL`'s real week-over-week
-direction, once the reserve-management-vs-QE distinction is handled
-carefully); layer 3's market-outcome dimensions; a hold-inclusive version of
-H-MACRO01 once a real FOMC meeting calendar exists; redundancy/incremental-
-value check across NFCI/VIXCLS/T10YIE/T5YIE (H-MACRO01's own significant
-four — may be projections of one latent factor, not four); a debt-ceiling
-event study; regime-duration; regime-conditional cross-sectional performance.
+**Queued, not yet built:** Liquidity (layer 2's remaining dimensions along
+with Guidance) — real SRF/discount-window usage data doesn't have a
+confirmed clean FRED series; likely needs the NY Fed's own operation results
+(a different, unverified source), not assumed available. Guidance needs
+real FOMC statement/speech text, which this project doesn't have — an
+NLP-shaped problem, not a correlation test. Layer 3's market-outcome
+dimensions; a hold-inclusive H-MACRO01 once a real FOMC calendar exists;
+redundancy/incremental-value checks within each paper's own significant set
+(H-MACRO01's four, H-MACRO02's ten — likely fewer independent signals than
+raw counts suggest); a debt-ceiling event study; regime-duration;
+regime-conditional cross-sectional performance. **The human+agent composite
+stays queued until more of the above lands** — two dimension papers isn't
+enough to distill from yet, per the user's own stated order (more
+hypotheses first, composite after).

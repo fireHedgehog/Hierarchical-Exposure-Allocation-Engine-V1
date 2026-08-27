@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-MACRO02: balance-sheet predictors, continuous IC not discrete events
+
+- New `research_lab/balance_sheet_predictors.py`: unlike Rate's discrete FOMC steps, balance sheet is a continuous stock — a naive weekly-direction "event" would mostly capture routine operational noise, the exact QE/reserve-management conflation the framework flags. Tests each indicator's level against `WALCL`'s own forward 13-week % change instead, real Pearson + Benjamini-Hochberg.
+- Real result: 10 of 23 significant (richer than Rate's 4/22) — rate-level and credit-tightening signals predict forward contraction, NFCI's stress signal predicts forward expansion. Two credit-spread results real but confined entirely to the 2023-2025 QT window, flagged as possibly regime-specific.
+- The continuous framing gave even the shortest-history series (credit spreads n=36, SOFR n=106) enough samples to clear the floor — no "not done" rows this time, illustrating that test shape matters as much as data availability.
+
 ### Research — H-MACRO01: first indicator-vs-Rate-decision table, real ground truth derived from data
 
 - New `research_lab/rate_decision_predictors.py`: real hike/cut events derived directly from `DFEDTAR`/`DFEDTARU`/`DFEDTARL` level changes (2004-2026, no hand-curated FOMC calendar — holds deliberately not classified, disclosed as a real v1 limitation). Tests all 22 other layer-1 indicators via Pearson + Benjamini-Hochberg.
