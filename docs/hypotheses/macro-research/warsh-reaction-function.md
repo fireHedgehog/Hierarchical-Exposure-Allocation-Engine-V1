@@ -117,6 +117,11 @@ For reading a keynote or statement's text directly:
 
 Next scheduled checkpoint: Jackson Hole keynote, 2026-08-28 10:00 ET (Fed-confirmed).
 
+`asset-selection-research/gold-reaction-function.md` (H-SECT06) registered
+2026-08-27, one day ahead of this keynote, watching the same real event
+from `GLD`'s side (fiscal-dominance/debasement pricing vs. this paper's
+Fed reaction function) — worth cross-checking both after the keynote lands.
+
 ## Promotion criteria
 
 None claimed yet. This is a cold-start hypothesis with essentially zero real 2026

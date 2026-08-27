@@ -82,7 +82,12 @@ single driver explains it, it's a genuine composite effect) → H-SECT04
 (rejected — the real correlation doesn't translate into a meaningful
 allocation edge once turned into an actual weighted portfolio rule) →
 H-SECT05 (H-SECT02 narrowed — most of it was beta, not new information;
-`XLU` is the one sleeve that survives every check run). Net conclusion:
+`XLU` is the one sleeve that survives every check run). H-SECT06 (gold
+reaction function) reopens `GLD` specifically as a cold-start, ongoing
+event log — not reversing H-SECT05's finding that gold's correlation
+with the *existing* composite was mostly beta, but testing whether a
+*different*, currently-unmodeled mechanism (fiscal dominance) is doing
+something real instead. Net conclusion on the concluded papers:
 `macro_regime_composite` stays scoped to gross exposure
 (`risk_envelope_allocation`, already live); this specific sleeve-tilt
 idea is a real, tested, documented dead end, not an unexplored one.
@@ -107,6 +112,8 @@ decision, not a gap to close).
 | Breadth / diffusion (#5) | **Not researchable with this project's data** — needs individual-stock membership within each sector; this project deliberately works at the ETF/sleeve level only. Not a gap to close. |
 | Sleeve-level dispersion (a coarser breadth proxy that *is* ETF-level) | Not started; real candidate raised in discussion — cross-sectional spread/correlation among the 12 sleeves, doesn't need stock components |
 | Regime velocity (worsening vs. stably-stressed) | Not started; real candidate raised in discussion — tests the composite's direction, not just its level, not yet tried anywhere in this project |
+| Gold's own reaction function — fiscal-dominance/debasement hedge vs. Fed-dovish | **Observing.** [`gold-reaction-function.md`](gold-reaction-function.md) (H-SECT06), cold-start event log, same shape as `warsh-reaction-function.md`. 1 real checkpoint (2026-08-27). |
+| Conjunctive/constraint-based sector triggers | Not started; user's own idea, inspired by `XLU` being the one sleeve that survived every check (H-SECT05). Instead of one continuous composite IC (what H-SECT02/03/05 all tested), test whether a sleeve only shows a strong, reliable directional bias when *several* specific conditions align simultaneously (e.g. real yield rising AND credit spreads widening AND USD strong) — a genuinely different design (rule/AND-based, not linear correlation), not yet tried anywhere in this folder |
 | Crowding / convexity (#6) | Not started; likely needs an options-market or short-interest proxy, may hit the same "free data only" ceiling macro research did |
 | Regime-conditional cross-sectional performance for `cross_sectional_momentum` itself (not sleeve-level) | Still open; different from H-SECT01/02, which tested sleeves, not the production momentum strategy — also listed in [macro-research](../macro-research/README.md)'s gap table |
 
@@ -119,3 +126,4 @@ decision, not a gap to close).
 | [Sleeve driver decomposition](sleeve-driver-decomposition.md) (H-SECT03) | concluded-rejected | Which single real driver (yield/credit/vol/inflation) explains each sleeve's H-SECT02 sensitivity — none does. 1 of 48 tests significant, below the ~2.4 chance baseline. A real null supporting the composite's own design over any one raw factor. |
 | [Regime-tilted allocation backtest](regime-tilted-allocation-backtest.md) (H-SECT04) | concluded-rejected | Does tilting the 12-sleeve book by regime beat equal-weight on real OOS Sharpe/drawdown/turnover — no. OOS Sharpe improvement +0.008, economically trivial, doesn't clear its own turnover cost. Closes the loop: real correlation (H-SECT02) doesn't survive becoming an actual allocation rule. |
 | [Beta-adjusted regime sensitivity](beta-adjusted-regime-sensitivity.md) (H-SECT05) | concluded-confirmed (partial) | Does H-SECT02 survive controlling for each sleeve's own beta to SPY? Mostly no — 11/24 raw drops to 3/24 beta-adjusted. `GLD`'s headline effect was almost entirely a beta artifact. `XLU` (both windows) is the one finding that survives every check in this arc: raw, OOS, and beta-adjusted. |
+| [Gold reaction function](gold-reaction-function.md) (H-SECT06) | observing | Cold-start event log (same shape as `warsh-reaction-function.md`): is `GLD` decoupling from the real-yield/Fed-dovish mechanic toward fiscal-dominance/currency-debasement pricing? Motivated by H-SECT02/03/05's own findings (GLD's composite correlation was never explained by a single driver, and weakened out-of-sample). 1 real checkpoint so far. |

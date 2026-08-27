@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-SECT06: gold reaction function, a cold-start event log — plus a new constraint-based-trigger idea recorded
+
+- New `asset-selection-research/gold-reaction-function.md` (H-SECT06), same cold-start event-log shape as `macro-research/warsh-reaction-function.md` — not a backtest. Thesis: `GLD` is decoupling from the textbook real-yield/Fed-dovish mechanic toward pricing fiscal-dominance/currency-debasement concerns. Grounded in two pieces of already-computed in-repo evidence, not just today's news: H-SECT03 never found a single driver explaining `GLD`'s composite sensitivity, and H-SECT02's OOS split found that sensitivity weakening post-2019 — both consistent with the old mechanic fading. First real checkpoint: a 2026-08-27 Reuters report (spot ~$4,630, +0.8%) of gold rising despite a firm dollar and rising Fed-hike odds, attributed by Reuters to fiscal-deficit/debasement concerns and Treasury long-bond purchases — one day ahead of Warsh's Jackson Hole keynote, cross-referenced from `warsh-reaction-function.md` since both papers are watching the same event.
+- New restart-here entry, user's own idea inspired by `XLU` being the one sleeve that survived every check in H-SECT01-05: a conjunctive/constraint-based trigger design (does a sleeve show a strong signal only when *several* macro conditions align simultaneously, e.g. real yield rising AND credit widening AND USD strong) instead of one continuous composite IC. Registered as an open question, not yet run.
+
 ### Research — H-SECT05: beta-adjustment narrows H-SECT02 — most of it was beta, not new information
 
 - User asked directly whether H-SECT02's finding was genuinely new information, given `XLU`/`XLP` are well-known low-beta sleeves and the composite already predicts SPY drawdown odds (H-MACRO09) — a real hole caught before H-SECT02 was treated as settled: raw `R_sleeve − R_SPY` never controlled for each sleeve's own beta.
