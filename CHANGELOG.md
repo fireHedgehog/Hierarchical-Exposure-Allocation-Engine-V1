@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-SECT01 v2: trend-regime-conditioned re-test — the rejection holds within regimes too
+
+- User's own direct methodological point: this project's experiments have all tested pooled, unconditional relationships, but a real market participant conditions on real, standard, explainable market state (price above its own moving average) -- not the same category as an arbitrary post-hoc transform. Confirmed as correct and legitimate (same category as the already-used macro-regime conditioning), then tested directly rather than left as a general claim.
+- New `research_lab/section_leadership_persistence_trend_conditioned.py`: reused H-SECT01's own rigorous non-overlapping-block method unchanged, split each block transition by a real SPY trend filter (5-day vs. 20-day moving average -- bullish/bearish/mixed) at the transition date.
+- Result: rejected in every regime. Bullish 36/99=36.4% (p=0.52), bearish 13/39=33.3% (p=1.00, exactly chance), mixed 36/117=30.8% (p=0.62) -- all indistinguishable from the 33.3% baseline. Strengthens, not just repeats, the original H-SECT01 rejection: rules out "the pooled null was hiding a real bull-market trend-following effect." The trend-regime filter itself is now a real, reusable methodology for future papers (e.g. H-SECT10).
+
 ### Research — H-SECT10: theme relative strength vs. broad index — clean rejection
 
 - User's own well-motivated question: does `SMH`/`IGV` (never tested anywhere in H-SECT01-09's universe) show real relative strength persistence against a *specific* broad index (`QQQ`/`SPY`/`DIA`, one at a time, not pooled with the other sleeves) at short "a few weeks" windows — a genuinely different specification from H-SECT01's sector-vs-sector-pool rejection.

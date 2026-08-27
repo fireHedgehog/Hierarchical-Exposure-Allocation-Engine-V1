@@ -1,7 +1,7 @@
 # Section leadership persistence (H-SECT01)
 
-Status: concluded-rejected (persistence, at the rigorous non-overlapping test — see Observation log); regime interaction not separately evaluated, its test shares the same confound
-Version: v0.2
+Status: concluded-rejected (persistence, at the rigorous non-overlapping test); v2 addendum confirms the rejection holds within a real SPY trend regime too, not just pooled — see Observation log.
+Version: v0.3
 Registered: 2026-08-27
 Concluded: 2026-08-27
 
@@ -111,3 +111,38 @@ implied by a confirmed result here).
 | 2026-08-27 | Real run, `research_lab/section_leadership_persistence.py`, dataset `real-macro-f7bd88ff-07eb-46d3-877f-701968666524`. 9 sectors, 5,468 real trading days (2004-2026), 1,480 real leadership episodes. | **Daily test (as designed): appeared to confirm.** Real median episode duration 3.0 trading days vs. permutation-null median 1.0 (1,000 reps) — empirical p=0.0010. But this test has a real confound not caught until after running it: a trailing-63-day window shares 62 of 63 days with the next day's window, so day-to-day rank stability is partly *mechanical*, not necessarily economic — the daily null breaks all cross-day correlation, which is a much weaker bar than genuine persistence needs to clear. |
 | 2026-08-27 | Same run, added mid-session after noticing the confound: non-overlapping 63-day block test — independent windows only, no shared days between consecutive rankings. 86 real blocks. | **Rejected at the rigorous test.** P(sector stays a leader in the next independent quarter, given it led this quarter) = 85/255 = 33.3% — *exactly* the 33.3% (3-of-9) chance rate. Binomial test vs. chance: p=0.5235, not significant. Sector leadership at a quarterly, non-overlapping horizon is statistically indistinguishable from random rotation. This is the real result — the daily test's apparent confirmation was the mechanical artifact, not a false alarm caught cheaply thanks to running both. |
 | 2026-08-27 | Regime interaction (Kruskal-Wallis across `macro_regime_composite` terciles at episode entry) | H=6.053, p=0.0485 — technically significant, but built on the daily-episode definition now known to be confound-dominated. Not promoted as a standalone finding: testing "does regime affect a mostly-mechanical duration statistic" isn't the same claim as "does regime affect real leadership persistence," and claim 1 (the thing regime would be conditioning) was rejected at the test that actually isolates it. Revisiting this properly would mean re-running the regime split on the block-level (quarterly) transition, not the daily episode list — real follow-up work, not done here. |
+
+## v2 addendum: trend-conditioned re-test (same H, real market filter, kept in this file)
+
+User's own direct methodological point: this project's experiments
+have all tested pooled, unconditional relationships — but a real
+market participant conditions on real, standard, *explainable* market
+state (e.g. "is price above its own moving average," not an arbitrary
+transform chosen after seeing results). That's the same legitimate
+category as `macro_regime_composite` conditioning already used
+elsewhere (e.g. this folder's own H-STREV addendum) — not overfitting,
+as long as the filter is real, pre-specified, and disclosed before
+running, which this is. Direct test of the classic claim: does
+trend-following/leadership persistence get real in a genuine bull
+trend, even though it was rejected pooled.
+
+**Method** (`research_lab/section_leadership_persistence_trend_conditioned.py`):
+same real, rigorous non-overlapping 63-day block test as the row
+above — reused directly, not redesigned. Each block-to-block
+transition split by a real, standard trend filter on `SPY` (5-day vs.
+20-day moving average, price above both = bullish, below both =
+bearish, otherwise mixed) as of the transition date, not a macro
+factor this time — a genuinely different conditioning variable.
+
+| Date | Checkpoint | Reading |
+| --- | --- | --- |
+| 2026-08-28 | Real run, same dataset, 86 real blocks split by real SPY trend regime at each transition. | **Rejected in every regime — the pooled null isn't hiding a real bull-market effect.** Bullish: 36/99 = 36.4% (vs. 33.3% chance), p=0.524. Bearish: 13/39 = 33.3%, p=1.000 (exactly chance). Mixed: 36/117 = 30.8%, p=0.624. All three real, disclosed sample sizes (39-117 transitions), none significant, none close. |
+
+**Reading this honestly:** the user's methodological point was correct
+and worth testing directly — a real, pre-specified market-state filter
+is not "making the experiment dirty." But applying it here doesn't
+rescue H-SECT01: sector leadership persistence stays exactly
+chance-level whether the market is trending up, down, or sideways at
+the moment of handoff. This strengthens, not just repeats, the
+original rejection — it rules out "the pooled test just averaged away
+a real bull-market effect" as an explanation for the null.
