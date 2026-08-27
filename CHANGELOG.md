@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-MACRO01: first indicator-vs-Rate-decision table, real ground truth derived from data
+
+- New `research_lab/rate_decision_predictors.py`: real hike/cut events derived directly from `DFEDTAR`/`DFEDTARU`/`DFEDTARL` level changes (2004-2026, no hand-curated FOMC calendar — holds deliberately not classified, disclosed as a real v1 limitation). Tests all 22 other layer-1 indicators via Pearson + Benjamini-Hochberg.
+- Real result: 4 of 22 significant — NFCI, VIXCLS, T10YIE, T5YIE (all market-based/forward-looking; none of the slower macro releases individually predicted direction). `BAMLH0A0HYM2`/`BAMLC0A0CM` correctly landed "not done — only 6 real events in their 3-year window," exactly the honest-gap case this format was designed to surface.
+- 3 more free FRED series added to production (`DFEDTAR`, `DFEDTARU`, `DFEDTARL`) for this ground truth; caught and fixed a real `None`-handling gap in `fetch_data.py`/`validate_data.py` for DFEDTAR's permanent discontinuation before it broke anything downstream.
+
 ### Engine — 14 new free FRED series fetched into production, live-verified
 
 - `SERIES_METADATA` (`common.py`) extended from 8 to 22 series — `fred_observations` is already series-agnostic, so no schema change. Every candidate verified live against the real FRED API before being wired in (a wrong ID hard-fails the whole fetch stage).

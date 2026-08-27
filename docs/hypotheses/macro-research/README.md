@@ -75,6 +75,15 @@ cross-sectional factor set.
 | Paper | Status | Covers |
 | --- | --- | --- |
 | [Warsh Fed reaction function](warsh-reaction-function.md) (H-W01) | observing | Layers 1-3, chair-specific |
+| [Rate decision predictors](rate-decision-predictors.md) (H-MACRO01) | observing | All 22 layer-1 indicators vs. layer 2's Rate dimension (hike/cut only — holds not classified yet, no FOMC calendar) |
+
+**One indicator-vs-target table per paper, by design** — each new layer-2/3
+target dimension (Balance sheet, Liquidity, Guidance, Equity, Credit, ...)
+gets its own paper testing all indicators against it, not one giant matrix.
+Once several exist, they get correlated against each other and distilled
+into a real composite — weighting scheme genuinely undetermined, not
+assumed; a real design question for when there's more than one dimension's
+real result to weigh.
 
 ## Fetched, not yet tested
 
@@ -104,9 +113,12 @@ Still missing, real free source exists but needs new provider code (not
 FRED — `fiscaldata.treasury.gov`, keyless): Treasury auction tail,
 bid-to-cover. **Not free anywhere found:** MOVE index.
 
-**Queued, not yet built:** research cards per indicator (hypothesis,
-expected vs. observed, incremental value); extending
-`macro_regime_composite`'s own significance-test extraction to include these
-14; a debt-ceiling-raise event study; regime-duration ("higher for longer,
-how long"); regime-conditional cross-sectional performance (connects this
-folder to `cross_sectional_momentum`).
+**Queued, not yet built:** the same table against Balance sheet, Liquidity,
+and Guidance (layer 2's remaining dimensions — Balance sheet is likely
+derivable the same data-only way as Rate, from `WALCL`'s real week-over-week
+direction, once the reserve-management-vs-QE distinction is handled
+carefully); layer 3's market-outcome dimensions; a hold-inclusive version of
+H-MACRO01 once a real FOMC meeting calendar exists; redundancy/incremental-
+value check across NFCI/VIXCLS/T10YIE/T5YIE (H-MACRO01's own significant
+four — may be projections of one latent factor, not four); a debt-ceiling
+event study; regime-duration; regime-conditional cross-sectional performance.
