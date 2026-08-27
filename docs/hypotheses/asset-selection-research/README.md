@@ -87,7 +87,13 @@ reaction function) reopens `GLD` specifically as a cold-start, ongoing
 event log — not reversing H-SECT05's finding that gold's correlation
 with the *existing* composite was mostly beta, but testing whether a
 *different*, currently-unmodeled mechanism (fiscal dominance) is doing
-something real instead. Net conclusion on the concluded papers:
+something real instead. H-SECT07-09 asked a higher-level question —
+park *direction*, test whether real opportunity/differentiation itself
+is predictable: H-SECT07 (dispersion) found a real full-sample pattern
+that didn't survive an OOS check; H-SECT08 (regime velocity) was a
+clean, unambiguous null; H-SECT09 (conjunctive `XLU` trigger) found a
+significant-but-fragile result driven by a 3-observation extreme
+bucket. Net conclusion on the concluded papers:
 `macro_regime_composite` stays scoped to gross exposure
 (`risk_envelope_allocation`, already live); this specific sleeve-tilt
 idea is a real, tested, documented dead end, not an unexplored one.
@@ -111,7 +117,8 @@ decision, not a gap to close).
 | Theme leadership / marginal-flow detection (#4) | Not started; no data source identified yet for "capital flow," may need a proxy |
 | Breadth / diffusion (#5) | **Not researchable with this project's data** — needs individual-stock membership within each sector; this project deliberately works at the ETF/sleeve level only. Not a gap to close. |
 | Sleeve dispersion / opportunity-set | **Run, inconclusive.** [H-SECT07](sleeve-dispersion-opportunity.md): 6/10 significant full-sample, but 0/10 out-of-sample (same sign, plausibly underpowered, not reversed). Real but unconfirmed — don't build on it as a settled gate yet. |
-| Regime velocity (worsening vs. stably-stressed) — does it change cross-sectional dispersion/opportunity, not re-run sector tilt | Not started; queued as priority 2, contingent on H-SECT07's ambiguous result |
+| Regime velocity (worsening vs. stably-stressed) — does it change cross-sectional dispersion/opportunity | **Rejected, cleanly.** [H-SECT08](regime-velocity-opportunity.md): 0/6 significant, all r trivially small. No OOS check needed — a null full-sample result doesn't need it the way a confirmed one does. |
+| Conjunctive `XLU` trigger (multiple clusters aligned) | **Run, inconclusive.** [H-SECT09](conjunctive-xlu-trigger.md): IC significant both windows (p=0.02-0.04), but driven substantially by a 3-observation extreme bucket (all 3 clusters stressed). The more robust sub-pattern (any alignment beats none, n=105+) is closer to "already known from H-SECT02/05" than a real conjunctive effect. |
 | Gold's own reaction function — fiscal-dominance/debasement hedge vs. Fed-dovish | **Observing.** [`gold-reaction-function.md`](gold-reaction-function.md) (H-SECT06), cold-start event log, same shape as `warsh-reaction-function.md`. 1 real checkpoint (2026-08-27). |
 | Conjunctive/constraint-based sector triggers | Not started; user's own idea, inspired by `XLU` being the one sleeve that survived every check (H-SECT05). Instead of one continuous composite IC (what H-SECT02/03/05 all tested), test whether a sleeve only shows a strong, reliable directional bias when *several* specific conditions align simultaneously (e.g. real yield rising AND credit spreads widening AND USD strong) — a genuinely different design (rule/AND-based, not linear correlation), not yet tried anywhere in this folder |
 | Crowding / convexity (#6) | Not started; likely needs an options-market or short-interest proxy, may hit the same "free data only" ceiling macro research did |
@@ -128,3 +135,5 @@ decision, not a gap to close).
 | [Beta-adjusted regime sensitivity](beta-adjusted-regime-sensitivity.md) (H-SECT05) | concluded-confirmed (partial) | Does H-SECT02 survive controlling for each sleeve's own beta to SPY? Mostly no — 11/24 raw drops to 3/24 beta-adjusted. `GLD`'s headline effect was almost entirely a beta artifact. `XLU` (both windows) is the one finding that survives every check in this arc: raw, OOS, and beta-adjusted. |
 | [Gold reaction function](gold-reaction-function.md) (H-SECT06) | observing | Cold-start event log (same shape as `warsh-reaction-function.md`): is `GLD` decoupling from the real-yield/Fed-dovish mechanic toward fiscal-dominance/currency-debasement pricing? Motivated by H-SECT02/03/05's own findings (GLD's composite correlation was never explained by a single driver, and weakened out-of-sample). 1 real checkpoint so far. |
 | [Sleeve dispersion / opportunity-set](sleeve-dispersion-opportunity.md) (H-SECT07) | concluded-inconclusive | Does currently-observable cross-sectional dispersion predict forward opportunity (bigger realized spread)? 6/10 significant full-sample (r=0.18-0.34, `dispersion`/`top3_minus_bottom3`/`leadership_gap`) — but 0/10 out-of-sample. Same sign throughout, plausibly underpowered rather than reversed, but doesn't clear this arc's usual bar. Real, not yet confirmed. |
+| [Regime velocity vs. opportunity](regime-velocity-opportunity.md) (H-SECT08) | concluded-rejected | Does regime *direction* (velocity/acceleration/days-since-transition), not just level, predict cross-sectional opportunity? No — 0/6 significant, trivially small correlations. A clean null, no ambiguity. |
+| [Conjunctive XLU trigger](conjunctive-xlu-trigger.md) (H-SECT09) | concluded-inconclusive | Is `XLU`'s edge stronger when multiple macro clusters simultaneously stress, beyond the aggregate composite already tested? IC significant both windows but driven substantially by a 3-observation extreme bucket — fragile, not confidently established at this sample size. |

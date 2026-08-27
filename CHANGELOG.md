@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-SECT08/H-SECT09: regime velocity rejected cleanly, conjunctive XLU trigger fragile
+
+- New `research_lab/regime_velocity_opportunity.py`: does the composite's *direction* (velocity, acceleration, days since a tercile transition), not just its level, predict cross-sectional opportunity — a different mechanism than H-SECT04's already-rejected sector tilt. Clean result: 0 of 6 significant, all correlations trivially small (r=+0.01 to +0.07). No OOS check needed — a null full-sample result doesn't need out-of-sample validation the way a confirmed one does.
+- New `research_lab/conjunctive_xlu_trigger.py`: is `XLU`'s real, beta-adjusted regime sensitivity (H-SECT05) stronger when multiple macro clusters simultaneously stress, beyond the aggregate composite already tested — deliberately narrow (only `XLU`, only the 3 production clusters, no combinatorial sweep across raw indicators). Real, significant IC at both windows (p=0.02-0.04), but honestly disclosed as fragile: driven substantially by a 3-observation extreme bucket (all 3 clusters stressed simultaneously, mean beta-adj return +5.49%/+7.27%). The more robust sub-pattern on larger samples (any alignment beats none) is closer to restating H-SECT02/05 than a genuine conjunctive effect. Recorded `concluded-inconclusive`, not confirmed.
+- Both papers close out the priority list from the user's own roadmap (dispersion → regime velocity → conjunctive trigger). `asset-selection-research/README.md` updated across all tables.
+
 ### Research — H-SECT07: sleeve dispersion / opportunity-set — real full-sample pattern, doesn't clear out-of-sample
 
 - New `research_lab/sleeve_dispersion_opportunity.py`: does currently-observable cross-sectional dispersion among the 12 sleeves (5 real state variables: dispersion, mean pairwise correlation, top3-minus-bottom3, leadership gap, sleeve breadth) predict how much real spread exists in the *forward* period — the "is there an opportunity to select at all" question, asked before "which sleeve wins" (already rejected at the trend level, H-SECT01).
