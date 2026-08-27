@@ -91,6 +91,7 @@ cross-sectional factor set.
 | [Composite forward risk](composite-forward-risk.md) (H-MACRO09) | observing | Reframed composite test (risk-context, not timing): stressed reading is 5-7x more likely to precede a real ≥10% SPY drawdown within 3-6mo (p<0.0001 both windows). |
 | [Composite forward risk — out-of-sample](composite-forward-risk-oos.md) | observing | Chronological split at 2019-01-01. Replicates cleanly on held-out data; 6mo effect is *stronger* out-of-sample (+42.9pp vs. +21.8pp in-sample) — the opposite of overfitting. |
 | [Composite threshold sensitivity](composite-threshold-sensitivity.md) | observing | 14/16 threshold×split combinations significant. 6-month window robust across every choice tested — not an artifact of the original -10%/tercile pick. |
+| [Exposure policy calibration](exposure-policy-calibration.md) (H-MACRO10) | preregistered | Flags a real conceptual gap (external review): `risk_envelope_allocation`'s confidence→gross-multiplier mapping is a *separate, untested* hypothesis from H-MACRO09's validated confidence→drawdown-probability finding. No experiment run yet. |
 
 **Layer 3 complete** — all 5 market-outcome dimensions (Equity, Credit,
 Volatility, Duration, USD) now have a real indicator-vs-target table.
@@ -164,6 +165,7 @@ rather than re-deriving what's missing.
 | Regime-duration ("higher for longer, how long") | Never started | Same duration-distribution method already scoped for H-BETA02, applied to a regime state |
 | Regime-conditional cross-sectional performance | Never started | Does `cross_sectional_momentum`'s edge change across `macro_regime_composite` states — connects this folder to the cross-sectional layer |
 | Composite threshold/design alternatives beyond what was tested | Naive-v1 bar accepted this as shippable, not because it's optimal | Compare cluster-equal-weighting against IC-weighted alternatives, once there's appetite for a deeper pass |
+| Exposure policy calibration (H-MACRO10) — does confidence's validated drawdown-probability actually calibrate to `risk_envelope_allocation`'s 0.5x-1.5x gross multiplier | Never started; a portfolio-optimization/utility question, not a correlation test | Real out-of-sample backtest: static vs. scaled exposure on Sharpe/drawdown — see the paper |
 
 ## [Composite methodology (design v1)](composite-methodology-v1.md)
 

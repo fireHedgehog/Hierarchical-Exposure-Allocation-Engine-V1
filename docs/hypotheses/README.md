@@ -52,7 +52,8 @@ noted otherwise.
 
 | Hypothesis | Type of evidence | Status | Real finding | Dataset |
 | --- | --- | --- | --- | --- |
-| [Macro research](macro-research/README.md) (subfolder) | 3-layer input/response/outcome framework, own index | in progress | 8 real papers (H-MACRO01-08): layer 2 Rate/Balance sheet, all 5 layer-3 outcomes, plus the redundancy check — 17-23 raw indicators reduce to ~4 real independent factor clusters. Composite design next. | n/a |
+| [Macro research](macro-research/README.md) (subfolder) | 3-layer input/response/outcome framework, own index | in progress | 10 real papers (H-MACRO01-10 + Warsh). Composite (`macro_regime_composite`) live at naive-v3 with real out-of-sample-validated forward-drawdown evidence (H-MACRO09). H-MACRO10 flags the confidence→gross-exposure mapping as a separate, still-untested hypothesis. | n/a |
+| [Asset selection research](asset-selection-research/README.md) (subfolder) | cross-sectional selection framework, own index | scope only | Which sector/asset-class/theme to hold, separate from single-name timing and the already-registered momentum ranking. No papers run yet. | n/a |
 | [Time-series momentum](time-series-momentum.md) | continuous (IC vs. real forward return) | concluded-rejected | Opposite direction at every horizon; replicated on 2004-26 but weaker (only 2 of 5 horizons still significant, was 5 of 5) | 2016+, 2004+ |
 | [Low-volatility anomaly](low-volatility-anomaly.md) | continuous (IC vs. real forward return) | concluded-rejected (raw return) | Opposite direction — volatile beat calm | 2016+ |
 | [Short-term mean reversion](short-term-mean-reversion.md) | continuous (IC vs. real forward return) | concluded-confirmed (1-week window) | Confirmed and strengthened on 2004-26: r=-0.057 (was -0.02), and now significant at 2 weeks too (was not) | 2016+, 2004+ |
