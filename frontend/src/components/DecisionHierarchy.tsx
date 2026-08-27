@@ -12,6 +12,34 @@ import {
 } from "../utils/format";
 import { ProvenanceStrip, StatusPill, Unavailable } from "./Ui";
 
+export function RegimeConsole({ regime }: { regime?: Regime | null }) {
+  return (
+    <div className="regime-console">
+      <div className="regime-console__lead">
+        <div className="regime-icon" aria-hidden="true">
+          <Gauge />
+        </div>
+        <div>
+          <p className="eyebrow">State modifier</p>
+          <h3>{regime?.label || NOT_AVAILABLE}</h3>
+          <p>{regime?.summary || "No persisted regime summary is available."}</p>
+        </div>
+        <div className="regime-confidence">
+          <span>Confidence</span>
+          <strong>{formatPercent(regime?.confidence)}</strong>
+        </div>
+      </div>
+
+      <RegimeFactorDetail
+        filters={regime?.filters}
+        weights={regime?.weights}
+        contributions={regime?.contributions}
+      />
+      <ProvenanceStrip provenance={regime} compact />
+    </div>
+  );
+}
+
 export function DecisionHierarchy({
   regime,
   graph,
@@ -24,29 +52,7 @@ export function DecisionHierarchy({
 
   return (
     <div className="hierarchy-layout">
-      <div className="regime-console">
-        <div className="regime-console__lead">
-          <div className="regime-icon" aria-hidden="true">
-            <Gauge />
-          </div>
-          <div>
-            <p className="eyebrow">State modifier</p>
-            <h3>{regime?.label || NOT_AVAILABLE}</h3>
-            <p>{regime?.summary || "No persisted regime summary is available."}</p>
-          </div>
-          <div className="regime-confidence">
-            <span>Confidence</span>
-            <strong>{formatPercent(regime?.confidence)}</strong>
-          </div>
-        </div>
-
-        <RegimeFactorDetail
-          filters={regime?.filters}
-          weights={regime?.weights}
-          contributions={regime?.contributions}
-        />
-        <ProvenanceStrip provenance={regime} compact />
-      </div>
+      <RegimeConsole regime={regime} />
 
       {grouped.length ? (
         <div className="hierarchy-flow" aria-label="Top-down allocation hierarchy">

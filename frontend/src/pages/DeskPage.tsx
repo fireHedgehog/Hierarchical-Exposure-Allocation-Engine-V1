@@ -3,7 +3,7 @@ import { endpoints, useApi } from "../api/client";
 import { CrossSectionMatrix } from "../components/CrossSectionMatrix";
 import { DataHealth } from "../components/DataHealth";
 import { DecisionHero } from "../components/DecisionHero";
-import { DecisionHierarchy } from "../components/DecisionHierarchy";
+import { DecisionHierarchy, RegimeConsole } from "../components/DecisionHierarchy";
 import { MetricsGrid } from "../components/MetricsGrid";
 import { PhilosophyPanel } from "../components/PhilosophyPanel";
 import { PositionCandidates } from "../components/PositionCandidates";
@@ -50,6 +50,7 @@ export function DeskPage() {
             </div>
             <h2 className="sr-only" id="today-decision-title">Latest persisted portfolio decision</h2>
             <DecisionHero recommendation={desk.data.recommendation} snapshot={desk.data.snapshot} />
+            <RegimeConsole regime={desk.data.regime} />
           </section>
 
           <Panel>
