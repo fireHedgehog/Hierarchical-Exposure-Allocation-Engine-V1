@@ -1,4 +1,4 @@
-import { ArrowDown, Braces, CircleDot, Filter, Gauge, GitBranch, Scale } from "lucide-react";
+import { ArrowDown, Braces, CircleDot, Gauge, GitBranch } from "lucide-react";
 import type { DecisionEdge, DecisionGraph, DecisionNode, Regime } from "../types";
 import {
   formatPercent,
@@ -40,11 +40,11 @@ export function DecisionHierarchy({
           </div>
         </div>
 
-        <div className="regime-console__grid">
-          <RegimeFilters filters={regime?.filters} />
-          <RegimeWeights weights={regime?.weights} />
-          <RegimeContributions contributions={regime?.contributions} />
-        </div>
+        <RegimeFactorDetail
+          filters={regime?.filters}
+          weights={regime?.weights}
+          contributions={regime?.contributions}
+        />
         <ProvenanceStrip provenance={regime} compact />
       </div>
 
@@ -233,113 +233,92 @@ function HierarchyNode({
   );
 }
 
-function RegimeFilters({ filters }: { filters?: Regime["filters"] }) {
-  return (
-    <div className="regime-module">
-      <div className="regime-module__title">
-        <Filter aria-hidden="true" size={15} />
-        <h4>Filters</h4>
-      </div>
-      {filters?.length ? (
-        <div className="filter-stack">
-          {filters.map((filter) => (
-            <div className="filter-row" key={filter.name}>
-              <div>
-                <strong>{filter.name}</strong>
-                {filter.explanation ? <small>{filter.explanation}</small> : null}
-              </div>
-              <span>{formatScalar(filter.value)}</span>
-              <span className="filter-threshold">vs {formatScalar(filter.threshold)}</span>
-              <StatusPill value={filter.status} tone={toneForStatus(filter.status)} />
-              <details className="filter-provenance">
-                <summary>Input provenance</summary>
-                <dl>
-                  <div><dt>Source</dt><dd>{filter.source_key || filter.source_name || NOT_AVAILABLE}</dd></div>
-                  <div><dt>Observed</dt><dd>{formatTimestamp(filter.observed_at)}</dd></div>
-                  <div><dt>Available</dt><dd>{formatTimestamp(filter.available_at)}</dd></div>
-                  <div><dt>Ingested</dt><dd>{formatTimestamp(filter.ingested_at)}</dd></div>
-                </dl>
-              </details>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <Unavailable compact />
-      )}
-    </div>
-  );
-}
+function RegimeFactorDetail({
+  filters,
+  weights,
+  contributions,
+}: {
+  filters?: Regime["filters"];
+  weights?: Regime["weights"];
+  contributions?: Regime["contributions"];
+}) {
+  const weightByName = new Map((weights ?? []).map((item) => [item.name, item]));
+  const contributionByName = new Map((contributions ?? []).map((item) => [item.name, item]));
+  const rows = filters ?? [];
 
-function RegimeWeights({ weights }: { weights?: Regime["weights"] }) {
-  const maximum = Math.max(...(weights ?? []).map((item) => Math.abs(item.value ?? 0)), 0);
-  return (
-    <div className="regime-module">
-      <div className="regime-module__title">
-        <Scale aria-hidden="true" size={15} />
-        <h4>Conditional weights</h4>
-      </div>
-      {weights?.length ? (
-        <div className="weight-stack">
-          {weights.map((weight) => {
-            const width = maximum && isFiniteNumber(weight.value) ? (Math.abs(weight.value) / maximum) * 100 : 0;
-            return (
-              <div className="weight-row" key={weight.name}>
-                <div>
-                  <span>{weight.name}</span>
-                  <b>{formatScalar(weight.value, weight.unit)}</b>
-                </div>
-                <span className="mini-bar" aria-hidden="true">
-                  <i style={{ width: `${width}%` }} />
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
+  if (!rows.length) {
+    return (
+      <div className="regime-factor-detail">
         <Unavailable compact />
-      )}
-    </div>
-  );
-}
+      </div>
+    );
+  }
 
-function RegimeContributions({ contributions }: { contributions?: Regime["contributions"] }) {
   return (
-    <div className="regime-module regime-module--wide">
-      <div className="regime-module__title">
-        <Braces aria-hidden="true" size={15} />
-        <h4>Contributions</h4>
+    <details className="regime-factor-detail">
+      <summary>
+        <Braces aria-hidden="true" size={14} />
+        <span>Factor detail ({rows.length})</span>
+      </summary>
+      <div className="regime-factor-table-wrap">
+        <table className="regime-factor-table">
+          <thead>
+            <tr>
+              <th scope="col">Factor</th>
+              <th scope="col">Current</th>
+              <th scope="col">Trailing basis</th>
+              <th scope="col">Weight</th>
+              <th scope="col">Direction</th>
+              <th scope="col" aria-label="More" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((filter) => {
+              const weight = weightByName.get(filter.name);
+              const contribution = contributionByName.get(filter.name);
+              const hasDetail = Boolean(filter.explanation || contribution?.explanation || contribution?.evidence?.length);
+              return (
+                <tr key={filter.name}>
+                  <td>
+                    <strong>{filter.name}</strong>
+                    <StatusPill value={filter.status} tone={toneForStatus(filter.status)} />
+                  </td>
+                  <td>{formatScalar(filter.value)}</td>
+                  <td>{formatScalar(filter.threshold)}</td>
+                  <td>{formatScalar(weight?.value, weight?.unit)}</td>
+                  <td className={`tone-${toneForDirection(contribution?.direction)}`}>
+                    {contribution?.direction ? humanize(contribution.direction) : NOT_AVAILABLE}
+                  </td>
+                  <td>
+                    {hasDetail ? (
+                      <details className="regime-factor-row-detail">
+                        <summary>More</summary>
+                        {filter.explanation ? <p>{filter.explanation}</p> : null}
+                        {contribution?.explanation ? <p>{contribution.explanation}</p> : null}
+                        {contribution?.evidence?.length ? (
+                          <dl>
+                            {contribution.evidence.map((evidence, index) => (
+                              <div key={`${evidence.label}-${index}`}>
+                                <dt>{evidence.label}</dt>
+                                <dd>{formatScalar(evidence.value)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        ) : null}
+                        <dl>
+                          <div><dt>Source</dt><dd>{filter.source_key || filter.source_name || NOT_AVAILABLE}</dd></div>
+                          <div><dt>Observed</dt><dd>{formatTimestamp(filter.observed_at)}</dd></div>
+                          <div><dt>Available</dt><dd>{formatTimestamp(filter.available_at)}</dd></div>
+                        </dl>
+                      </details>
+                    ) : null}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-      {contributions?.length ? (
-        <div className="contribution-stack">
-          {contributions.map((contribution) => (
-            <details className="contribution-row" key={contribution.name}>
-              <summary>
-                <div>
-                  <strong>{contribution.name}</strong>
-                  <span>{contribution.explanation || NOT_AVAILABLE}</span>
-                </div>
-                <b className={`tone-${toneForDirection(contribution.direction)}`}>
-                  {formatScalar(contribution.value, contribution.unit)}
-                </b>
-              </summary>
-              {contribution.evidence?.length ? (
-                <dl>
-                  {contribution.evidence.map((evidence, index) => (
-                    <div key={`${evidence.label}-${index}`}>
-                      <dt>{evidence.label}</dt>
-                      <dd>{formatScalar(evidence.value)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <Unavailable compact />
-              )}
-            </details>
-          ))}
-        </div>
-      ) : (
-        <Unavailable compact />
-      )}
-    </div>
+    </details>
   );
 }

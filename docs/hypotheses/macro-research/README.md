@@ -146,18 +146,24 @@ check below has to test before anyone calls it that.
 not 17-26 indicators — inflation/growth, rate level, market stress, policy
 operations. This is the concrete input for composite design.
 
-**Still queued:**
-- Liquidity (SRF/discount-window — no confirmed clean FRED series, likely
-  needs the NY Fed's own operation results, unverified) and Guidance (needs
-  real FOMC text, an NLP problem, not a correlation test) — both real,
-  named gaps, not silently skipped.
-- A hold-inclusive H-MACRO01 once a real FOMC meeting calendar exists.
-- A debt-ceiling event study; regime-duration; regime-conditional
-  cross-sectional performance.
-
 **8 real papers now exist** (2 layer-2 dimensions, all 5 layer-3 dimensions,
 plus the redundancy check) — the free-data potential in what's readily
-fetchable is largely mined for a first pass.
+fetchable is largely mined for a first pass, and the composite is live at
+naive-v3. If this gets picked up again, restart from the table below
+rather than re-deriving what's missing.
+
+## Restart-here: every known gap, in one place
+
+| Gap | Why it's parked | What would close it |
+| --- | --- | --- |
+| Policy-operations cluster (WALCL/WTREGEN/IORB/SOFR) not in the live composite | Sign genuinely ambiguous — balance-sheet expansion can mean crisis liquidity injection (risk-off) or accommodative ease (risk-on), context-dependent | A real sub-hypothesis distinguishing the two cases before assigning any sign, not a guess |
+| Liquidity dimension (SRF/discount-window) | No confirmed clean free FRED series | Verify whether the NY Fed's own operation-result data is usable; if not, stays parked |
+| Guidance dimension (Fed speech/statement tone) | Needs real text, an NLP problem, not a correlation test | Real FOMC statement/speech text source — none connected yet |
+| H-MACRO01 (Rate) has no "Hold" outcome | No real FOMC meeting calendar in this project | Curate or source a real meeting-date calendar, then re-run with 3-class outcomes |
+| Debt-ceiling event study | Never started | Curate real debt-ceiling-raise dates (legislative record, free); small-N event study, same shape as the Warsh paper |
+| Regime-duration ("higher for longer, how long") | Never started | Same duration-distribution method already scoped for H-BETA02, applied to a regime state |
+| Regime-conditional cross-sectional performance | Never started | Does `cross_sectional_momentum`'s edge change across `macro_regime_composite` states — connects this folder to the cross-sectional layer |
+| Composite threshold/design alternatives beyond what was tested | Naive-v1 bar accepted this as shippable, not because it's optimal | Compare cluster-equal-weighting against IC-weighted alternatives, once there's appetite for a deeper pass |
 
 ## [Composite methodology (design v1)](composite-methodology-v1.md)
 

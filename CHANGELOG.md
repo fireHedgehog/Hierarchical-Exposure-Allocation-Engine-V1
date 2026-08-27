@@ -4,6 +4,17 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Frontend — Methodology page stale-content fix; compact regime factor accordion
+
+- Real, user-caught bug: `MethodologyPage.tsx`'s cross-sectional-momentum and single-name-timing cards still described the retired naive-v2 code (`momentum_v2.py`, MACD entry) even though both were promoted to naive-v3 earlier this session (12-1 momentum, short-term reversal entry) — the page was never updated when the backend changed. Both cards rewritten to describe what's actually live.
+- `DecisionHierarchy.tsx`'s regime console rebuilt: the always-visible 3-section factor grid (Filters/Weights/Contributions, verbose even at 8 factors, worse at naive-v3's 13) replaced with one compact table inside a single collapsed-by-default accordion — factor, current value, trailing basis, weight, direction in one row, with per-row detail (evidence, provenance) a click away. Regime label/summary/confidence stay always-visible; nothing else does until opened.
+- Dead CSS removed (`.filter-row`, `.weight-row`, `.contribution-row` and related — verified unused elsewhere first), replaced with new compact-table styles.
+- `tsc` clean, 52 frontend tests passing, production build succeeds.
+
+### Research — macro-research restart-gap table
+
+- `docs/hypotheses/macro-research/README.md` gained one consolidated "Restart-here" table listing every known gap (policy-operations cluster, Liquidity, Guidance, hold-inclusive Rate test, debt-ceiling study, regime-duration, regime-conditional cross-sectional performance, threshold alternatives) with why it's parked and what would close it — previously scattered across several prose sections.
+
 ### Engine — macro_regime_composite promoted to naive-v3: real z-score clusters, calibrated confidence
 
 - New `backend/engine/regime/scoring_v3.py`: 13 factors in 3 real evidence-based clusters (H-MACRO08), each a real z-score against its own trailing history (replacing v1/v2's hand-picked `scale` constants and hand-picked per-factor `WEIGHTS`, which unintentionally gave one correlated cluster 2.5x the weight of others). `confidence` is now a real, out-of-sample-validated historical drawdown likelihood (34.5% stressed / 23.8% middle / 7.1% calm — composite-forward-risk.md and its OOS/threshold-sensitivity follow-ups), not a naive linear transform of the score.
