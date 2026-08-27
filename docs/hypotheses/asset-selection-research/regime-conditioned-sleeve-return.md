@@ -1,7 +1,7 @@
 # Regime-conditioned sleeve relative return (H-SECT02)
 
-Status: concluded-confirmed (out-of-sample replicated for XLU/XLP; QQQ/XLY/DIA strengthen OOS; GLD weakens OOS but same sign — see Observation log)
-Version: v0.3
+Status: concluded-confirmed, narrowed by H-SECT05 — see that paper. Beta-adjustment drops 11/24 significant to 3/24; only XLU (both windows) and XLY (63d) are real independent of beta. GLD's headline effect was almost entirely a beta artifact. Treat the table below as the raw, pre-beta-adjustment picture, not the final read.
+Version: v0.4
 Registered: 2026-08-27
 Concluded: 2026-08-27
 

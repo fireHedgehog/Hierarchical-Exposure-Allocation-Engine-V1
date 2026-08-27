@@ -4,6 +4,13 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-SECT05: beta-adjustment narrows H-SECT02 — most of it was beta, not new information
+
+- User asked directly whether H-SECT02's finding was genuinely new information, given `XLU`/`XLP` are well-known low-beta sleeves and the composite already predicts SPY drawdown odds (H-MACRO09) — a real hole caught before H-SECT02 was treated as settled: raw `R_sleeve − R_SPY` never controlled for each sleeve's own beta.
+- New `research_lab/beta_adjusted_regime_sensitivity.py`: real 252-day trailing beta per sleeve (point-in-time correct), same 24-test IC panel against `R_sleeve − β×R_SPY` instead of raw relative return.
+- Real result: 11/24 raw significant drops to 3/24 beta-adjusted — still above the ~1.2 chance floor, so a real, narrower core survives, but most of H-SECT02's headline effect was beta. `GLD`'s single largest reported effect (+7.64%/-5.43% stressed-vs-calm) collapses to essentially zero once beta-adjusted — almost entirely a beta artifact, not gold-specific stress-hedge information. `XLU` (both windows) is the one finding that survives every check run in this arc: raw significance, OOS replication, and now beta-adjustment. `XLY` (63d) is a smaller second real finding.
+- H-SECT02's own Status line updated to point to this correction rather than silently editing its original observation log; `asset-selection-research/README.md`'s framework/restart-here/index tables updated across the board. Doesn't change H-SECT04's already-rejected conclusion, but explains part of why the allocation tilt found so little edge — 2 of its 4 tilted sleeves carried weaker real signal than originally reported.
+
 ### Research — H-SECT02 OOS split, H-SECT03, H-SECT04: the asset-selection arc concludes — real correlation, no real allocation edge
 
 - H-SECT02 out-of-sample split (`regime_conditioned_sleeve_return_oos.py`, same 2019-01-01 convention as H-MACRO09): 3 distinct patterns, disclosed separately rather than averaged into one verdict. `XLU`/`XLP` (defensive rotation) robust in both halves. `QQQ`/`XLY`/`DIA` same sign both halves but only clear significance out-of-sample (plausibly real structural strengthening, not overfitting-shaped). `GLD` significant in-sample (2008-driven) but weaker out-of-sample, same sign — a real, disclosed downgrade from the full-sample number.
