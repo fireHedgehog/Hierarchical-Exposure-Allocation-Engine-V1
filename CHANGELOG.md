@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-SECT02: regime-conditioned sleeve relative return — confirmed, 11/24 significant, economically coherent
+
+- Universe corrected first, per a real critique: this project has no individual-stock cross-section, only a 13-asset real sleeve universe (GLD, SPY, QQQ, DIA, 9 sector ETFs), all identical real history from GLD's 2004 listing (the same anchor the project's "2004+" dataset window already uses). `asset-selection-research/README.md` rewritten to say so plainly and scope what is/isn't testable at this size.
+- New `research_lab/regime_conditioned_sleeve_return.py`: for each of 12 sleeves x 2 forward windows (3mo/6mo), continuous IC between `macro_regime_composite`'s real point-in-time score and the sleeve's forward return relative to SPY, monthly-strided, Benjamini-Hochberg corrected across all 24 tests — a different mechanism than H-SECT01 (trend predicting itself, rejected): this tests macro *state* predicting relative return, independent of trend.
+- Real, strong result: 11 of 24 significant after correction (~1.2 expected by chance alone). Every sign matches a known mechanism, not an unexplained pattern — defensives (`XLU`, `XLP`) and gold (`GLD`) outperform SPY when the composite is stressed (`GLD` +7.64% vs. -5.43% stressed-vs-calm, the largest effect); growth/duration-sensitive sleeves (`QQQ`, `XLY`) outperform when calm. Recorded `concluded-confirmed (in-sample)` — no out-of-sample split yet, same disclosed-gap shape H-MACRO09 had before its own OOS follow-up.
+
 ### Research — H-SECT01: section leadership persistence — rejected at the rigorous test, confirmed catch of a self-introduced confound
 
 - New `research_lab/section_leadership_persistence.py`: 9 sector SPDR ETFs, real 2004-2026 daily closes already in the database (no fetch needed). First test as designed (daily rolling-window rank, permutation null) appeared to confirm persistence (p=0.0010) — but a trailing-63-day window shares 62 of 63 days with the next day's, so daily rank stability is partly mechanical, not necessarily economic. Caught before writing up the result, not after.
