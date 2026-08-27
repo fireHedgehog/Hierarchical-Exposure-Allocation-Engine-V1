@@ -1,5 +1,6 @@
 from backend.engine.regime.scoring import WEIGHTS, compute_regime
 from backend.engine.regime.scoring_v2 import compute_regime_v2
+from backend.engine.regime.scoring_v3 import compute_regime_v3
 from backend.engine.regime.types import (
     InsufficientSeriesDataError,
     RegimeEvidenceItem,
@@ -12,6 +13,7 @@ __all__ = [
     "WEIGHTS",
     "compute_regime",
     "compute_regime_v2",
+    "compute_regime_v3",
     "InsufficientSeriesDataError",
     "RegimeEvidenceItem",
     "RegimeFactor",

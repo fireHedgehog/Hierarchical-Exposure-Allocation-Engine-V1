@@ -453,9 +453,9 @@ def test_seeded_admin_inventory_strategies_signals_and_chart_annotations(
         "/api/v1/admin/strategies/macro_regime_composite"
     ).json()["strategy"]
     assert real_strategy["status"] == "active"
-    assert real_strategy["version"] == "naive-v2"
+    assert real_strategy["version"] == "naive-v3"
     versions_by_number = {version["version"]: version for version in real_strategy["versions"]}
-    assert set(versions_by_number) == {"naive-v1", "naive-v2"}
+    assert set(versions_by_number) == {"naive-v1", "naive-v2", "naive-v3"}
     real_version = versions_by_number["naive-v2"]
     assert real_version["verification_status"] == "registered_only"
     assert real_version["next_review_at"] == "2027-02-25"
@@ -1921,25 +1921,23 @@ def test_legacy_demo_gets_complete_versioned_v3_fixture_on_reseed(tmp_path: Path
         # 2 synthetic demo fixtures + 5 real engine algorithms + 2 honest
         # draft placeholders with no implementation yet (sentiment_text_mining,
         # fundamental_analysis), all registered in schema.sql. Of the 5 real
-        # ones, macro_regime_composite carries 2 versions (naive-v1, naive-v2);
-        # macd_rsi_single_name_timing and cross_sectional_momentum each carry
-        # 3 (naive-v1, naive-v2, naive-v3). macd_rsi_single_name_timing's
-        # naive-v3: macd_crossover retired for no real entry edge (0.29),
-        # replaced by short_term_reversal_entry, real cost-checked evidence,
-        # backend/engine/timing/backtest_v3.py. cross_sectional_momentum's
-        # naive-v3: 12m_skip1m (Jegadeesh & Titman 1993 12-1 momentum,
-        # registered draft since 0.16) promoted into the live blend as a 4th
-        # horizon, backend/engine/factors/momentum_v3.py -- a promotion
-        # decision on already-standing evidence (0.16, 0.26), not new
-        # research. Each strategy's earlier version keeps its own component
-        # rows as an unedited historical record; naive-v3 re-registers its
-        # own current set -- 4 lifecycle events total record macd's
-        # retirement, draft registration, and naive-v3 promotion, plus
-        # cross_sectional_momentum's naive-v3 promotion.
+        # ones, macd_rsi_single_name_timing, cross_sectional_momentum, and
+        # macro_regime_composite each carry 3 versions (naive-v1, naive-v2,
+        # naive-v3). macro_regime_composite's naive-v3: real z-score per
+        # factor (trailing stdev, not a hand-picked scale) grouped into 3
+        # evidence-based clusters (H-MACRO08's real redundancy finding),
+        # replacing v1/v2's hand-picked per-factor weights that
+        # unintentionally gave one correlated cluster 2.5x the weight of
+        # others; confidence is now a real, out-of-sample-validated
+        # historical drawdown likelihood, not a naive linear transform --
+        # see docs/hypotheses/macro-research/. Each strategy's earlier
+        # version keeps its own component rows (where it has any) as an
+        # unedited historical record; naive-v3 promotions add one lifecycle
+        # event each.
         assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 9
-        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 12
-        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 26
-        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 14
+        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 13
+        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 28
+        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 15
         assert connection.execute("SELECT COUNT(*) FROM strategy_components").fetchone()[0] == 7
         synthetic_assets = connection.execute(
             """

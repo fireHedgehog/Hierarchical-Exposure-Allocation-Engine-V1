@@ -1072,7 +1072,7 @@ CREATE TABLE IF NOT EXISTS strategy_components (
 -- decorrelation, decay, fitted weights) is what promotes a version past
 -- naive-v1; decay_rate/estimated_capacity_usd stay NULL until it does.
 INSERT OR IGNORE INTO strategies (strategy_key, name, family, summary, status, current_version, added_at, retired_at, retirement_reason, public_spec_url, created_at, updated_at) VALUES
-    ('macro_regime_composite', 'Macro regime composite', 'macro_regime', '8-factor macro composite (growth, inflation, PPI, core PCE, employment, liquidity, volatility, rates) mapped to a regime label and confidence.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
+    ('macro_regime_composite', 'Macro regime composite', 'macro_regime', 'Real z-score composite across 3 evidence-based clusters (growth/inflation, rate level, market stress -- 13 factors) mapped to a regime label and a real, calibrated historical drawdown-likelihood confidence.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
     ('cross_sectional_momentum', 'Cross-sectional momentum ranking', 'cross_sectional_discovery', 'Blended 1M/3M/6M z-score momentum ranking across the staging universe.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
     ('macd_rsi_single_name_timing', 'Single-name timing', 'single_name_timing', 'Long-only MACD(12,26,9) bullish-crossover entry, MACD bearish-crossover or RSI(14)>=70 exit, per symbol -- an ensemble of independently retireable components (see Registry record), not one fixed formula.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
     ('risk_envelope_allocation', 'Risk envelope allocation', 'portfolio_construction', 'Regime confidence scales a gross-exposure multiplier (0.5x-1.5x) against the equal-weight baseline; sleeve targets aggregate factor_engine''s per-symbol tilts.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
@@ -1186,6 +1186,63 @@ INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurre
     ('naive-v2-macro_regime_composite-promoted', 'macro_regime_composite', '2026-08-25T00:00:00Z', 'active', 'active',
      'Promoted naive-v1 -> naive-v2: per-factor scoring reframed from a fixed hand-picked target to a real surprise against the series'' own trailing statistical average, motivated by the macro-announcement-surprise literature (see strategy_versions.thesis for citations). Still naive by design -- Milestone 4''s statistical validation gate has not run against this version yet.',
      'naive-v2');
+
+-- naive-v3 (2026-08-27): a real research arc, not a guess -- see
+-- docs/hypotheses/macro-research/ (H-MACRO01-09, indicator-redundancy,
+-- composite-methodology-v1, composite-forward-risk, its out-of-sample
+-- split, and the threshold-sensitivity check). Two real fixes over v2:
+-- (1) H-MACRO08's real pairwise correlation + effective-number-of-bets
+-- found growth/inflation/PPI/PCE/employment pairwise correlated 0.77-0.998
+-- -- one real latent signal, not five -- yet v1/v2's hand-picked WEIGHTS
+-- gave that single cluster 0.65 of total weight vs. 0.25 for market stress
+-- and 0.10 for rates; naive-v3 groups factors into 3 real evidence-based
+-- clusters (growth_inflation, rate_level, market_stress) and splits weight
+-- equally across clusters, then equally within each -- no cluster can
+-- outvote another just by having more correlated names in it. (2) each
+-- factor's surprise score now divides by its own real trailing standard
+-- deviation (an adaptive z-score) instead of a hand-picked `scale`
+-- constant. `confidence` is now a real, calibrated historical drawdown
+-- likelihood (composite-forward-risk.md, out-of-sample validated: a
+-- stressed reading precedes a real >=10% SPY drawdown within 6 months
+-- 34.5% of the time vs. 7.1% when calm) instead of v1/v2's naive linear
+-- transform of the composite score. A 4th real cluster (policy operations:
+-- WALCL/WTREGEN/IORB/SOFR) is deliberately excluded -- its sign is
+-- genuinely ambiguous, a real disclosed gap, not guessed (see
+-- composite-methodology-v1.md). This is explicitly a risk-context read,
+-- not a timing signal -- nothing here executes a trade. v1's and v2's code
+-- both stay untouched and importable so any dataset snapshot already
+-- sealed under either stays honestly reproducible.
+INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
+    ('macro_regime_composite', 'naive-v3', '2026-08-27T00:00:00Z',
+     'A composite built from real, evidence-based factor clusters (not a hand-picked weight per raw indicator) and calibrated against real historical drawdown likelihood (not a naive linear transform of the score) is a more honest -- though still naive -- read of macro risk than v1/v2.',
+     'A real, out-of-sample-validated relationship exists between this composite and forward SPY drawdown risk (composite-forward-risk.md, composite-forward-risk-oos.md: r=+0.28-0.32, p<0.05 both in-sample and out-of-sample). This is evidence for the composite as a risk-context read, not a claim of tradable alpha -- nothing here executes, and it does not say when.',
+     'naive-v3: real z-score per factor (trailing stdev, not a hand-picked scale) grouped into 3 evidence-based clusters (H-MACRO08) with cluster-balanced weighting, replacing v1/v2''s hand-picked per-factor WEIGHTS; confidence is now a real calibrated historical drawdown-likelihood, not a naive linear transform. 5 new factors added (GDP, 30-year yield, 10-year real yield, HY/IG credit spreads); policy-operations cluster deliberately excluded (ambiguous sign, disclosed).',
+     '{"clusters":{"growth_inflation":["growth","employment","gdp","inflation","pce","ppi"],"rate_level":["rates_10y","rates_30y","real_yield_10y"],"market_stress":["liquidity","volatility","credit_hy","credit_ig"]},"stressed_tercile_cutoff":-0.33,"calm_tercile_cutoff":0.33,"historical_drawdown_rate_stressed":0.345,"historical_drawdown_rate_middle":0.238,"historical_drawdown_rate_calm":0.071,"drawdown_threshold":-0.10,"drawdown_window_days":126}',
+     'backend/engine/regime/scoring_v3.py', '2026-08-27T00:00:00Z', '2027-02-27');
+
+UPDATE strategies SET current_version = 'naive-v3', updated_at = '2026-08-27T00:00:00Z'
+WHERE strategy_key = 'macro_regime_composite';
+
+-- Summary corrected to match naive-v3's real shape (13 factors in 3
+-- clusters, not the naive-v1/v2 fixed 8) -- an existing database gets this
+-- from the UPDATE below (matches only the stale naive-v1/v2 text, so it
+-- never re-fires once corrected); a fresh clone gets it from the seed row
+-- above being replaced in a future schema cleanup, same "correction, not a
+-- fresh row" pattern already used for this project's other summary fixes.
+UPDATE strategies SET summary = 'Real z-score composite across 3 evidence-based clusters (growth/inflation, rate level, market stress -- 13 factors) mapped to a regime label and a real, calibrated historical drawdown-likelihood confidence.'
+WHERE strategy_key = 'macro_regime_composite'
+  AND summary = '8-factor macro composite (growth, inflation, PPI, core PCE, employment, liquidity, volatility, rates) mapped to a regime label and confidence.';
+
+INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, label, value, unit, status, window_label, as_of, description, sort_order) VALUES
+    ('macro_regime_composite', 'naive-v3', 'decay_rate', 'Signal decay rate', NULL, 'fraction_per_period', 'not_computed', NULL, NULL,
+     'Not yet measured. Requires Milestone 4: statistical significance testing and decay estimation over real forward returns.', 1),
+    ('macro_regime_composite', 'naive-v3', 'estimated_capacity_usd', 'Estimated capacity', NULL, 'usd', 'not_computed', NULL, NULL,
+     'Not yet measured. Requires liquidity/market-impact modeling not yet built.', 2);
+
+INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
+    ('naive-v3-macro_regime_composite-promoted', 'macro_regime_composite', '2026-08-27T00:00:00Z', 'active', 'active',
+     'Promoted naive-v2 -> naive-v3: real z-score normalization and redundancy-aware cluster weighting (H-MACRO08), replacing v1/v2''s hand-picked scale constants and per-factor weights that unintentionally gave one correlated cluster 2.5x the weight of others. Confidence is now a real, out-of-sample-validated historical drawdown likelihood (composite-forward-risk.md and its OOS/threshold-sensitivity follow-ups), not a naive linear transform. A genuine risk-context read -- explicitly not a timing signal, nothing here executes.',
+     'naive-v3');
 
 -- naive-v2: cross_sectional_momentum's horizon blend weights (v1: fixed
 -- 0.2/0.3/0.5) are replaced by a real per-horizon Pearson-correlation

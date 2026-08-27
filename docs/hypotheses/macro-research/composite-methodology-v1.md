@@ -105,18 +105,21 @@ falsification-first paper in this folder).
 
 ## Sequencing — the "long way to go," made explicit
 
-1. **This document** — review, correct before anything else.
-2. **Face-validity backtest** (`research_lab`, no schema/pipeline changes).
-3. Only if that holds up: a **new hypothesis paper** with the real backtest
-   numbers (not this design doc) — the actual evidence gate.
-4. Only after that: `schema.sql` registration (new `strategy_versions` row,
-   `macro_regime_composite` naive-v3, matching the naive-v1→v2 promotion
-   pattern already used everywhere else in this project) and `fetch_data`/
-   `regime_filter` wiring so it computes on every real pipeline run, not
-   just in `research_lab`.
-5. Only after that: the frontend Methodology page's macro card gets
-   rewritten to describe what's actually live — not before, and not this
-   document standing in for that page.
+1. ✅ **This document** — reviewed.
+2. ✅ **Face-validity backtest** (H-MACRO09's predecessor) — 3/4 known dates matched.
+3. ✅ **Reframed hypothesis paper with real backtest numbers** (H-MACRO09 +
+   its out-of-sample split + threshold sensitivity) — the actual evidence
+   gate, cleared: real, significant, replicates out-of-sample, robust
+   across thresholds.
+4. ✅ **`schema.sql` registration** — `macro_regime_composite` promoted to
+   naive-v3.
+5. ✅ **`backend/engine/regime/scoring_v3.py` + `regime_filter.py` wiring**
+   — live, computing on every real pipeline run.
+6. ✅ **Frontend Methodology page's macro card** rewritten to describe
+   what's actually live.
 
-`macro_regime_composite` stays frozen at naive-v2 through steps 1-3,
-unchanged from the existing rule.
+`macro_regime_composite` is now live at naive-v3 (2026-08-27) — staging
+mode, not production; still not a timing signal, still carries the
+disclosed gaps named in this document (policy-operations cluster,
+threshold choices not exhaustively searched, Liquidity/Guidance out of
+scope for this composite).

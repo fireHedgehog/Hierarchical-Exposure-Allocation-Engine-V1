@@ -4,6 +4,16 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Engine — macro_regime_composite promoted to naive-v3: real z-score clusters, calibrated confidence
+
+- New `backend/engine/regime/scoring_v3.py`: 13 factors in 3 real evidence-based clusters (H-MACRO08), each a real z-score against its own trailing history (replacing v1/v2's hand-picked `scale` constants and hand-picked per-factor `WEIGHTS`, which unintentionally gave one correlated cluster 2.5x the weight of others). `confidence` is now a real, out-of-sample-validated historical drawdown likelihood (34.5% stressed / 23.8% middle / 7.1% calm — composite-forward-risk.md and its OOS/threshold-sensitivity follow-ups), not a naive linear transform of the score.
+- Policy-operations cluster (WALCL/WTREGEN/IORB/SOFR) deliberately excluded — sign genuinely ambiguous, disclosed not guessed.
+- `regime_filter.py` and `research_repository.py`'s `_macro_composite_score_series` (whose own docstring claims to test "the live regime label") both repointed at v3. v1/v2 stay untouched and importable.
+- `schema.sql`: new `strategy_versions` row (naive-v3), `strategies.summary` corrected to describe the real 13-factor/3-cluster shape (dual-path: fresh-clone seed + `UPDATE` for existing databases).
+- Frontend Methodology page's macro card rewritten to describe what's actually live, including the calibrated-confidence numbers and the disclosed policy-operations gap — `tsc` clean, 52 frontend tests passing.
+- 175/175 backend tests passing (2 real count-assertion updates, both caught before merge, not after). Live-verified end to end: a real pipeline run now shows "Mixed / transition (confidence 0.24)" — 0.24 matching the real, calibrated middle-tercile historical rate, not an arbitrary number.
+- This is a real, evidence-backed staging promotion, not production-grade — still explicitly a risk-context read, never a timing signal; nothing here executes a trade.
+
 ### Research — composite threshold sensitivity: robust, closing a real gap before staging
 
 - New `research_lab/composite_threshold_sensitivity.py`: 4 drawdown thresholds (-8/-10/-12/-15%) × 2 bucket splits (tercile/quartile) × 2 windows, full pooled 2004-2026.

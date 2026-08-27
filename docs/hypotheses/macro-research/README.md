@@ -6,10 +6,15 @@ inheriting one from commentary. Same lifecycle and rules as the parent
 [`docs/hypotheses/`](../README.md); this subfolder exists because "many
 aspects to test" needs its own index, not an ever-growing flat table.
 
-**Non-negotiable:** `macro_regime_composite` (the live, production regime
-classifier) stays exactly as it is — naive-v2, unchanged — until this
-research produces real, quantified grey-zone evidence for a specific,
-proposed change. No promotion without evidence; there is currently none.
+**Update, 2026-08-27:** the freeze is lifted. `macro_regime_composite` was
+promoted to **naive-v3** (`backend/engine/regime/scoring_v3.py`) after a
+real, out-of-sample-validated evidence chain — see
+[composite-methodology-v1.md](composite-methodology-v1.md)'s sequencing
+section. Staging mode, not production: still not a timing signal, still
+carries disclosed gaps (policy-operations cluster excluded, Liquidity/
+Guidance out of scope for this composite). Any *further* change still
+needs the same bar: real, quantified evidence before promotion, no
+exceptions.
 
 ## The 3-layer framework
 

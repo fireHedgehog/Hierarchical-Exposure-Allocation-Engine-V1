@@ -13,7 +13,7 @@ from backend.engine.factors import (
 from backend.engine.factors.momentum_v2 import _pooled_ic_samples
 from backend.engine.factors.types import Bar
 from backend.engine.indicators import compute_macd, compute_rsi
-from backend.engine.regime import InsufficientSeriesDataError, compute_regime_v2
+from backend.engine.regime import InsufficientSeriesDataError, compute_regime_v3
 from backend.engine.regime.types import SeriesObservation
 from backend.engine.research import (
     FORWARD_HORIZON_TRADING_DAYS,
@@ -72,15 +72,15 @@ def _macro_composite_score_series(
     """Real, point-in-time composite regime score at each of CPIAUCSL's own
     observation dates (same anchor convention as _macro_factor_series):
     truncate every factor's history to what was actually available at that
-    date, then run it through the real naive-v2 composite (compute_regime_v2)
-    -- the same weighted sum that drives the live regime label, not a
-    re-derived approximation of it. This is what 0.20 named and left undone:
-    every individual factor's forward-return correlation was tested, never
-    the composite score itself. An anchor with too little trailing history
-    for any one factor's surprise window (up to 60 periods, for VIX/rates)
-    is honestly skipped -- InsufficientSeriesDataError, not a fabricated
-    value -- so the resulting series is real from its first computable point
-    on, never padded."""
+    date, then run it through the real naive-v3 composite (compute_regime_v3)
+    -- the same cluster-averaged z-score that drives the live regime label,
+    not a re-derived approximation of it. This is what 0.20 named and left
+    undone: every individual factor's forward-return correlation was
+    tested, never the composite score itself. An anchor with too little
+    trailing history for any one factor's z-score window is honestly
+    skipped -- InsufficientSeriesDataError, not a fabricated value -- so
+    the resulting series is real from its first computable point on, never
+    padded."""
 
     anchor_dates = sorted({obs.observation_date for obs in factor_observations.get("CPIAUCSL", [])})
     composite_observations: list[SeriesObservation] = []
@@ -90,7 +90,7 @@ def _macro_composite_score_series(
             for series_id, observations in factor_observations.items()
         }
         try:
-            result = compute_regime_v2(truncated, date.fromisoformat(anchor))
+            result = compute_regime_v3(truncated, date.fromisoformat(anchor))
         except InsufficientSeriesDataError:
             continue
         composite_score = sum(result.weights[factor.key] * factor.contribution for factor in result.factors)
