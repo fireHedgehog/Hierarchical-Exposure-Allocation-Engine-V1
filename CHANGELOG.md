@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — macro composite methodology, design v1 (no code)
+
+- New `docs/hypotheses/macro-research/composite-methodology-v1.md`: a design document, not a hypothesis, written before any code per direct instruction. Answers the user's real questions directly: staleness (hold a factor's score flat between real releases — already the existing naive-v2 behavior, made explicit as policy); normalization (upgrade the existing hand-picked-scale surprise score to a real z-score against each factor's own trailing history — same mechanism for release-driven and continuous factors, differing only in what counts as "latest"); aggregation (weighted sum, weights from H-MACRO08's real ~4-cluster structure, not the raw indicator list).
+- Validation step named before any schema/pipeline change: a face-validity backtest against known historical dates (2008 Lehman, 2020 COVID crash, etc.), `research_lab` only.
+- Explicit 5-step sequencing to production, with `macro_regime_composite` frozen through steps 1-3: design doc → backtest → real hypothesis paper with evidence → schema.sql/pipeline wiring (naive-v3 promotion, same pattern as every other layer) → frontend Methodology page update, in that order only.
+
 ### Research — H-MACRO08: indicator redundancy — the composite prerequisite
 
 - New `research_lab/macro_indicator_redundancy.py`: real pairwise correlation + effective-number-of-bets (`signal_validation.py`, already proven on the original 8 macro factors) applied to the 17-23 indicators tested across H-MACRO01-07, two honest passes (deep-history 2004-2026 n=283, recent 2023-2025 n=39 — pooling would either truncate history or drop the shortest series).

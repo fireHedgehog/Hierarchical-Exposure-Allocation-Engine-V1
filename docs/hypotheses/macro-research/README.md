@@ -149,4 +149,17 @@ operations. This is the concrete input for composite design.
 
 **8 real papers now exist** (2 layer-2 dimensions, all 5 layer-3 dimensions,
 plus the redundancy check) — the free-data potential in what's readily
-fetchable is largely mined for a first pass. Composite design is next.
+fetchable is largely mined for a first pass.
+
+## [Composite methodology (design v1)](composite-methodology-v1.md)
+
+Not a hypothesis — a design document, written before any code per direct
+instruction. Answers: how to handle a factor that's 3 weeks stale with a
+new print due in a week (hold flat, never fabricate); what to normalize
+against (a real z-score against each factor's own trailing history,
+replacing the existing naive-v2 hand-picked-scale approximation); how to
+aggregate (weighted sum, weights from H-MACRO08's real ~4-cluster
+structure, not the raw 17-26 indicator list); and the real validation step
+before touching schema or pipeline code (a face-validity backtest against
+known historical dates). `macro_regime_composite` stays frozen through
+every step until real backtest evidence exists.
