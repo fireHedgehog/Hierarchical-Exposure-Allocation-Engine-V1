@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — composite face-validity backtest: 3 of 4 known dates matched, 1 real informative miss
+
+- New `research_lab/composite_face_validity_backtest.py`: runs composite-methodology-v1.md's proposed design (real z-score per indicator, point-in-time correct, 3-cluster average) against 5 real historical dates.
+- 2008 Lehman, 2020 COVID crash, 2022 hiking trough all correctly read risk-off. 2021-11 late-cycle top read risk-off while equities were near highs — a real, informative disagreement (inflation-surprise and NFCI were already tightening ahead of the 2022 crash), raising a genuine unresolved design question (coincident vs. leading indicator) rather than indicating a bug.
+- `macro_regime_composite` untouched; no schema/pipeline changes.
+
 ### Research — macro composite methodology, design v1 (no code)
 
 - New `docs/hypotheses/macro-research/composite-methodology-v1.md`: a design document, not a hypothesis, written before any code per direct instruction. Answers the user's real questions directly: staleness (hold a factor's score flat between real releases — already the existing naive-v2 behavior, made explicit as policy); normalization (upgrade the existing hand-picked-scale surprise score to a real z-score against each factor's own trailing history — same mechanism for release-driven and continuous factors, differing only in what counts as "latest"); aggregation (weighted sum, weights from H-MACRO08's real ~4-cluster structure, not the raw indicator list).

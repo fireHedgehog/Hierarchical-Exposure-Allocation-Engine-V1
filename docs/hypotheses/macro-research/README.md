@@ -163,3 +163,10 @@ structure, not the raw 17-26 indicator list); and the real validation step
 before touching schema or pipeline code (a face-validity backtest against
 known historical dates). `macro_regime_composite` stays frozen through
 every step until real backtest evidence exists.
+
+**[Face-validity backtest results](composite-face-validity-backtest.md)**:
+3 of 4 known crisis dates matched (2008, 2020, 2022). One real miss
+(2021-11 late-cycle top) — the composite read risk-off while equities were
+near highs, driven by real inflation-surprise and tightening NFCI readings
+that preceded the actual 2022 crash. Raises a real, unresolved design
+question (coincident vs. leading indicator), not a bug.
