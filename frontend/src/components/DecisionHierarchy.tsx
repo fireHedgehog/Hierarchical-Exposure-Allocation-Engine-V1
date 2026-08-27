@@ -63,6 +63,15 @@ function RegimePercentileGauge({ percentileRank }: { percentileRank?: number | n
 
   return (
     <div className="regime-gauge">
+      <p className="regime-gauge__title">Risk regime scale</p>
+
+      <div className="regime-gauge__pointer-row" style={{ "--gauge-position": `${clamped}%` } as React.CSSProperties}>
+        <div className="regime-gauge__pointer">
+          <strong>{clamped.toFixed(0)}</strong>
+          <span>{zoneLabel}</span>
+        </div>
+      </div>
+
       <div className="regime-gauge__track" role="img" aria-label={`${clamped.toFixed(0)}th percentile, ${zoneLabel}`}>
         <div className="regime-gauge__zone regime-gauge__zone--off" style={{ width: `${GAUGE_STRESSED_CUTOFF}%` }} />
         <div
@@ -70,15 +79,22 @@ function RegimePercentileGauge({ percentileRank }: { percentileRank?: number | n
           style={{ width: `${GAUGE_CALM_CUTOFF - GAUGE_STRESSED_CUTOFF}%` }}
         />
         <div className="regime-gauge__zone regime-gauge__zone--on" style={{ width: `${100 - GAUGE_CALM_CUTOFF}%` }} />
-        <div className="regime-gauge__marker" style={{ left: `${clamped}%` }}>
-          <span>{clamped.toFixed(0)}</span>
-        </div>
+        <div className="regime-gauge__needle" style={{ left: `${clamped}%` }} />
       </div>
+
+      <div className="regime-gauge__ticks">
+        <span className="regime-gauge__tick" style={{ left: "0%" }}>0</span>
+        <span className="regime-gauge__tick" style={{ left: `${GAUGE_STRESSED_CUTOFF}%` }}>{GAUGE_STRESSED_CUTOFF}</span>
+        <span className="regime-gauge__tick" style={{ left: `${GAUGE_CALM_CUTOFF}%` }}>{GAUGE_CALM_CUTOFF}</span>
+        <span className="regime-gauge__tick regime-gauge__tick--last" style={{ left: "100%" }}>100</span>
+      </div>
+
       <div className="regime-gauge__zone-labels">
         <span>Risk-off</span>
         <span>Neutral</span>
         <span>Risk-on</span>
       </div>
+
       <p className="regime-gauge__readout">
         Today: <strong>{clamped.toFixed(0)}th percentile</strong> of real 2004-2026 history ({zoneLabel}). Position
         is exact; only the 3 zones carry a real, out-of-sample-tested forward-drawdown claim.
