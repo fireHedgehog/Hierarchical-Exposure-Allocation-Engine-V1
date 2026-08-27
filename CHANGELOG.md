@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-SECT10: theme relative strength vs. broad index — clean rejection
+
+- User's own well-motivated question: does `SMH`/`IGV` (never tested anywhere in H-SECT01-09's universe) show real relative strength persistence against a *specific* broad index (`QQQ`/`SPY`/`DIA`, one at a time, not pooled with the other sleeves) at short "a few weeks" windows — a genuinely different specification from H-SECT01's sector-vs-sector-pool rejection.
+- New `research_lab/theme_relative_strength.py`: non-overlapping-block persistence (the rigorous design H-SECT01 landed on, not its confounded daily-overlap version), continuous IC, 2 themes × 3 benchmarks × 2 windows (10d/21d) × 2 checks (persistence, predicts-absolute-return) = 24 tests, Benjamini-Hochberg corrected.
+- Clean, well-powered rejection: 0 of 24 significant (n=259-545/cell, not a small-sample problem), no near-misses. 23 of 24 raw correlations negative — a real but non-significant hint of short-window reversal, not persistence, noted but not claimed. Consistent with H-SECT01 and this session's broader pattern: short-horizon technical persistence doesn't show real structure here regardless of universe, benchmark, or window.
+
 ### Engine — `risk_envelope_allocation` promoted to naive-v2: a real directional bug found and fixed (H-MACRO10)
 
 - Picking H-MACRO10 back up (the exposure-policy-calibration gap flagged earlier this session) found something more severe than "unvalidated": naive-v1's `multiplier = clamp(confidence * 2.0, 0.5, 1.5)` went directionally backwards after the naive-v3 macro promotion changed what `confidence` means (a roughly symmetric v1/v2 score -> a real, one-sided P(drawdown), 0.071-0.345). At the real production range: stressed (0.345) -> 0.69x, but middle (0.238) and calm (0.071) both floor at 0.50x -- stressed gets *more* exposure than calm, and calm/middle become indistinguishable. Live-confirmed, not just computed: a real pipeline run at confidence=0.24 had already published exactly a 0.50x multiplier.
