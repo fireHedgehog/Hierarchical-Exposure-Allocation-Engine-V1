@@ -68,41 +68,44 @@ project applies everywhere: a raw rate alone proves nothing.
 
 | # | Question | Note |
 | --- | --- | --- |
-| 1 | Relative expected return — E[R_section − R_market \| state] | **Answered, confirmed** (H-SECT02): 11 of 24 sleeve/window tests significant after correction, all economically coherent (defensives + gold up in stress, growth/cyclicals up when calm) |
+| 1 | Relative expected return — E[R_section − R_market \| state] | **Answered, confirmed** (H-SECT02): 11 of 24 sleeve/window tests significant after correction, all economically coherent (defensives + gold up in stress, growth/cyclicals up when calm). Robust OOS for `XLU`/`XLP`; `QQQ`/`XLY`/`DIA` strengthen OOS; `GLD` weakens OOS (same sign). |
 | 2 | Relative risk efficiency — return per unit of vol/drawdown | Not started |
-| 3 | State sensitivity — exposure mapping to specific macro drivers (real yield, USD, oil, credit spreads), not a static GICS label | Partially answered by H-SECT02 (regime composite, not individual drivers yet) — decomposing which specific driver (real yield vs. credit vs. inflation) is doing the work is real follow-up work |
+| 3 | State sensitivity — exposure mapping to specific macro drivers (real yield, USD, oil, credit spreads), not a static GICS label | **Answered, rejected** (H-SECT03): no single driver (real yield, credit, VIX, breakeven inflation) dominates any sleeve's sensitivity — a real null supporting the composite's own redundancy-aware design over any one raw factor |
 | 4 | Theme leadership — which cluster currently carries the market's marginal capital flow | Matches this project's own thematic-beta trading style (see [`thematic-beta-selection-process.md`](../thematic-beta-selection-process.md)) |
 | 5 | Breadth / diffusion — is leadership concentrated in a few names or spreading | Distinguishes healthy leadership from late-stage narrow crowding |
 | 6 | Crowding / convexity — has the strongest section become a negative-convexity trade (upside needs continued inflow, a miss is a big downside) | A different axis from momentum itself |
 | 7 | Cross-section persistence — real duration distribution of leadership (median weeks in top-decile relative strength before it fades) | **Answered, rejected** (H-SECT01): at a quarterly, non-overlapping horizon, leadership persistence is indistinguishable from chance |
 
-**Next recommended question:** an out-of-sample split of H-SECT02
-(same shape as H-MACRO09's own OOS follow-up), before it's promotion-
-ready. If that holds, the natural next step is the allocation-level
-test H-SECT02's own paper scoped but didn't design: does a regime-
-tilted sleeve allocation actually beat equal-weight/static on real
-OOS Sharpe/drawdown/turnover — the test that would justify wiring any
-of this into the allocation engine, vs. leaving it as sleeve-tilt
-context for manual use.
+**Where this arc landed:** H-SECT01 (rejected) → H-SECT02 (confirmed,
+real regime-conditioned sleeve sensitivity) → H-SECT03 (rejected — no
+single driver explains it, it's a genuine composite effect) → H-SECT04
+(rejected — the real correlation doesn't translate into a meaningful
+allocation edge once turned into an actual weighted portfolio rule).
+Net conclusion: `macro_regime_composite` stays scoped to gross exposure
+(`risk_envelope_allocation`, already live); this specific sleeve-tilt
+idea is a real, tested, documented dead end, not an unexplored one.
+Remaining open questions (#2, #4, #5, #6) are lower-priority — none
+connect as directly to what's already been validated.
 
-## Restart-here: open questions, none started yet
+## Restart-here: every known gap, in one place
 
-| Question | Note |
+| Question | Status |
 | --- | --- |
-| Section leadership persistence, regime-conditional (#7 above, connected to macro state) | **Run, rejected:** [`section-leadership-persistence.md`](section-leadership-persistence.md) (H-SECT01). At a quarterly, non-overlapping horizon, real persistence is indistinguishable from chance (33.3% vs. 33.3%, p=0.52) — a daily overlapping-window test had appeared to confirm it, but that was a mechanical confound, caught before write-up. |
-| Regime-conditioned sleeve relative return (#1/#3) | **Run, confirmed:** [`regime-conditioned-sleeve-return.md`](regime-conditioned-sleeve-return.md) (H-SECT02). 11/24 tests significant, economically coherent. No OOS split yet. |
-| H-SECT02 out-of-sample split | Not started; recommended next step before promotion |
-| Regime-tilted sleeve allocation vs. equal-weight/static, real OOS Sharpe/drawdown/turnover | Not started; the actual allocation-level test, contingent on H-SECT02's OOS split holding |
-| Which specific macro driver (real yield, credit, inflation) drives each sleeve's sensitivity | Not started; H-SECT02 used the composite, not individual factors |
-| Relative risk efficiency (#2) | Not started |
+| Section leadership persistence (#7) | **Rejected.** [H-SECT01](section-leadership-persistence.md): quarterly persistence = exactly chance (33.3%, p=0.52). |
+| Regime-conditioned sleeve relative return (#1/#3) | **Confirmed.** [H-SECT02](regime-conditioned-sleeve-return.md): 11/24 significant; `XLU`/`XLP` OOS-robust, `QQQ`/`XLY`/`DIA` OOS-strengthening, `GLD` OOS-weakening. |
+| Which driver explains it (#3, decomposed) | **Rejected (real null).** [H-SECT03](sleeve-driver-decomposition.md): no single driver (real yield/credit/VIX/breakeven) dominates — genuinely a composite effect. |
+| Regime-tilted allocation vs. equal-weight, real OOS Sharpe/drawdown/turnover | **Rejected.** [H-SECT04](regime-tilted-allocation-backtest.md): Sharpe improvement +0.008 OOS — real in sign, economically trivial, doesn't clear its own turnover cost. This line of work is concluded, not parked. |
+| Relative risk efficiency (#2) | Not started; lower priority now that #1/#3's allocation-level payoff (H-SECT04) came back negative |
 | Theme leadership / marginal-flow detection (#4) | Not started; no data source identified yet for "capital flow," may need a proxy |
 | Breadth / diffusion (#5) | Not started |
 | Crowding / convexity (#6) | Not started; likely needs an options-market or short-interest proxy, may hit the same "free data only" ceiling macro research did |
-| Regime-conditional cross-sectional performance — does `cross_sectional_momentum`'s edge change across `macro_regime_composite` states | Same as #7/recommended start; also listed in [macro-research](../macro-research/README.md)'s gap table |
+| Regime-conditional cross-sectional performance for `cross_sectional_momentum` itself (not sleeve-level) | Still open; different from H-SECT01/02, which tested sleeves, not the production momentum strategy — also listed in [macro-research](../macro-research/README.md)'s gap table |
 
 ## Index
 
 | Paper | Status | Covers |
 | --- | --- | --- |
 | [Section leadership persistence](section-leadership-persistence.md) (H-SECT01) | concluded-rejected | Real quarterly-horizon test: P(leader next quarter \| leader this quarter) = 33.3%, exactly chance (p=0.52). A same-session daily-overlapping-window test had appeared to confirm persistence (p=0.001) — turned out to be a mechanical rolling-window artifact, not a real effect; caught and superseded before promotion. |
-| [Regime-conditioned sleeve relative return](regime-conditioned-sleeve-return.md) (H-SECT02) | concluded-confirmed (in-sample) | Different mechanism than H-SECT01: macro state, not trend, predicting relative return. 11 of 24 sleeve/window tests significant after correction (~1.2 expected by chance) — defensives + gold outperform SPY when stressed, growth/cyclicals outperform when calm. No OOS split yet. |
+| [Regime-conditioned sleeve relative return](regime-conditioned-sleeve-return.md) (H-SECT02) | concluded-confirmed | Different mechanism than H-SECT01: macro state, not trend, predicting relative return. 11 of 24 sleeve/window tests significant after correction (~1.2 expected by chance) — defensives + gold outperform SPY when stressed, growth/cyclicals outperform when calm. OOS split: robust for `XLU`/`XLP`, strengthens for `QQQ`/`XLY`/`DIA`, weakens (same sign) for `GLD`. |
+| [Sleeve driver decomposition](sleeve-driver-decomposition.md) (H-SECT03) | concluded-rejected | Which single real driver (yield/credit/vol/inflation) explains each sleeve's H-SECT02 sensitivity — none does. 1 of 48 tests significant, below the ~2.4 chance baseline. A real null supporting the composite's own design over any one raw factor. |
+| [Regime-tilted allocation backtest](regime-tilted-allocation-backtest.md) (H-SECT04) | concluded-rejected | Does tilting the 12-sleeve book by regime beat equal-weight on real OOS Sharpe/drawdown/turnover — no. OOS Sharpe improvement +0.008, economically trivial, doesn't clear its own turnover cost. Closes the loop: real correlation (H-SECT02) doesn't survive becoming an actual allocation rule. |

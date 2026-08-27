@@ -4,6 +4,13 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-SECT02 OOS split, H-SECT03, H-SECT04: the asset-selection arc concludes — real correlation, no real allocation edge
+
+- H-SECT02 out-of-sample split (`regime_conditioned_sleeve_return_oos.py`, same 2019-01-01 convention as H-MACRO09): 3 distinct patterns, disclosed separately rather than averaged into one verdict. `XLU`/`XLP` (defensive rotation) robust in both halves. `QQQ`/`XLY`/`DIA` same sign both halves but only clear significance out-of-sample (plausibly real structural strengthening, not overfitting-shaped). `GLD` significant in-sample (2008-driven) but weaker out-of-sample, same sign — a real, disclosed downgrade from the full-sample number.
+- New H-SECT03 (`sleeve-driver-decomposition.md`): which single real driver (real yield, credit spread, VIX, breakeven inflation) explains each H-SECT02 sleeve's sensitivity, tested directly rather than assumed. Real null: only 1 of 48 tests significant, below the ~2.4 chance baseline — no driver dominates, a real result supporting the composite's own redundancy-aware design (H-MACRO08) over any single raw factor.
+- New H-SECT04 (`regime-tilted-allocation-backtest.md`), the test H-SECT02 itself scoped as the real bar to clear: a naive regime tilt (`XLU`/`XLP` overweight when stressed, `QQQ`/`XLY` overweight when calm, 1.5x/0.67x band matching `risk_envelope_allocation`'s own naive convention) on the 12-sleeve book, vs. monthly-rebalanced equal-weight, both halves. Real result: OOS Sharpe improvement +0.008 — real in sign, economically trivial, doesn't clear its own real turnover cost (gross-only, no transaction costs modeled yet). Recorded `concluded-rejected`: the sleeve-level correlation is real, but diluted to near-nothing once only 4 of 12 sleeves get tilted inside an already-diversified book.
+- Arc conclusion, not a parked gap: `macro_regime_composite` stays scoped to gross exposure only (`risk_envelope_allocation`, already live); this sleeve-tilt idea is a real, fully tested dead end. `asset-selection-research/README.md`'s restart-here table and index updated to record all 4 papers' real outcomes in one place.
+
 ### Research — H-SECT02: regime-conditioned sleeve relative return — confirmed, 11/24 significant, economically coherent
 
 - Universe corrected first, per a real critique: this project has no individual-stock cross-section, only a 13-asset real sleeve universe (GLD, SPY, QQQ, DIA, 9 sector ETFs), all identical real history from GLD's 2004 listing (the same anchor the project's "2004+" dataset window already uses). `asset-selection-research/README.md` rewritten to say so plainly and scope what is/isn't testable at this size.

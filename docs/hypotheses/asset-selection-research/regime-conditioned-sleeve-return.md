@@ -1,7 +1,7 @@
 # Regime-conditioned sleeve relative return (H-SECT02)
 
-Status: concluded-confirmed (in-sample; no out-of-sample split yet — see Promotion criteria)
-Version: v0.2
+Status: concluded-confirmed (out-of-sample replicated for XLU/XLP; QQQ/XLY/DIA strengthen OOS; GLD weakens OOS but same sign — see Observation log)
+Version: v0.3
 Registered: 2026-08-27
 Concluded: 2026-08-27
 
@@ -98,3 +98,13 @@ not started.
 `XLE` and `XLV` were close but didn't survive correction (adj_p 0.056-0.075) — disclosed as real near-misses, not folded into the confirmed set. `XLB`, `XLF`, `XLI`, `XLK` showed no real signal (adj_p > 0.19).
 
 **Caveat, same shape as H-MACRO09 before its own OOS follow-up:** this is one in-sample pass, no chronological split yet. The result is economically coherent (every sign matches a known mechanism — defensive rotation, gold-as-hedge, growth/duration sensitivity) rather than an unexplained pattern, which lowers the risk this is a pure multiple-comparisons artifact, but doesn't replace an actual out-of-sample check.
+
+| 2026-08-27 | Out-of-sample split, `research_lab/regime_conditioned_sleeve_return_oos.py`. Same 2019-01-01 chronological split H-MACRO09 used, full 24-test panel re-run independently on each half (no refitting). In-sample 2004-2018 (n≈3,545 days), out-of-sample 2019-2026 (n≈1,923 days). | **Three real patterns, disclosed separately rather than averaged into one verdict:** |
+
+| Pattern | Sleeves | Reading |
+| --- | --- | --- |
+| Robust both halves | `XLU`, `XLP` | Significant, same sign, both windows, both halves — the strongest, most durable finding. Defensive rotation isn't a full-sample artifact. |
+| Strengthens out-of-sample | `QQQ`, `XLY`, `DIA` | Same sign both halves, but only cleared significance in 2019-2026 (e.g. `QQQ` 63d: r=+0.106 n.s. in-sample → r=+0.283 SIG out-of-sample). Consistent direction, not a sign flip — plausibly real (mega-cap tech concentration in `QQQ`/growth exposure rose over the sample), not overfitting-shaped, but weaker evidence than the robust pair. |
+| Weakens out-of-sample, same sign | `GLD` | Significant in-sample (r=-0.265, driven substantially by 2008) but not out-of-sample (r=-0.142, still same sign, still includes 2020/2022). The full-sample number likely overstates how reliable gold's stress-hedge behavior is going forward. |
+
+Net: the defensive-rotation core (`XLU`/`XLP`) is the one piece of this paper that clears the same bar H-MACRO09 did. The rest is real but should be weighted down accordingly in any follow-up allocation test, not treated as equally strong evidence.
