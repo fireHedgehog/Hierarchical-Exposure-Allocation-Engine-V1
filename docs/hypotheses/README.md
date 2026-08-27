@@ -1,5 +1,20 @@
 # Research hypotheses
 
+## Four decision layers
+
+Every research question here belongs to exactly one of these — a
+number/signal that tries to answer two at once is the recurring bug
+this project keeps finding (`macro-research/exposure-policy-
+calibration.md` is the latest instance). File new hypotheses under the
+matching folder, not by which indicator happens to be involved:
+
+| Layer | Question it answers | Folder |
+| --- | --- | --- |
+| Macro regime | How much total risk should I own right now? | [`macro-research/`](macro-research/README.md) |
+| Asset selection | Given that risk budget, where should it be expressed? | [`asset-selection-research/`](asset-selection-research/README.md) |
+| Timing | Given a position (or instrument), when do I act — enter/hold/trim/exit? | [`timing-research/`](timing-research/README.md) |
+| Portfolio construction | How much in each specific instrument? | Not a hypothesis folder yet — currently `backend/engine/instruments/` (conviction-scaled structure/sizing), naive-v1 |
+
 A hypothesis starts here, as a versioned working paper — not as a database row. This
 folder exists because research itself has a data-structure problem: one candidate
 idea's evidence is a nominal category (hawkish/dovish), another's is a continuous
@@ -53,7 +68,8 @@ noted otherwise.
 | Hypothesis | Type of evidence | Status | Real finding | Dataset |
 | --- | --- | --- | --- | --- |
 | [Macro research](macro-research/README.md) (subfolder) | 3-layer input/response/outcome framework, own index | in progress | 10 real papers (H-MACRO01-10 + Warsh). Composite (`macro_regime_composite`) live at naive-v3 with real out-of-sample-validated forward-drawdown evidence (H-MACRO09). H-MACRO10 flags the confidence→gross-exposure mapping as a separate, still-untested hypothesis. | n/a |
-| [Asset selection research](asset-selection-research/README.md) (subfolder) | cross-sectional selection framework, own index | scope only | Which sector/asset-class/theme to hold, separate from single-name timing and the already-registered momentum ranking. No papers run yet. | n/a |
+| [Asset selection research](asset-selection-research/README.md) (subfolder) | cross-sectional selection framework, own index | scope only | Which sector/asset-class/theme to hold, separate from single-name timing and the already-registered momentum ranking. 7-question framework laid out, none run yet. | n/a |
+| [Timing research](timing-research/README.md) (subfolder) | action-layer framework, own index | scope only | When to enter/hold/trim/exit. Existing top-level papers already cover most of entry; RSI(14)>=70 exit flagged as a real gap — live in production, never independently tested. | n/a |
 | [Time-series momentum](time-series-momentum.md) | continuous (IC vs. real forward return) | concluded-rejected | Opposite direction at every horizon; replicated on 2004-26 but weaker (only 2 of 5 horizons still significant, was 5 of 5) | 2016+, 2004+ |
 | [Low-volatility anomaly](low-volatility-anomaly.md) | continuous (IC vs. real forward return) | concluded-rejected (raw return) | Opposite direction — volatile beat calm | 2016+ |
 | [Short-term mean reversion](short-term-mean-reversion.md) | continuous (IC vs. real forward return) | concluded-confirmed (1-week window) | Confirmed and strengthened on 2004-26: r=-0.057 (was -0.02), and now significant at 2 weeks too (was not) | 2016+, 2004+ |
