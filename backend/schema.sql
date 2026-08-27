@@ -2037,7 +2037,8 @@ INSERT INTO staging_symbols (
     ('AAPL', 'Apple Inc.', 'mega_cap_equity', 'free', 'intrinio', NULL, 1, 80),
     ('NVDA', 'NVIDIA Corporation', 'mega_cap_equity', 'free', 'intrinio', NULL, 1, 81),
     ('SMH', 'VanEck Semiconductor ETF', 'thematic_etf', 'free', 'intrinio', NULL, 1, 90),
-    ('IGV', 'iShares Expanded Tech-Software Sector ETF', 'thematic_etf', 'free', 'intrinio', NULL, 1, 91)
+    ('IGV', 'iShares Expanded Tech-Software Sector ETF', 'thematic_etf', 'free', 'intrinio', NULL, 1, 91),
+    ('VXX', 'iPath Series B S&P 500 VIX Short-Term Futures ETN', 'thematic_etf', 'free', 'intrinio', 'Rolling VIX-futures ETN, not spot VIX -- real trading history starts 2009-01-30 (real listing date, not a fetch constraint). Added for a real, quantified VXX entry-timing question (macro_regime_composite/VIXCLS already fetched); VIX options themselves stay out of scope, no free options-chain source exists.', 1, 92)
 ON CONFLICT(symbol) DO UPDATE SET
     name = excluded.name,
     category = excluded.category,

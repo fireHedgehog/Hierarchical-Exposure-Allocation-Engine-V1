@@ -60,4 +60,4 @@ up," but "should I act on it now."
 
 | Paper | Status | Covers |
 | --- | --- | --- |
-| _none yet in this folder — see "Relation to what's already tested" above for existing top-level papers_ | — | — |
+| [VIX-percentile VXX entry timing](vix-percentile-vxx-entry.md) (H-TIME01) | concluded-confirmed (partial) | New real data this paper required: `VXX` added and fetched (real history only reaches 2018, not 2009 — a real Yahoo-ticker-reissue limitation, disclosed). Days since `VIXCLS` was last elevated (>20) real-predicts `VXX`'s forward return (r=+0.26 to +0.36, both windows significant) — `VXX`'s current percentile level does not. Small sample (~8 years), no OOS check yet. |
