@@ -170,3 +170,28 @@ for the theoretical improvement to survive contact with a long-only,
 walk-forward, cost-aware reality. Same net conclusion as v1, reached
 by a completely different and more rigorous route: this sleeve-tilt
 idea does not get engineered into the pipeline.
+
+## v3: extended universe (adds SMH, IGV; BTC-USD reference-only)
+
+Same v2 method, bigger real universe — 14 tradable sleeves
+(`research_lab/breadth_weighted_allocation_backtest_extended.py`).
+`BTC-USD` reported separately, info-only, never in the tradable book —
+this project's own existing rule (`roadmap.md`: "research reference
+only, never a position candidate"), not overridden here. Its own IC
+against this dataset could not be computed — no real `BTC-USD` bars in
+the currently sealed dataset snapshot, disclosed rather than guessed.
+
+| Metric | 12-sleeve (v2) | 14-sleeve (v3) |
+| --- | --- | --- |
+| Real effective breadth | 2.44 | 2.48 |
+| Mean \|IC\| | 0.142 | 0.137 |
+| Grinold-predicted IR | 0.222 | 0.215 |
+| Realized Sharpe diff, OOS | +0.005 | +0.007 |
+
+`SMH` shows a real, moderate IC (+0.207, similar magnitude to `XLF`);
+`IGV` is near zero (+0.003). Adding them barely moves effective
+breadth (2.44 → 2.48) — they're correlated enough with the existing 12
+that they don't add real independence, only raw count. Same
+conclusion as v2, now confirmed robust to a bigger candidate universe:
+the bottleneck is real correlation among ETF-level sleeves, not the
+number of tickers tested.

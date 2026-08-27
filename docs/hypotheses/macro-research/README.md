@@ -92,6 +92,7 @@ cross-sectional factor set.
 | [Composite forward risk — out-of-sample](composite-forward-risk-oos.md) | observing | Chronological split at 2019-01-01. Replicates cleanly on held-out data; 6mo effect is *stronger* out-of-sample (+42.9pp vs. +21.8pp in-sample) — the opposite of overfitting. |
 | [Composite threshold sensitivity](composite-threshold-sensitivity.md) | observing | 14/16 threshold×split combinations significant. 6-month window robust across every choice tested — not an artifact of the original -10%/tercile pick. |
 | [Exposure policy calibration](exposure-policy-calibration.md) (H-MACRO10) | concluded-confirmed | Found a real, more severe issue than "untested": naive-v1's confidence→multiplier formula was directionally backwards after the naive-v3 promotion (stressed got more exposure than calm). Fixed (naive-v2, live in production) and backtested: beats static exposure on Sharpe and drawdown, consistently across full-sample/in-sample/out-of-sample. |
+| [Factor breadth-weighting](factor-breadth-weighting.md) (H-MACRO11) | concluded-confirmed, flagged | Does a real, walk-forward IC-weighted combination of the 13 factors beat naive-v3's cluster-equal weighting? Yes, substantially — OOS IC nearly doubles (+0.400 vs. +0.210), strengthens OOS not weakens. Not promotion-ready: tested against forward SPY *return*, not the composite's real validated target (drawdown probability, H-MACRO09) — real next step before touching production. |
 
 **Layer 3 complete** — all 5 market-outcome dimensions (Equity, Credit,
 Volatility, Duration, USD) now have a real indicator-vs-target table.
@@ -164,7 +165,7 @@ rather than re-deriving what's missing.
 | Debt-ceiling event study | Never started | Curate real debt-ceiling-raise dates (legislative record, free); small-N event study, same shape as the Warsh paper |
 | Regime-duration ("higher for longer, how long") | Never started | Same duration-distribution method already scoped for H-BETA02, applied to a regime state |
 | Regime-conditional cross-sectional performance | Never started for `cross_sectional_momentum` itself. A related question (section leadership persistence, regime-conditioned) was tested as [H-SECT01](../asset-selection-research/section-leadership-persistence.md) and rejected — leadership doesn't persist at a quarterly horizon, so its regime-interaction sub-test wasn't promoted either | Does `cross_sectional_momentum`'s own edge (not leadership persistence) change across `macro_regime_composite` states — still open |
-| Composite threshold/design alternatives beyond what was tested | Naive-v1 bar accepted this as shippable, not because it's optimal | Compare cluster-equal-weighting against IC-weighted alternatives, once there's appetite for a deeper pass |
+| ~~Compare cluster-equal-weighting against IC-weighted alternatives~~ | **Answered.** [H-MACRO11](factor-breadth-weighting.md): IC-weighted nearly doubles real OOS IC (+0.400 vs. +0.210). Real, but tested against the wrong target (forward return, not drawdown probability) — real next step before this can touch production, not done yet |
 
 ## [Composite methodology (design v1)](composite-methodology-v1.md)
 

@@ -4,6 +4,18 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-SECT04 v3: extended to 14 sleeves (adds SMH/IGV) — same conclusion, confirms the bottleneck is correlation not ticker count
+
+- New `research_lab/breadth_weighted_allocation_backtest_extended.py`: same v2 breadth method, bigger real universe (adds `SMH`, `IGV`; `BTC-USD` reported reference-only per this project's own existing rule, never in the tradable book -- its own IC couldn't even be computed, no real bars in the currently sealed dataset).
+- Real effective breadth barely moves (2.44 → 2.48 of 14) despite 2 more real candidates -- `SMH` carries a real, moderate IC (+0.207) but is correlated enough with the existing 12 not to add real independence. Same realized Sharpe magnitude as v2 (+0.007 to +0.013). Confirms v2's finding is robust to a bigger candidate universe within the same ETF-level category.
+
+### Research — H-MACRO11: factor breadth-weighting nearly doubles real OOS IC — real, substantial, and flagged before production
+
+- Picked up an already-flagged, pre-scoped gap directly: `macro-research/README.md`'s restart-here table has carried "compare cluster-equal-weighting against IC-weighted alternatives" since the naive-v3 promotion. Applied the same Fundamental-Law-of-Active-Management framework just built for H-SECT04 v2, this time to the macro composite's own 13 factors.
+- New `research_lab/macro_factor_breadth_test.py`: real, walk-forward per-factor IC (contribution vs. forward 126d SPY return, learned in-sample only, held fixed OOS -- no lookahead), real effective breadth via this project's own proven PCA machinery. IC-weighted alternative composite vs. the existing cluster-equal composite, same real target, same dates, both halves.
+- Real, substantial result -- much bigger than anything found at the sleeve layer: out-of-sample IC nearly doubles, +0.400 (IC-weighted) vs. +0.210 (cluster-equal), and the improvement is *larger* out-of-sample than in-sample -- the same strengthens-not-weakens pattern H-MACRO09 itself showed, a real sign against overfitting. Real, explainable mechanism: cluster-equal-weighting forces near-zero/wrong-signed factors (rates, volatility, against *this* target) to the same weight as genuinely predictive ones (ppi, growth, inflation).
+- **Not promotion-ready, flagged clearly:** tested against forward SPY *return*, not the composite's actual, real, out-of-sample-validated target (forward drawdown *probability*, H-MACRO09). A tail/asymmetric target can have a materially different real factor structure than a continuous-return target. Real, required next step before this could ever touch `scoring_v3.py`: re-run the identical method with the target swapped to match H-MACRO09's own drawdown-probability definition -- not done yet, deliberately.
+
 ### Research — H-SECT04 v2: a proper Fundamental-Law-of-Active-Management test — real effective breadth is only ~2.4, not 12
 
 - User's own direct, correct methodological point: every test this session asked "is this one bet individually significant," never Grinold's actual question -- does combining many weak-but-real bets across real breadth (`IR ≈ IC × √BR`) produce portfolio-level value. H-SECT04 v1's binary tilt threw away all 8 non-"significant" sleeves' real (if weak) information, exactly the mistake the Fundamental Law warns against.
