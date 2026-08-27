@@ -102,6 +102,7 @@ def make_fred_fetcher(
         "DFEDTAR": (1.0, 1.0),
         "DFEDTARU": (4.0, 3.75),
         "DFEDTARL": (3.75, 3.5),
+        "DTWEXBGS": (120.0, 118.0),
     }
     calls: list[tuple[Any, ...]] = []
 

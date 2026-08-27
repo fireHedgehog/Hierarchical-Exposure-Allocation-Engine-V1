@@ -57,6 +57,7 @@ SERIES_METADATA: dict[str, dict[str, Any]] = {
     "BAMLC0A0CM": {"frequency": "daily", "max_age_days": 10, "label": "ICE BofA US corporate (IG) OAS spread"},
     "SOFR": {"frequency": "daily", "max_age_days": 10, "label": "Secured Overnight Financing Rate"},
     "IORB": {"frequency": "daily", "max_age_days": 10, "label": "Interest rate on reserve balances"},
+    "DTWEXBGS": {"frequency": "daily", "max_age_days": 10, "label": "Trade-weighted broad U.S. dollar index"},
     # Real, objective Fed rate-decision ground truth -- lets macro-research
     # derive every real hike/cut directly from data (level changes on the
     # effective date), with no hand-curated meeting calendar needed. DFEDTAR

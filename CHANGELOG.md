@@ -4,6 +4,15 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-MACRO04-07: layer 3 complete (Credit, Volatility, Duration, USD)
+
+- Four more real indicator-vs-target papers, same continuous-IC method as H-MACRO02/03, looped through without stopping for confirmation between each per direct instruction. Layer 3 (all 5 market-outcome dimensions) is now fully covered.
+- **Credit** (H-MACRO04): 6/22 significant, but the smallest evidentiary base in the folder — target's own real history is only 2023-2025 (n=72).
+- **Volatility** (H-MACRO05): 7/23 significant at 1 quarter, and nearly all agree with H-MACRO03/04's direction — stress now predicts *calming* ahead, not more stress. A real cross-paper pattern, not asserted as one factor yet.
+- **Duration** (H-MACRO06): 18/23 significant, richest result in the folder — two distinct, coherent mechanisms: elevated rate *levels* mean-revert, while growth/inflation *fundamentals* predict continued pressure.
+- **USD** (H-MACRO07): new free FRED series (`DTWEXBGS`, verified live before use) added to production (27 series total). 15/24 significant; the rate-mean-reversion group plausibly chains from H-MACRO06's own finding into dollar weakness.
+- **Next, before any composite**: a redundancy/incremental-value check across all 7 papers (`signal_validation.py`'s effective-number-of-bets, already proven) — VIX/NFCI/credit-spreads/T10YIE keep reappearing across different targets, and that check is what determines how many real independent signals exist versus one repeated latent factor.
+
 ### Research — H-MACRO03: equity outcome predictors, direct test of "bad news is good news"
 
 - New `research_lab/equity_outcome_predictors.py`: real, pooled continuous IC, each of 24 layer-1 indicators vs. SPY's own forward 1m/3m return. 17/24 significant, full 2004-2026 history for most.

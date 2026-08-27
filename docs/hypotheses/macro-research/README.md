@@ -78,6 +78,13 @@ cross-sectional factor set.
 | [Rate decision predictors](rate-decision-predictors.md) (H-MACRO01) | observing | All 22 layer-1 indicators vs. layer 2's Rate dimension (hike/cut only — holds not classified yet, no FOMC calendar). 4/22 significant. |
 | [Balance sheet predictors](balance-sheet-predictors.md) (H-MACRO02) | observing | All 23 layer-1 indicators vs. layer 2's Balance sheet dimension, continuous IC (not discrete events — see paper for why). 10/23 significant. |
 | [Equity outcome predictors](equity-outcome-predictors.md) (H-MACRO03) | observing | All 24 layer-1 indicators vs. layer 3's Equity dimension (SPY forward return). 17/24 significant. Direct test of "bad news is good news": VIX confirms it, NFCI doesn't. |
+| [Credit outcome predictors](credit-outcome-predictors.md) (H-MACRO04) | observing | 22 indicators vs. HY spread forward change. 6/22 significant, but smallest sample in the folder (n=72, single 2023-2025 regime). |
+| [Volatility outcome predictors](volatility-outcome-predictors.md) (H-MACRO05) | observing | 23 indicators vs. VIX forward change. 7/23 significant at 1q — nearly all point the same way as H-MACRO03/04: stress now predicts calming, not more stress. |
+| [Duration outcome predictors](duration-outcome-predictors.md) (H-MACRO06) | observing | 23 indicators vs. 10Y yield forward change. 18/23 significant — richest result in the folder; rate-level mean-reversion vs. fundamentals-continuation, two distinct real mechanisms. |
+| [USD outcome predictors](usd-outcome-predictors.md) (H-MACRO07) | observing | 24 indicators vs. broad dollar index forward change (new series, `DTWEXBGS`). 15/24 significant; rate-mean-reversion group plausibly chains from H-MACRO06's own finding. |
+
+**Layer 3 complete** — all 5 market-outcome dimensions (Equity, Credit,
+Volatility, Duration, USD) now have a real indicator-vs-target table.
 
 **One indicator-vs-target table per paper, by design** — each new layer-2/3
 target dimension (Balance sheet, Liquidity, Guidance, Equity, Credit, ...)
@@ -115,17 +122,32 @@ Still missing, real free source exists but needs new provider code (not
 FRED — `fiscaldata.treasury.gov`, keyless): Treasury auction tail,
 bid-to-cover. **Not free anywhere found:** MOVE index.
 
-**Queued, not yet built:** Liquidity (layer 2's remaining dimensions along
-with Guidance) — real SRF/discount-window usage data doesn't have a
-confirmed clean FRED series; likely needs the NY Fed's own operation results
-(a different, unverified source), not assumed available. Guidance needs
-real FOMC statement/speech text, which this project doesn't have — an
-NLP-shaped problem, not a correlation test. Layer 3's market-outcome
-dimensions; a hold-inclusive H-MACRO01 once a real FOMC calendar exists;
-redundancy/incremental-value checks within each paper's own significant set
-(H-MACRO01's four, H-MACRO02's ten — likely fewer independent signals than
-raw counts suggest); a debt-ceiling event study; regime-duration;
-regime-conditional cross-sectional performance. **The human+agent composite
-stays queued until more of the above lands** — two dimension papers isn't
-enough to distill from yet, per the user's own stated order (more
-hypotheses first, composite after).
+## A pattern across papers, not asserted as one thing yet
+
+H-MACRO03/04/05 largely agree: elevated stress *now* (VIX, NFCI, credit
+spreads) tends to predict *calming* ahead (higher equity return, narrower
+spreads, lower vol), not further deterioration — a real "stress mean-
+reverts" story spanning three independently-run papers. H-MACRO06/07 agree
+with each other on a related but distinct mechanism: elevated *rate levels*
+mean-revert, and that plausibly chains into dollar weakness. Neither is
+confirmed as one underlying factor — that's exactly what the redundancy
+check below has to test before anyone calls it that.
+
+**Queued, not yet built:**
+- **Redundancy/incremental-value check across all 7 papers** — the single
+  most important next step before any composite. VIX/NFCI/credit-spreads/
+  T10YIE keep reappearing across different targets; effective-number-of-bets
+  (`signal_validation.py`, already proven) will say how many real
+  independent signals actually exist versus one repeated latent factor.
+- Liquidity (SRF/discount-window — no confirmed clean FRED series, likely
+  needs the NY Fed's own operation results, unverified) and Guidance (needs
+  real FOMC text, an NLP problem, not a correlation test) — both real,
+  named gaps, not silently skipped.
+- A hold-inclusive H-MACRO01 once a real FOMC meeting calendar exists.
+- A debt-ceiling event study; regime-duration; regime-conditional
+  cross-sectional performance.
+
+**The human+agent composite stays queued until the redundancy check runs** —
+7 dimension papers with real, partly-overlapping signals is exactly the
+input that check needs; distilling into a composite before it runs would
+double-count whatever the redundancy check would have caught.
