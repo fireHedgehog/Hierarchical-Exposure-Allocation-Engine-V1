@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-MACRO09: composite forward risk — reframed from timing to "how likely"
+
+- User's own correction after the face-validity miss: not "does the composite match today's price label" but "how likely is a real forward drawdown, given today's reading" — risk-context, not timing. New `research_lab/composite_forward_risk.py`: same 3-cluster composite, tested pooled across ~255 real dates (2004-2026) against SPY's own real forward max drawdown, both continuous IC and a probability comparison (bottom vs. top composite tercile).
+- Real, strong, significant result: a stressed reading is **5-7x more likely** to precede a real ≥10% SPY drawdown within 3-6 months than a calm one (+22.4pp at 3mo, +27.4pp at 6mo, both p<0.0001). Continuous IC r=+0.28/+0.32, both p<0.0001.
+- The face-validity backtest's results still stand — this extends, not replaces it.
+
 ### Research — composite face-validity backtest: 3 of 4 known dates matched, 1 real informative miss
 
 - New `research_lab/composite_face_validity_backtest.py`: runs composite-methodology-v1.md's proposed design (real z-score per indicator, point-in-time correct, 3-cluster average) against 5 real historical dates.

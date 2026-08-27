@@ -83,6 +83,7 @@ cross-sectional factor set.
 | [Duration outcome predictors](duration-outcome-predictors.md) (H-MACRO06) | observing | 23 indicators vs. 10Y yield forward change. 18/23 significant — richest result in the folder; rate-level mean-reversion vs. fundamentals-continuation, two distinct real mechanisms. |
 | [USD outcome predictors](usd-outcome-predictors.md) (H-MACRO07) | observing | 24 indicators vs. broad dollar index forward change (new series, `DTWEXBGS`). 15/24 significant; rate-mean-reversion group plausibly chains from H-MACRO06's own finding. |
 | [Indicator redundancy](indicator-redundancy.md) (H-MACRO08) | observing | **The prerequisite for any composite.** 17-23 raw indicators → only ~3.5-4.1 effective independent bets. Real factor structure: inflation/growth, rate level, market stress, policy operations — 4 clusters, not 17-26 signals. |
+| [Composite forward risk](composite-forward-risk.md) (H-MACRO09) | observing | Reframed composite test (risk-context, not timing): stressed reading is 5-7x more likely to precede a real ≥10% SPY drawdown within 3-6mo (p<0.0001 both windows). |
 
 **Layer 3 complete** — all 5 market-outcome dimensions (Equity, Credit,
 Volatility, Duration, USD) now have a real indicator-vs-target table.
@@ -168,5 +169,13 @@ every step until real backtest evidence exists.
 3 of 4 known crisis dates matched (2008, 2020, 2022). One real miss
 (2021-11 late-cycle top) — the composite read risk-off while equities were
 near highs, driven by real inflation-surprise and tightening NFCI readings
-that preceded the actual 2022 crash. Raises a real, unresolved design
-question (coincident vs. leading indicator), not a bug.
+that preceded the actual 2022 crash. Raised a real, resolved design
+question: not a timing signal, a risk-context read (see below) — the user's
+own correction, confirmed by:
+
+**[Forward risk results](composite-forward-risk.md) (H-MACRO09)**: reframed
+to "how likely is a real drawdown," pooled across ~255 real dates instead
+of 5. A composite reading in the bottom tercile is **5-7x more likely** to
+precede a real ≥10% SPY drawdown within 3-6 months than a calm reading
+(+22-27pp, p<0.0001 both windows) — a real, quantified, significant answer
+to "how likely, how confident, how strong."
