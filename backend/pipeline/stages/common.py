@@ -57,6 +57,16 @@ SERIES_METADATA: dict[str, dict[str, Any]] = {
     "BAMLC0A0CM": {"frequency": "daily", "max_age_days": 10, "label": "ICE BofA US corporate (IG) OAS spread"},
     "SOFR": {"frequency": "daily", "max_age_days": 10, "label": "Secured Overnight Financing Rate"},
     "IORB": {"frequency": "daily", "max_age_days": 10, "label": "Interest rate on reserve balances"},
+    # Real, objective Fed rate-decision ground truth -- lets macro-research
+    # derive every real hike/cut directly from data (level changes on the
+    # effective date), with no hand-curated meeting calendar needed. DFEDTAR
+    # (single target, pre-2008-12-16) and DFEDTARU/DFEDTARL (target range,
+    # after the Fed switched regimes) together cover 2004-2026 continuously.
+    # max_age_days=None: this series was permanently discontinued 2008-12-15
+    # (replaced by DFEDTARU/DFEDTARL) -- staleness has no real meaning here.
+    "DFEDTAR": {"frequency": "daily", "max_age_days": None, "label": "Fed funds target rate (pre-2008 single value)"},
+    "DFEDTARU": {"frequency": "daily", "max_age_days": 10, "label": "Fed funds target range, upper bound"},
+    "DFEDTARL": {"frequency": "daily", "max_age_days": 10, "label": "Fed funds target range, lower bound"},
 }
 
 PRICE_SOFT_MAX_AGE_DAYS = 5

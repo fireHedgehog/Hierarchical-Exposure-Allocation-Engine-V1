@@ -99,6 +99,9 @@ def make_fred_fetcher(
         "BAMLC0A0CM": (0.9, 0.81),
         "SOFR": (3.8, 3.66),
         "IORB": (3.8, 3.65),
+        "DFEDTAR": (1.0, 1.0),
+        "DFEDTARU": (4.0, 3.75),
+        "DFEDTARL": (3.75, 3.5),
     }
     calls: list[tuple[Any, ...]] = []
 

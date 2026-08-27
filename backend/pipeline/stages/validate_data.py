@@ -57,8 +57,14 @@ def run_validate_data_stage(
         if available_at > future_limit:
             hard_failures.append(f"{series_id}: latest observation is future-dated.")
             continue
-        age_days = (now.date() - date.fromisoformat(latest["observation_date"])).days
         max_age_days = meta["max_age_days"]
+        if max_age_days is None:
+            # A real, permanently-discontinued series (e.g. DFEDTAR, replaced
+            # by DFEDTARU/DFEDTARL in 2008) -- its own history has a real,
+            # fixed end date and will never get fresher. Not a staleness
+            # problem to flag, ever.
+            continue
+        age_days = (now.date() - date.fromisoformat(latest["observation_date"])).days
         if age_days > max_age_days * 2:
             hard_failures.append(
                 f"{series_id}: latest observation is {age_days} days old (hard limit {max_age_days * 2})."

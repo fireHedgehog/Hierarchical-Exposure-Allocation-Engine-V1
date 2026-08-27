@@ -203,7 +203,7 @@ def run_fetch_data_stage(
                 latest.observation_date,
                 latest.observation_date,
                 timestamp,
-                meta["max_age_days"] * 86400,
+                None if meta["max_age_days"] is None else meta["max_age_days"] * 86400,
                 dataset_id,
                 f"{len(observations)} real point-in-time observations fetched from FRED.",
                 timestamp,
