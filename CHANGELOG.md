@@ -4,6 +4,13 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-SECT02 v2: SPY-50MA trend-conditioned re-test — clean rejection, a real counter-narrative pattern noted
+
+- User's own follow-up, recalling H-SECT02's original design and asking for the same relative-return measure (`R_sleeve - R_SPY`) conditioned on a real, classic CTA-style filter instead of macro regime -- SPY vs. its own 50-day moving average, deliberately slow enough to ignore 5-10 day chop. Universe extended to include `SMH`/`IGV` ("strongest narrative in a bull market" is exactly their use case; neither was in the original 12-sleeve test).
+- New `research_lab/regime_conditioned_sleeve_return_trend_conditioned.py`: 14 sleeves x 2 windows = 28 tests, point-biserial IC (bull/bear indicator vs. forward relative return), Benjamini-Hochberg corrected.
+- Clean rejection: 0 of 28 significant, closest at adj_p=0.066 (`XLK`, `XLV`, `IGV`, all 126d). One real, counter-intuitive pattern shown plainly rather than buried: growth/theme sleeves' raw bull-vs-bear means point the wrong way for a "growth leads in bull markets" story -- `XLK`/`IGV`/`SMH` all show bigger relative outperformance in bear-filtered periods than bull ones. None of it significant, recorded as a pattern, not a claim.
+- Informative meta-pattern across the arc: macro-regime conditioning (this paper's original test, H-STREV's addendum) has found real signal more than once; price-trend conditioning, now tried twice with two different real filters, has found none.
+
 ### Research — H-SECT01 v2: trend-regime-conditioned re-test — the rejection holds within regimes too
 
 - User's own direct methodological point: this project's experiments have all tested pooled, unconditional relationships, but a real market participant conditions on real, standard, explainable market state (price above its own moving average) -- not the same category as an arbitrary post-hoc transform. Confirmed as correct and legitimate (same category as the already-used macro-regime conditioning), then tested directly rather than left as a general claim.

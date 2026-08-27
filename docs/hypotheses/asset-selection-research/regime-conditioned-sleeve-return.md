@@ -1,7 +1,7 @@
 # Regime-conditioned sleeve relative return (H-SECT02)
 
-Status: concluded-confirmed, narrowed by H-SECT05 — see that paper. Beta-adjustment drops 11/24 significant to 3/24; only XLU (both windows) and XLY (63d) are real independent of beta. GLD's headline effect was almost entirely a beta artifact. Treat the table below as the raw, pre-beta-adjustment picture, not the final read.
-Version: v0.4
+Status: concluded-confirmed, narrowed by H-SECT05 — see that paper. Beta-adjustment drops 11/24 significant to 3/24; only XLU (both windows) and XLY (63d) are real independent of beta. GLD's headline effect was almost entirely a beta artifact. Treat the table below as the raw, pre-beta-adjustment picture, not the final read. v2 addendum: the same relative-return measure conditioned on a real SPY trend filter (50-day MA) instead of macro regime — clean rejection, 0/28.
+Version: v0.5
 Registered: 2026-08-27
 Concluded: 2026-08-27
 
@@ -108,3 +108,49 @@ not started.
 | Weakens out-of-sample, same sign | `GLD` | Significant in-sample (r=-0.265, driven substantially by 2008) but not out-of-sample (r=-0.142, still same sign, still includes 2020/2022). The full-sample number likely overstates how reliable gold's stress-hedge behavior is going forward. |
 
 Net: the defensive-rotation core (`XLU`/`XLP`) is the one piece of this paper that clears the same bar H-MACRO09 did. The rest is real but should be weighted down accordingly in any follow-up allocation test, not treated as equally strong evidence.
+
+## v2 addendum: SPY-50MA trend-conditioned re-test (same H, real CTA-style filter)
+
+Same real measure (`R_sleeve − R_SPY`) as the whole paper, same
+21/126-day windows — condition swapped from `macro_regime_composite`
+to a real, classic, textbook CTA trend filter: SPY above vs. below its
+own 50-day moving average, deliberately slow-moving so it ignores
+5-10-day chop by construction (per direct instruction). Universe
+extended to include `SMH`/`IGV` — "which narrative is winning in a
+real bull market" is exactly their use case, and neither was in the
+original 12-sleeve test.
+
+**Method** (`research_lab/regime_conditioned_sleeve_return_trend_conditioned.py`):
+14 sleeves × 2 windows = 28 tests, point-biserial IC (bull/bear
+indicator vs. forward relative return, same `pearson_significance`
+trick this project already uses for binary-event tests), Benjamini-
+Hochberg corrected. Real bull/bear mean relative return reported per
+sleeve for the direct "which narrative is strongest in bull" reading.
+
+| Date | Checkpoint | Reading |
+| --- | --- | --- |
+| 2026-08-28 | Real run, full 2004-2026 history. 5,420 real classifiable days: 70.3% bullish by this filter (SPY spends most of a 22-year window above its own 50MA), 29.7% bearish. | **Clean rejection — 0 of 28 significant.** Closest: `XLK` 126d (adj_p=0.066), `XLV` 126d (adj_p=0.066), `IGV` 126d (adj_p=0.066) — real near-misses, not significant. |
+
+**A real, counter-intuitive pattern worth showing plainly, not burying
+because it doesn't fit the "growth leads in bull markets" story:**
+growth/theme sleeves' *raw* bull-vs-bear means point the wrong way for
+that narrative — `XLK` bull mean +1.81% vs. bear mean +4.09%; `IGV`
++0.20% vs. +3.51%; `SMH` +4.05% vs. +6.65% — all show *bigger* relative
+outperformance vs. `SPY` specifically in bear-filtered periods, not
+bull ones. None of this clears significance (real, disclosed — this is
+a pattern, not a finding), and the bear sample is real but smaller
+(n≈79-80 vs. n≈174-176 bull, since bull regimes dominate a 22-year
+window by construction). Not promoted as a claim; recorded because a
+real, counter-narrative pattern is exactly the kind of thing worth
+tracking even short of significance.
+
+**Reading this against the rest of the arc:** this is the *second*
+real price-trend-conditioned re-test this session (after H-SECT01's
+own SPY-trend addendum), and it's the second clean rejection. Macro-
+regime conditioning (this paper's original test, H-STREV's addendum)
+has found real signal more than once; price-trend conditioning, tried
+twice now with two different real filters (5/20-day and 50-day MA), has
+not. That's a real, informative pattern about which *kind* of
+conditioning variable carries information in this project's data —
+fundamental/macro state, not price-trend state — worth keeping in mind
+before designing the next filter-conditioned re-test.
