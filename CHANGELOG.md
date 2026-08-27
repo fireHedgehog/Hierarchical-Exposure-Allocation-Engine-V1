@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — composite threshold sensitivity: robust, closing a real gap before staging
+
+- New `research_lab/composite_threshold_sensitivity.py`: 4 drawdown thresholds (-8/-10/-12/-15%) × 2 bucket splits (tercile/quartile) × 2 windows, full pooled 2004-2026.
+- 14 of 16 combinations significant; both non-significant cells share one real, expected edge case (-15% at 3mo, a rare tail event with small hit counts). 6-month window is robust across every threshold and split tested — recommended as primary for production wiring.
+
 ### Research — H-MACRO09 out-of-sample split: replicates cleanly
 
 - New `research_lab/composite_forward_risk_oos.py`: chronological split at 2019-01-01 (disclosed before running), no refitting on either half. In-sample 2004-2018 (includes 2008); out-of-sample 2019-2026 (includes 2020 COVID crash and the 2022 hiking cycle).
