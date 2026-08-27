@@ -30,6 +30,22 @@ project's current phase is deliberately price/volume (+ macro) only.
 | Alternative structured | Flows, options, short interest | Not connected. Named as a real gap in `asset-selection-research/README.md`'s crowding/convexity question (#6) |
 | Unstructured | Text, earnings, themes, news | Not connected. `thematic-beta-selection-process.md` (H-BETA01) is parked specifically because it needs this tier |
 
+**Within "market numeric," not every symbol is general-purpose.**
+`staging_symbols.research_scope` (`general` / `narrow_proxy` /
+`reference_only`) exists so a broad cross-sectional sweep — a future
+H-SECT-style study, or a future ML feature pipeline — doesn't silently
+pool in a structurally-different instrument. `VXX` (a rolling-futures
+ETN with a real, persistent decay mechanism — see `timing-research/
+vix-percentile-vxx-entry.md`) is `narrow_proxy`: a real, valid proxy
+for its *own* deliberately-scoped hypothesis, never a general asset.
+`BTC-USD` is `reference_only` (never spliced into a listed instrument's
+history, per `roadmap.md`). Every general-purpose production query
+(`factor_engine`, `allocation_engine`, `instrument_engine`) and every
+broad research sweep (`research_repository.py`'s significance/momentum/
+timing-signal studies) filters `research_scope = 'general'` — a new
+narrow-scope symbol added for one paper must be labeled at the same
+time it's added, not left to pollute the general universe by default.
+
 A hypothesis starts here, as a versioned working paper — not as a database row. This
 folder exists because research itself has a data-structure problem: one candidate
 idea's evidence is a nominal category (hawkish/dovish), another's is a continuous

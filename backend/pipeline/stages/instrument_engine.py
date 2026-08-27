@@ -85,7 +85,8 @@ def run_instrument_engine_stage(
     risk_free_rate = rate_row["value"] / 100.0
 
     staging_rows = connection.execute(
-        "SELECT symbol, category FROM staging_symbols WHERE active = 1 AND category != 'macro_series'"
+        "SELECT symbol, category FROM staging_symbols "
+        "WHERE active = 1 AND category != 'macro_series' AND research_scope = 'general'"
     ).fetchall()
     category_by_symbol = {row["symbol"]: row["category"] for row in staging_rows}
 

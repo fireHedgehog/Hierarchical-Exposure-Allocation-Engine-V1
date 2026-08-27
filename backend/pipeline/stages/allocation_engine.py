@@ -56,7 +56,8 @@ def run_allocation_engine_stage(
         )
 
     staging_rows = connection.execute(
-        "SELECT symbol, category FROM staging_symbols WHERE active = 1 AND category != 'macro_series'"
+        "SELECT symbol, category FROM staging_symbols "
+        "WHERE active = 1 AND category != 'macro_series' AND research_scope = 'general'"
     ).fetchall()
     category_by_symbol = {row["symbol"]: row["category"] for row in staging_rows}
 

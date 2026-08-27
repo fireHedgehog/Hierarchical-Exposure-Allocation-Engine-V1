@@ -196,6 +196,28 @@ def _install_compatible_columns(connection: sqlite3.Connection) -> None:
             "ALTER TABLE desk_snapshots ADD COLUMN regime_percentile_rank REAL "
             "CHECK (regime_percentile_rank IS NULL OR (regime_percentile_rank >= 0 AND regime_percentile_rank <= 100))"
         )
+    staging_symbol_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(staging_symbols)").fetchall()
+    }
+    if "research_scope" not in staging_symbol_columns:
+        connection.execute(
+            "ALTER TABLE staging_symbols ADD COLUMN research_scope TEXT NOT NULL DEFAULT 'general' "
+            "CHECK (research_scope IN ('general', 'narrow_proxy', 'reference_only'))"
+        )
+    # Corrected here, not in schema.sql: on an existing database schema.sql's
+    # own script runs before this function, so an UPDATE referencing
+    # research_scope there would fail with "no such column" the first time
+    # this migration is needed -- caught by actually running it, not assumed.
+    # Runs every startup, harmless once already correct.
+    connection.execute(
+        "UPDATE staging_symbols SET research_scope = 'narrow_proxy' "
+        "WHERE symbol = 'VXX' AND research_scope != 'narrow_proxy'"
+    )
+    connection.execute(
+        "UPDATE staging_symbols SET research_scope = 'reference_only' "
+        "WHERE symbol = 'BTC-USD' AND research_scope != 'reference_only'"
+    )
 
     event_columns = {
         row["name"]

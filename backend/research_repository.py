@@ -146,7 +146,8 @@ def run_factor_significance_research(
         factor_observations["macro_regime_composite_score"] = composite_series
 
     staging_rows = connection.execute(
-        "SELECT symbol, category FROM staging_symbols WHERE active = 1 AND category != 'macro_series'"
+        "SELECT symbol, category FROM staging_symbols "
+        "WHERE active = 1 AND category != 'macro_series' AND research_scope = 'general'"
     ).fetchall()
     symbol_bars: dict[str, list[Bar]] = {}
     for row in staging_rows:
@@ -404,7 +405,8 @@ def _momentum_horizon_series(
     series_by_key["12m_skip1m"] = []
 
     staging_rows = connection.execute(
-        "SELECT symbol, category FROM staging_symbols WHERE active = 1 AND category != 'macro_series'"
+        "SELECT symbol, category FROM staging_symbols "
+        "WHERE active = 1 AND category != 'macro_series' AND research_scope = 'general'"
     ).fetchall()
     for row in staging_rows:
         security_id = _security_id_for(row["symbol"], row["category"])
@@ -612,7 +614,8 @@ def _tradable_symbol_bars(connection: sqlite3.Connection, dataset_snapshot_id: s
     this project's non-negotiable rules, see roadmap.md)."""
 
     staging_rows = connection.execute(
-        "SELECT symbol, category FROM staging_symbols WHERE active = 1 AND category NOT IN ('macro_series', 'crypto_reference')"
+        "SELECT symbol, category FROM staging_symbols "
+        "WHERE active = 1 AND category NOT IN ('macro_series', 'crypto_reference') AND research_scope = 'general'"
     ).fetchall()
     bars_by_symbol: dict[str, list[Bar]] = {}
     for row in staging_rows:

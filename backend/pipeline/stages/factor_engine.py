@@ -62,7 +62,8 @@ def run_factor_engine_stage(
         )
 
     staging_rows = connection.execute(
-        "SELECT symbol, name, category FROM staging_symbols WHERE active = 1 AND category != 'macro_series' ORDER BY sort_order"
+        "SELECT symbol, name, category FROM staging_symbols "
+        "WHERE active = 1 AND category != 'macro_series' AND research_scope = 'general' ORDER BY sort_order"
     ).fetchall()
     bars_by_symbol: dict[str, list[Bar]] = {}
     security_id_by_symbol: dict[str, str] = {}

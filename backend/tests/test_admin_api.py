@@ -350,7 +350,13 @@ def test_real_pipeline_run_persists_backtest_events_and_metrics_per_symbol(
     assert factor["status"] == "completed"
 
     symbols = client.get("/api/v1/symbols").json()["symbols"]
-    assert len(symbols) == 22
+    # 27 staging symbols, minus 4 macro_series, minus VXX (narrow_proxy) and
+    # BTC-USD (reference_only) -- both real research_scope exclusions, not a
+    # regression. BTC-USD's own long-standing note says "research reference
+    # only, never a position candidate"; it was incorrectly being ranked
+    # here before research_scope existed to enforce that -- a real bug fix,
+    # not just a count bump.
+    assert len(symbols) == 21
     top = next(item for item in symbols if item["rank"] == 1)
 
     detail = client.get(f"/api/v1/symbols/{top['symbol']}").json()
@@ -385,8 +391,8 @@ def test_staging_universe_is_seeded_by_default_with_no_paid_provider_references(
         client=("127.0.0.1", 52000),
     ) as client:
         universe = client.get("/api/v1/admin/universe").json()
-    assert universe["summary"]["total"] == 26
-    assert universe["summary"]["active"] == 26
+    assert universe["summary"]["total"] == 27
+    assert universe["summary"]["active"] == 27
     assert universe["summary"]["by_category"]["macro_series"] == 4
     assert universe["summary"]["by_category"]["sector_equity_etf"] == 11
     symbols_by_key = {item["symbol"]: item for item in universe["symbols"]}

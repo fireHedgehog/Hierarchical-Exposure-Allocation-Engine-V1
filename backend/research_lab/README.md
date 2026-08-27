@@ -41,6 +41,21 @@ they support, files that grow large and ugly over weeks of checkpoints. None of
 this needs fixing. Apply zero code-quality bar here — it would be wasted effort on
 code whose only job is to get thrown away or rewritten properly at graduation.
 
+## One real rule that isn't relaxed: `research_scope`
+
+Zero code-quality bar doesn't extend to universe correctness. When a
+script pulls a broad symbol set from `staging_symbols` (not a single
+named symbol for its own paper), filter `research_scope = 'general'` —
+same as every production stage and every existing broad sweep in
+`research_repository.py` already does. `narrow_proxy` symbols (e.g.
+`VXX` — a rolling-futures ETN with a real, persistent decay mechanism)
+and `reference_only` symbols (e.g. `BTC-USD`) are real, valid data for
+*their own* deliberately-scoped hypothesis, never for a general
+cross-sectional pool. Adding a new narrow-scope symbol for one paper
+means labeling it at the same time (`schema.sql`'s `staging_symbols`
+seed), not leaving it to default into `general` and pollute the next
+broad sweep.
+
 ## Agent behavior
 
 Skip this folder in code review, cleanup passes, and "while I'm here" refactors by

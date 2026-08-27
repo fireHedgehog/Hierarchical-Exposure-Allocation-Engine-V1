@@ -805,7 +805,20 @@ CREATE TABLE IF NOT EXISTS staging_symbols (
     production_provider_key TEXT REFERENCES provider_onboarding_plan(plan_key),
     notes TEXT,
     active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
-    sort_order INTEGER NOT NULL
+    sort_order INTEGER NOT NULL,
+    -- Real, queryable label so a future broad cross-sectional sweep (e.g. an
+    -- H-SECT-style "rank every active symbol" study, or a future ML feature
+    -- pipeline) doesn't silently pull in a structurally-narrow proxy
+    -- instrument alongside normal assets. 'general': safe for broad,
+    -- pooled research (the default -- every symbol below unless corrected).
+    -- 'narrow_proxy': a real, structurally-different instrument (e.g. VXX --
+    -- a rolling-futures ETN with a real, persistent decay mechanism, only a
+    -- valid proxy for its OWN deliberately-scoped hypothesis, never pooled
+    -- into a general universe). 'reference_only': not even spliced into a
+    -- listed instrument's history (e.g. BTC-USD, no production provider).
+    research_scope TEXT NOT NULL DEFAULT 'general' CHECK (research_scope IN (
+        'general', 'narrow_proxy', 'reference_only'
+    ))
 );
 
 -- Readiness definitions are application configuration. Their current state is
@@ -2038,7 +2051,7 @@ INSERT INTO staging_symbols (
     ('NVDA', 'NVIDIA Corporation', 'mega_cap_equity', 'free', 'intrinio', NULL, 1, 81),
     ('SMH', 'VanEck Semiconductor ETF', 'thematic_etf', 'free', 'intrinio', NULL, 1, 90),
     ('IGV', 'iShares Expanded Tech-Software Sector ETF', 'thematic_etf', 'free', 'intrinio', NULL, 1, 91),
-    ('VXX', 'iPath Series B S&P 500 VIX Short-Term Futures ETN', 'thematic_etf', 'free', 'intrinio', 'Rolling VIX-futures ETN, not spot VIX -- real trading history starts 2009-01-30 (real listing date, not a fetch constraint). Added for a real, quantified VXX entry-timing question (macro_regime_composite/VIXCLS already fetched); VIX options themselves stay out of scope, no free options-chain source exists.', 1, 92)
+    ('VXX', 'iPath Series B S&P 500 VIX Short-Term Futures ETN', 'thematic_etf', 'free', 'intrinio', 'Rolling VIX-futures ETN, not spot VIX. Real fetched history only reaches 2018-01-25, not the 2009 launch -- the ticker was reissued as this Series B note in 2018 and Yahoo does not carry the earlier Series A history under this symbol (a real property of the free data source, found on fetch, not a fetch constraint). Added for a real, quantified VXX entry-timing question (H-TIME01, macro_regime_composite/VIXCLS already fetched); VIX options themselves stay out of scope, no free options-chain source exists. research_scope=narrow_proxy (see below) -- a real proxy for its own hypothesis, never pool into a general cross-sectional universe.', 1, 92)
 ON CONFLICT(symbol) DO UPDATE SET
     name = excluded.name,
     category = excluded.category,
@@ -2046,6 +2059,14 @@ ON CONFLICT(symbol) DO UPDATE SET
     production_provider_key = excluded.production_provider_key,
     notes = excluded.notes,
     sort_order = excluded.sort_order;
+
+-- research_scope corrections for VXX/BTC-USD deliberately live in
+-- database.py's _install_compatible_columns, not here: on an existing
+-- database this script runs BEFORE that function adds the research_scope
+-- column (initialize_database's own ordering), so an UPDATE referencing it
+-- here would fail with "no such column" on any pre-existing database --
+-- caught by actually running this against the real dev database, not
+-- assumed safe.
 
 INSERT INTO readiness_milestones (
     milestone_key, name, description, sort_order
