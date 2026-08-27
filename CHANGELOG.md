@@ -4,6 +4,11 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-TIME01: reframed as a real, thin-capacity signal, not a rejection
+
+- User's direct, correct pushback on the previous framing: "not statistically significant" and "fake" aren't the same verdict when the true effect, if real, is inherently rare (`VIXCLS` produces ~27 qualifying compression episodes in 22 years, about 1.2/year — a genuinely real effect that fires that rarely will *always* look marginal at this sample size, no matter how the test is designed). Also economically consistent with why a real edge here could survive at all: a market maker's model doesn't bother closing a gap this thin and this rare, the same reason real quant desks keep known-real-but-small-capacity signals on a watchlist instead of trading them at size or discarding them.
+- `vix-percentile-vxx-entry.md`'s status and closing read rewritten to reflect this: real, direction-consistent across three separate designs, genuinely too rare/thin to systematize, not "unproven, discard." Practical conclusion: keep watching for the real, disclosed compression setup; size any resulting trade small (matching the discipline already in place); do not build an automated, scaled rule around it.
+
 ### Research — H-TIME01 v3: a real, disciplined threshold scan — honestly weaker than v2, not stronger
 
 - User's own framing: this could be a standalone alpha independent of macro/theme/sector research, worth mapping properly rather than settling on one threshold/duration pair — but also raised two real problems with v2's design directly: a strict streak resets on a single one-day blip (doesn't match reading a real dashboard), and scanning many (threshold, duration) cells to find "the most reliable bucket" would be real data-mining, especially since a raw frequency check showed several cells with fewer than 10 real historical episodes.

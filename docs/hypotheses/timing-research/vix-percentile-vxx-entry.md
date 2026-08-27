@@ -1,7 +1,7 @@
 # VIX-percentile VXX entry timing (H-TIME01)
 
-Status: v1 confirmed (partial, `days_since_elevated`); v2/v3 event-study reframes real-directional but not significant, and v3's more robust (tolerant, sample-floored, non-cherry-picked) design is *weaker* than v2's strict-streak version — a real fragility signal, not a stronger case. Not yet a standalone tradable rule. See all three Observation log sections.
-Version: v0.4
+Status: v1 confirmed (partial, `days_since_elevated`); v2/v3 event-study reframes real-directional, consistently, across every design tried, never reaching conventional significance — reframed per direct correction (see Capacity framing) as a real, thin-capacity signal (~1-2 qualifying episodes/year), not a rejected one. Watch-and-size-small, not a systematic rule. See all Observation log sections.
+Version: v0.5
 Registered: 2026-08-27
 Concluded: 2026-08-27
 
@@ -203,10 +203,24 @@ needs a larger sample (more real history, or a shorter, more frequent
 compression definition) than 22 years of daily VIX can currently
 support at any definition tested so far.
 
-**Direct answer to "can I trade this":** not yet, honestly. This is a
-real, plausible, multiply-tested-consistent-in-direction belief about
-how volatility behaves, but no version of it — strict streak, tolerant
-window, VIX-native or VXX-proxied — clears this project's own
-significance bar once tested without cherry-picking. Calling it a
-standalone tradable alpha today would be overclaiming past what three
-real, honest passes at the same idea actually found.
+**Direct answer to "can I trade this":** not as a systematic, sized
+rule — but the earlier "not yet" framing undersold this. Real, correct
+reframe from the user: "not significant" and "fake" aren't the same
+verdict when the true effect, if real, is inherently rare. `VIXCLS`
+only produces ~27 qualifying compression episodes in 22 real years —
+about 1.2 per year, and fewer at the stricter/more reliable end. A
+genuinely real effect that only fires once or twice a year will *always*
+look statistically marginal in a dataset this size — that's not a flaw
+in the effect, it's what rare-and-real looks like with a finite real
+sample, and no amount of honest redesign (v1→v2→v3) changes that
+ceiling. This is also economically consistent with why the effect
+would survive at all: a market maker's model doesn't bother closing a
+gap this thin and this rare — the same reason genuine quant desks keep
+"real but too-small-capacity" signals on a watchlist rather than either
+trading them at size or discarding them as false. Real, practical
+conclusion: keep watching for the real, disclosed setup (deep,
+sustained VIX compression); size any resulting trade small when it
+occurs (matching the discipline already in place, not a new rule); do
+not build an automated, scaled strategy around it — a rare, thin,
+real edge is exactly the kind of thing this app should log and
+surface, not systematize.
