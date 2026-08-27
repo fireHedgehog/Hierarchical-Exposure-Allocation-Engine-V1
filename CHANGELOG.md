@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-MACRO08: indicator redundancy — the composite prerequisite
+
+- New `research_lab/macro_indicator_redundancy.py`: real pairwise correlation + effective-number-of-bets (`signal_validation.py`, already proven on the original 8 macro factors) applied to the 17-23 indicators tested across H-MACRO01-07, two honest passes (deep-history 2004-2026 n=283, recent 2023-2025 n=39 — pooling would either truncate history or drop the shortest series).
+- Real result: **17 raw indicators → 4.13 effective independent bets** (deep pass); **23 → 3.46** (recent pass). Roughly 4 real factor clusters, not 17-26 signals: inflation/growth (CPI/PCE/PPI/GDP/payrolls, r up to 0.998), rate level (10Y/30Y nominal/real), market stress (NFCI/VIX, r=+0.744 — correlated in level despite predicting opposite-signed outcomes in H-MACRO03/04, a real unresolved tension named, not smoothed), policy operations (TGA/WALCL, IORB/SOFR).
+- This is the concrete input any future composite needs — draw from ~4 clusters, not the raw indicator list, to avoid double/triple-counting.
+
 ### Research — H-MACRO04-07: layer 3 complete (Credit, Volatility, Duration, USD)
 
 - Four more real indicator-vs-target papers, same continuous-IC method as H-MACRO02/03, looped through without stopping for confirmation between each per direct instruction. Layer 3 (all 5 market-outcome dimensions) is now fully covered.

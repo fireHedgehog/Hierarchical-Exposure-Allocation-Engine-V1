@@ -82,6 +82,7 @@ cross-sectional factor set.
 | [Volatility outcome predictors](volatility-outcome-predictors.md) (H-MACRO05) | observing | 23 indicators vs. VIX forward change. 7/23 significant at 1q — nearly all point the same way as H-MACRO03/04: stress now predicts calming, not more stress. |
 | [Duration outcome predictors](duration-outcome-predictors.md) (H-MACRO06) | observing | 23 indicators vs. 10Y yield forward change. 18/23 significant — richest result in the folder; rate-level mean-reversion vs. fundamentals-continuation, two distinct real mechanisms. |
 | [USD outcome predictors](usd-outcome-predictors.md) (H-MACRO07) | observing | 24 indicators vs. broad dollar index forward change (new series, `DTWEXBGS`). 15/24 significant; rate-mean-reversion group plausibly chains from H-MACRO06's own finding. |
+| [Indicator redundancy](indicator-redundancy.md) (H-MACRO08) | observing | **The prerequisite for any composite.** 17-23 raw indicators → only ~3.5-4.1 effective independent bets. Real factor structure: inflation/growth, rate level, market stress, policy operations — 4 clusters, not 17-26 signals. |
 
 **Layer 3 complete** — all 5 market-outcome dimensions (Equity, Credit,
 Volatility, Duration, USD) now have a real indicator-vs-target table.
@@ -133,12 +134,11 @@ mean-revert, and that plausibly chains into dollar weakness. Neither is
 confirmed as one underlying factor — that's exactly what the redundancy
 check below has to test before anyone calls it that.
 
-**Queued, not yet built:**
-- **Redundancy/incremental-value check across all 7 papers** — the single
-  most important next step before any composite. VIX/NFCI/credit-spreads/
-  T10YIE keep reappearing across different targets; effective-number-of-bets
-  (`signal_validation.py`, already proven) will say how many real
-  independent signals actually exist versus one repeated latent factor.
+**Redundancy check done (H-MACRO08): ~4 real independent factor clusters**,
+not 17-26 indicators — inflation/growth, rate level, market stress, policy
+operations. This is the concrete input for composite design.
+
+**Still queued:**
 - Liquidity (SRF/discount-window — no confirmed clean FRED series, likely
   needs the NY Fed's own operation results, unverified) and Guidance (needs
   real FOMC text, an NLP problem, not a correlation test) — both real,
@@ -147,7 +147,6 @@ check below has to test before anyone calls it that.
 - A debt-ceiling event study; regime-duration; regime-conditional
   cross-sectional performance.
 
-**The human+agent composite stays queued until the redundancy check runs** —
-7 dimension papers with real, partly-overlapping signals is exactly the
-input that check needs; distilling into a composite before it runs would
-double-count whatever the redundancy check would have caught.
+**8 real papers now exist** (2 layer-2 dimensions, all 5 layer-3 dimensions,
+plus the redundancy check) — the free-data potential in what's readily
+fetchable is largely mined for a first pass. Composite design is next.
