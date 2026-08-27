@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-MACRO03: equity outcome predictors, direct test of "bad news is good news"
+
+- New `research_lab/equity_outcome_predictors.py`: real, pooled continuous IC, each of 24 layer-1 indicators vs. SPY's own forward 1m/3m return. 17/24 significant, full 2004-2026 history for most.
+- Direct test of a real, user-proposed mechanism (stress → policy intervention → rally): VIX confirms it cleanly (higher fear → higher forward return, r=+0.129 at 3m, full history) and breakevens confirm the other half (lower T10YIE → higher return, r=-0.154). NFCI does not fit the same story — negatively correlated, the naive direction, opposite of VIX — disclosed as a real, unresolved nuance rather than smoothed over.
+- Second real pattern: INDPRO negative (strong growth → lower forward return, a "good news is bad news"/hawkish-Fed story) while CPI/PCE are positive — flagged for a redundancy pass, not force-explained.
+
 ### Research — H-MACRO02: balance-sheet predictors, continuous IC not discrete events
 
 - New `research_lab/balance_sheet_predictors.py`: unlike Rate's discrete FOMC steps, balance sheet is a continuous stock — a naive weekly-direction "event" would mostly capture routine operational noise, the exact QE/reserve-management conflation the framework flags. Tests each indicator's level against `WALCL`'s own forward 13-week % change instead, real Pearson + Benjamini-Hochberg.

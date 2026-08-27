@@ -77,6 +77,7 @@ cross-sectional factor set.
 | [Warsh Fed reaction function](warsh-reaction-function.md) (H-W01) | observing | Layers 1-3, chair-specific |
 | [Rate decision predictors](rate-decision-predictors.md) (H-MACRO01) | observing | All 22 layer-1 indicators vs. layer 2's Rate dimension (hike/cut only — holds not classified yet, no FOMC calendar). 4/22 significant. |
 | [Balance sheet predictors](balance-sheet-predictors.md) (H-MACRO02) | observing | All 23 layer-1 indicators vs. layer 2's Balance sheet dimension, continuous IC (not discrete events — see paper for why). 10/23 significant. |
+| [Equity outcome predictors](equity-outcome-predictors.md) (H-MACRO03) | observing | All 24 layer-1 indicators vs. layer 3's Equity dimension (SPY forward return). 17/24 significant. Direct test of "bad news is good news": VIX confirms it, NFCI doesn't. |
 
 **One indicator-vs-target table per paper, by design** — each new layer-2/3
 target dimension (Balance sheet, Liquidity, Guidance, Equity, Credit, ...)
