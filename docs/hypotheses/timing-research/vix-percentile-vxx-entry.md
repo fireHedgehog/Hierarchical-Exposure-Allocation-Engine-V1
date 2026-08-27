@@ -1,7 +1,7 @@
 # VIX-percentile VXX entry timing (H-TIME01)
 
-Status: concluded-confirmed (partial, v1) + concluded-inconclusive (v2 reframe — real, consistent direction across every test, not yet statistically decisive). See both Observation log sections.
-Version: v0.3
+Status: v1 confirmed (partial, `days_since_elevated`); v2/v3 event-study reframes real-directional but not significant, and v3's more robust (tolerant, sample-floored, non-cherry-picked) design is *weaker* than v2's strict-streak version — a real fragility signal, not a stronger case. Not yet a standalone tradable rule. See all three Observation log sections.
+Version: v0.4
 Registered: 2026-08-27
 Concluded: 2026-08-27
 
@@ -144,3 +144,69 @@ than genuinely absent. Real next step, not done: either wait for more
 real history to accumulate, or test the same event design against a
 less rare compression definition as a deliberate, disclosed robustness
 check — not a silent threshold search.
+
+## v3: framed as a standalone alpha — real scarcity, real robustness check, honestly weaker
+
+User's own framing: this is a genuinely independent signal (not tied
+to macro/theme/sector research), worth mapping properly rather than
+committing to one threshold/duration pair. Two real problems raised
+directly and addressed, not glossed over:
+
+1. **A strict streak is brittle.** v2's design resets its compression
+   counter to zero on a single one-day blip (e.g. VIX printing 15.1 for
+   a day inside an otherwise-compressed stretch) — doesn't match how a
+   real dashboard reading actually works.
+2. **"Find the most reliable bucket" by scanning many (threshold,
+   duration) cells and picking the best one is real data-mining.** A
+   raw frequency scan (a one-off diagnostic count, not a paper script)
+   showed real episode counts collapsing fast at stricter cells:
+   threshold 12 / 63-day duration has **never occurred** in 22 real
+   years; several cells sit at n<10, where one lucky episode swings the
+   rate 10-15pp.
+
+**Redesigned method** (`research_lab/vix_compression_threshold_scan.py`):
+tolerant compression state (≥90% of the last 21 trading days below
+threshold, not an unbroken streak — survives a 1-2 day blip, disclosed,
+not tuned), scanned across **one axis only** (threshold, 13-18 —
+duration fixed, not a 2D grid, to keep the real multiple-comparisons
+burden small and each cell's sample pooled rather than fragmented). A
+real, disclosed sample floor (n≥15) — any cell below that is reported
+for transparency but explicitly not trusted for a rate claim. A real
+monotonicity check across the trusted cells, not a max-pick.
+
+## Observation log — v3
+
+| Date | Checkpoint | Reading |
+| --- | --- | --- |
+| 2026-08-27 | Real run, `research_lab/vix_compression_threshold_scan.py`, full 2004-2026 history, 10-day explosion window (the one closest to significant in v2). | **Real, monotonic direction — but weaker than v2's strict-streak version, not stronger.** |
+
+| Threshold | Real episodes | Explosion rate | vs. baseline (5.6%) | Trusted (n≥15)? |
+| --- | --- | --- | --- | --- |
+| 13 | 11 | 0.0% | — | No (n=11) |
+| 14 | 28 | 14.3% | +8.7%, adj_p=0.35 | Yes, not significant |
+| 15 | 32 | 9.4% | +3.8%, adj_p=0.42 | Yes, not significant |
+| 16 | 32 | 0.0% | -5.6%, adj_p=0.42 | Yes, not significant |
+| 17 | 30 | 0.0% | -5.6%, adj_p=0.42 | Yes, not significant |
+| 18 | 35 | 0.0% | -5.6%, adj_p=0.42 | Yes, not significant |
+
+Monotonic across every trusted cell (stricter threshold → higher or
+equal explosion rate, zero reversals) — a real, coherent shape, not
+noise. But the best trusted cell (threshold 14, adj_p=0.35) is a much
+weaker result than v2's strict-streak design (threshold 15/streak 21,
+p=0.063). **Read honestly: the more robust the definition gets
+(tolerant, sample-floored, single-axis, not cherry-picked), the weaker
+this signal looks — the opposite of what a real, robust effect should
+do.** That's a genuine fragility finding, not just "still not
+significant." Either the strict-streak version's near-significance was
+itself partly a specification artifact, or a real effect exists but
+needs a larger sample (more real history, or a shorter, more frequent
+compression definition) than 22 years of daily VIX can currently
+support at any definition tested so far.
+
+**Direct answer to "can I trade this":** not yet, honestly. This is a
+real, plausible, multiply-tested-consistent-in-direction belief about
+how volatility behaves, but no version of it — strict streak, tolerant
+window, VIX-native or VXX-proxied — clears this project's own
+significance bar once tested without cherry-picking. Calling it a
+standalone tradable alpha today would be overclaiming past what three
+real, honest passes at the same idea actually found.

@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — H-TIME01 v3: a real, disciplined threshold scan — honestly weaker than v2, not stronger
+
+- User's own framing: this could be a standalone alpha independent of macro/theme/sector research, worth mapping properly rather than settling on one threshold/duration pair — but also raised two real problems with v2's design directly: a strict streak resets on a single one-day blip (doesn't match reading a real dashboard), and scanning many (threshold, duration) cells to find "the most reliable bucket" would be real data-mining, especially since a raw frequency check showed several cells with fewer than 10 real historical episodes.
+- New `research_lab/vix_compression_threshold_scan.py`: redesigned compression state as tolerant (≥90% of the last 21 days below threshold, survives a 1-2 day blip) rather than an unbroken streak; scanned one axis only (threshold 13-18, duration fixed) to keep the real multiple-comparisons burden small; real, disclosed sample floor (n≥15, cells below it reported but not trusted); a real monotonicity check across trusted cells instead of picking the best-looking one.
+- Real, honest result: monotonic across every trusted cell (stricter threshold → higher or equal explosion rate, no reversals) — a real, coherent shape. But the best trusted cell (threshold 14, adj_p=0.35) is meaningfully weaker than v2's strict-streak result (p=0.063) — the more robust the design gets, the weaker the signal looks, the opposite of what a genuinely robust effect should do. Recorded honestly: real, plausible, direction-consistent across three separate designs, but no version clears this project's significance bar without cherry-picking — not yet a standalone tradable rule.
+
 ### Research — H-TIME01 v2: compression-episode explosion event study — real direction, not yet decisive
 
 - User's own direct correction to v1's design: not a continuous IC over a long forward window, but a real event study matching the actual belief being tested (volatility can't stay compressed forever) — same reframe shape as `dow-theory-trend-structure.md` → `dow-theory-risk-state.md`.
