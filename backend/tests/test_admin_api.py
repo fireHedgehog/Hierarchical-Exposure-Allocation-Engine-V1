@@ -1929,21 +1929,26 @@ def test_legacy_demo_gets_complete_versioned_v3_fixture_on_reseed(tmp_path: Path
         # fundamental_analysis), all registered in schema.sql. Of the 5 real
         # ones, macd_rsi_single_name_timing, cross_sectional_momentum, and
         # macro_regime_composite each carry 3 versions (naive-v1, naive-v2,
-        # naive-v3). macro_regime_composite's naive-v3: real z-score per
-        # factor (trailing stdev, not a hand-picked scale) grouped into 3
-        # evidence-based clusters (H-MACRO08's real redundancy finding),
-        # replacing v1/v2's hand-picked per-factor weights that
+        # naive-v3); risk_envelope_allocation carries 2 (naive-v1, naive-v2 --
+        # H-MACRO10 found naive-v1's confidence-to-multiplier formula had
+        # gone directionally backwards after the naive-v3 macro promotion
+        # changed what "confidence" means; naive-v2 fixes it with a real,
+        # monotonically decreasing interpolation between the same already-
+        # validated calibration endpoints). macro_regime_composite's naive-v3:
+        # real z-score per factor (trailing stdev, not a hand-picked scale)
+        # grouped into 3 evidence-based clusters (H-MACRO08's real redundancy
+        # finding), replacing v1/v2's hand-picked per-factor weights that
         # unintentionally gave one correlated cluster 2.5x the weight of
         # others; confidence is now a real, out-of-sample-validated
         # historical drawdown likelihood, not a naive linear transform --
         # see docs/hypotheses/macro-research/. Each strategy's earlier
         # version keeps its own component rows (where it has any) as an
-        # unedited historical record; naive-v3 promotions add one lifecycle
-        # event each.
+        # unedited historical record; each version promotion adds one
+        # lifecycle event.
         assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 9
-        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 13
-        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 28
-        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 15
+        assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 14
+        assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 30
+        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 16
         assert connection.execute("SELECT COUNT(*) FROM strategy_components").fetchone()[0] == 7
         synthetic_assets = connection.execute(
             """

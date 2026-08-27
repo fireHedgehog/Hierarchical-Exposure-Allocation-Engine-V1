@@ -6,7 +6,7 @@ from datetime import datetime
 from backend.engine.allocation import (
     InsufficientAllocationDataError,
     SymbolAllocationInput,
-    compute_risk_envelope,
+    compute_risk_envelope_v2 as compute_risk_envelope,
 )
 from backend.pipeline.stages.common import StageOutcome, _iso_z
 

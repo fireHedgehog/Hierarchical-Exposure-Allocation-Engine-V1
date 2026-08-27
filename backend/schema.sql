@@ -1261,6 +1261,50 @@ INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurre
      'Promoted naive-v2 -> naive-v3: real z-score normalization and redundancy-aware cluster weighting (H-MACRO08), replacing v1/v2''s hand-picked scale constants and per-factor weights that unintentionally gave one correlated cluster 2.5x the weight of others. Confidence is now a real, out-of-sample-validated historical drawdown likelihood (composite-forward-risk.md and its OOS/threshold-sensitivity follow-ups), not a naive linear transform. A genuine risk-context read -- explicitly not a timing signal, nothing here executes.',
      'naive-v3');
 
+-- naive-v2 (2026-08-28): real, direction-corrected fix, found by H-MACRO10
+-- (docs/hypotheses/macro-research/exposure-policy-calibration.md). naive-v1's
+-- `multiplier = clamp(confidence * 2.0, 0.5, 1.5)` was written before the
+-- naive-v3 macro promotion, when `regime_confidence` meant a roughly
+-- symmetric v1/v2 score. Since naive-v3, `confidence` is a real, calibrated,
+-- ONE-SIDED P(drawdown) -- 0.071 (calm) to 0.345 (stressed) -- and naive-v1's
+-- unchanged formula collapsed badly under that new range: stressed
+-- (0.345*2=0.69) got MORE exposure than calm or middle (both floor at 0.5,
+-- since 0.071*2 and 0.238*2 are both under the floor) -- backwards, and calm/
+-- middle became indistinguishable. Live-verified, not just reasoned about: a
+-- real pipeline run at confidence=0.24 published exactly a 0.50x multiplier,
+-- this exact bug, already live in production before this fix. Corrected via
+-- real, monotonically decreasing linear interpolation between the SAME two
+-- real, already-validated calibration endpoints (no new numbers invented) --
+-- calm maps to the top of the existing 0.5x-1.5x band, stressed to the
+-- bottom. v1's code stays untouched and importable so any dataset snapshot
+-- already sealed under it stays honestly reproducible; this is a NEW version
+-- row, not a rewrite.
+INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
+    ('risk_envelope_allocation', 'naive-v2', '2026-08-28T00:00:00Z',
+     'A gross-exposure multiplier should decrease as the real, calibrated probability of a forward drawdown increases -- naive-v1''s formula, inherited unchanged from before the naive-v3 confidence semantics changed, did the opposite over the real production range.',
+     'None claimed as a tradable edge -- this fixes a real directional bug, it does not yet prove the corrected rule beats static exposure on real out-of-sample Sharpe/drawdown (that is H-MACRO10''s own next, separate checkpoint).',
+     'naive-v2: multiplier now linearly interpolates, decreasing, between HISTORICAL_DRAWDOWN_RATE_CALM (-> 1.5x) and HISTORICAL_DRAWDOWN_RATE_STRESSED (-> 0.5x), replacing v1''s `confidence * 2.0` which collapsed calm and middle to the same floor and gave stressed more exposure than calm at the real, current confidence range.',
+     '{"min_multiplier":0.5,"max_multiplier":1.5,"calm_confidence":0.071,"stressed_confidence":0.345,"interpolation":"linear_decreasing"}',
+     'backend/engine/allocation/envelope_v2.py', '2026-08-28T00:00:00Z', '2027-02-28');
+
+UPDATE strategies SET current_version = 'naive-v2', updated_at = '2026-08-28T00:00:00Z'
+WHERE strategy_key = 'risk_envelope_allocation';
+
+UPDATE strategies SET summary = 'Regime confidence (a real, calibrated P(drawdown)) scales a gross-exposure multiplier (0.5x-1.5x), now correctly decreasing as drawdown risk rises; sleeve targets aggregate factor_engine''s per-symbol tilts.'
+WHERE strategy_key = 'risk_envelope_allocation'
+  AND summary = 'Regime confidence scales a gross-exposure multiplier (0.5x-1.5x) against the equal-weight baseline; sleeve targets aggregate factor_engine''s per-symbol tilts.';
+
+INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, label, value, unit, status, window_label, as_of, description, sort_order) VALUES
+    ('risk_envelope_allocation', 'naive-v2', 'decay_rate', 'Signal decay rate', NULL, 'fraction_per_period', 'not_computed', NULL, NULL,
+     'Not yet measured. This version fixes a real directional bug; whether the corrected rule beats static exposure at all is H-MACRO10''s own separate, not-yet-run backtest.', 1),
+    ('risk_envelope_allocation', 'naive-v2', 'estimated_capacity_usd', 'Estimated capacity', NULL, 'usd', 'not_computed', NULL, NULL,
+     'Not yet measured. Requires liquidity/market-impact modeling not yet built.', 2);
+
+INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
+    ('naive-v2-risk_envelope_allocation-promoted', 'risk_envelope_allocation', '2026-08-28T00:00:00Z', 'active', 'active',
+     'Promoted naive-v1 -> naive-v2: fixed a real directional bug found by H-MACRO10 -- naive-v1''s multiplier formula was inherited unchanged from before the naive-v3 macro promotion and collapsed badly at confidence''s new, real, one-sided range (stressed got more exposure than calm; calm and middle were indistinguishable). Live-verified in production before the fix, not just reasoned about. Does not yet claim the corrected rule beats static exposure -- that is a separate, not-yet-run checkpoint.',
+     'naive-v2');
+
 -- naive-v2: cross_sectional_momentum's horizon blend weights (v1: fixed
 -- 0.2/0.3/0.5) are replaced by a real per-horizon Pearson-correlation
 -- significance test (pooled horizon-return vs. 21-trading-day-forward-return
