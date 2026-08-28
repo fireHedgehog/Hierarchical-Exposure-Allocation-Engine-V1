@@ -1,11 +1,13 @@
 # Factor breadth-weighting vs. cluster-equal-weighting (H-MACRO11)
 
-Status: concluded-confirmed, real and substantial — but flagged, not
-promotion-ready: the target tested here (forward SPY return) is not
-the target the live composite is actually validated against (forward
-drawdown probability, H-MACRO09). Real next step required before this
-touches production; not done yet. See Observation log.
-Version: v0.1
+Status: concluded-rejected against the real target. The original
+result (below) both used the wrong target AND had a real sign bug in
+the weighting formula; after fixing the bug and re-testing against the
+composite's actual, validated target (real drawdown probability), the
+existing cluster-equal design holds up *better* out-of-sample than the
+IC-weighted alternative — a real, honest reversal, not a footnote. See
+Observation log for the full sequence, including the bug.
+Version: v0.2
 Registered: 2026-08-28
 Concluded: 2026-08-28
 
@@ -55,49 +57,45 @@ the sealed dataset.
 
 | Date | Checkpoint | Reading |
 | --- | --- | --- |
-| 2026-08-28 | Real run, `research_lab/macro_factor_breadth_test.py`. 256 real anchors, 11 of 13 factors had enough in-sample history for a real IC (`BAMLH0A0HYM2`/`BAMLC0A0CM` excluded — real data only from 2023, no in-sample coverage before the 2019 split, disclosed not guessed). | **Confirmed, and substantially larger than anything found at the sleeve layer.** |
+| 2026-08-28 | Real run, `research_lab/macro_factor_breadth_test.py`, target = forward SPY return (the wrong target — flagged as such the same day). 256 real anchors, 11 of 13 factors had enough in-sample history (`BAMLH0A0HYM2`/`BAMLC0A0CM` excluded — real data only from 2023, no in-sample coverage). | OOS IC nearly doubled, +0.400 (IC-weighted) vs. +0.210 (cluster-equal) — exciting, but explicitly not trusted yet: wrong target, and (not yet known) a real formula bug. |
+| 2026-08-28 | Real re-test, `research_lab/macro_factor_breadth_test_drawdown_target.py`, target swapped to the composite's actual, validated target — P(real SPY drawdown ≥10% within 126 trading days), matching H-MACRO09 exactly. | **A real bug caught before being trusted, not after:** the IC-weighted composite showed an *impossible* sign — positive IC against real drawdown risk (its "stressed tercile" showed *lower* drawdown probability than its "calm tercile"). A real formula error, not a real finding: `contributions` are already sign-oriented by `scoring_v3` (negative = stress, consistently), so a genuinely reliable factor correctly shows a *negative* IC against drawdown risk — multiplying by that signed, negative IC flips the factor's own already-correct sign, corrupting the composite. Fixed: weight by `\|IC\|` (reliability) instead of signed IC, in both scripts. |
+| 2026-08-28 | Both scripts re-run with the fix. | **The corrected result reverses the exciting one.** See tables below — both against the real, correct target this time. |
 
-| Metric | Value |
-| --- | --- |
-| Mean \|IC\| across 11 factors | 0.148 |
-| Real effective breadth | 7.33 (vs. naive count 13; a different, continuous measure than H-MACRO08's "~4 clusters," not contradictory — this counts real independence among factors, not a categorical grouping) |
-| Grinold-predicted IR | 0.402 |
-| In-sample IC — cluster-equal (existing) | +0.258 |
-| In-sample IC — IC-weighted (alternative) | +0.403 |
-| **Out-of-sample IC — cluster-equal (existing)** | **+0.210** |
-| **Out-of-sample IC — IC-weighted (alternative)** | **+0.400** |
+**Corrected result, forward-return target (for reference, still the
+wrong target for this composite's real use, kept for comparison):**
+OOS IC-weighted +0.360 vs. cluster-equal +0.210 — the improvement
+survives the bug fix here, still real and substantial.
 
-The IC-weighted alternative nearly doubles the real, out-of-sample IC
-(+0.400 vs. +0.210) — and the improvement is *larger* out-of-sample
-than in-sample (+0.190 OOS vs. +0.145 in-sample), the same
-strengthens-not-weakens-OOS pattern H-MACRO09 itself showed, a real
-sign this isn't overfitting. A real, explainable mechanism, not a
-fluke: cluster-equal-weighting forces near-zero or wrong-signed
-factors (`rates_10y` IC=+0.020, `rates_30y` IC=-0.028, `volatility`
-IC=-0.053 against *this* target) to the same weight as genuinely
-predictive ones (`ppi` +0.260, `growth` +0.255, `inflation` +0.233) —
-IC-weighting correctly down-weights the former.
+**Corrected result, real drawdown-probability target (the one that
+actually matters):**
 
-**The real, disclosed reason this is not promotion-ready:** the target
-tested here is forward SPY *return* — a continuous, symmetric measure
-— not forward SPY *drawdown probability*, the actual, real,
-out-of-sample-validated target the live composite's calibrated
-`confidence` is built and tested against (H-MACRO09). `volatility` and
-the rate factors scoring near-zero IC *here* does not mean they're
-uninformative for drawdown probability specifically — a tail/asymmetric
-target can have a very different real factor structure than a
-continuous-return target. Re-weighting the live composite based on
-*this* result alone would risk optimizing for the wrong thing.
+| Window | Cluster-equal IC | IC-weighted IC | Cluster-equal tercile spread | IC-weighted tercile spread |
+| --- | --- | --- | --- | --- |
+| In-sample | -0.207 | -0.423 | +20.0% (p=0.010, SIG) | +43.6% (p<0.0001, SIG) |
+| **Out-of-sample** | **-0.311** | **-0.279** | **+32.1% (p=0.014, SIG)** | **+21.4% (p=0.121, not significant)** |
+
+In-sample, IC-weighting looks better (expected — some in-sample
+fitting bias). Out-of-sample — the number that actually matters — it's
+the *existing* cluster-equal design that wins: real, significant
+(p=0.014), while the "improved" IC-weighted alternative is weaker and
+not significant (p=0.121). A real, plausible, disclosed mechanism, not
+just "OOS is noisy": in-sample IC-weighting likely overfits to the
+specific factor pattern that preceded 2008 (`gdp` IC=-0.403, `growth`
+IC=-0.372 — a real, dominant signature of that one recession), which
+doesn't generalize as well to differently-shaped real crises (2020's
+shock, 2022's inflation-driven cycle). This is the same real,
+well-documented phenomenon behind the "1/N puzzle" in the finance
+literature (DeMiguel, Garlappi & Uppal 2009) — naive equal-weighting
+often beats "optimized" weighting out-of-sample precisely because
+optimization fits noise in the estimation sample that a naive scheme
+never tries to fit in the first place.
 
 ## Promotion criteria
 
-Real, substantial, and directionally confirmed — but a required next
-step, not done here: re-run this exact method with the target swapped
-to match H-MACRO09's own real target (P(real SPY drawdown ≥10% within
-6 months)), same walk-forward discipline. Only if the IC-weighted
-alternative also beats cluster-equal-weighting on *that* target, OOS,
-does this become a real candidate for `scoring_v3.py` → `scoring_v4.py`
-(a new version row, v3's code untouched, matching this project's own
-established promotion pattern) — a real, live-production-facing change
-that deserves that confirmation first, not promoted on this result
-alone.
+Not met, and the direction reversed from the first, wrong-target pass.
+Real conclusion: `macro_regime_composite`'s existing cluster-equal
+design is not obviously improvable by simple IC-weighting once tested
+against its actual, validated target — if anything, this paper is now
+a real, independent piece of evidence *for* keeping the naive-v3
+design as-is, not a case to change it. `scoring_v3.py` stays
+unchanged.

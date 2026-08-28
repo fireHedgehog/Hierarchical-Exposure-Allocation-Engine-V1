@@ -125,10 +125,19 @@ def main() -> None:
         print(f"Grinold prediction: IR ~= {mean_abs_ic:.3f} x sqrt({breadth:.2f}) = {mean_abs_ic * breadth ** 0.5:.3f}\n")
 
     def _ic_weighted_composite(contributions: dict[str, float]) -> float:
+        # Weight by |IC| (reliability), NOT signed IC: `contributions` is
+        # already sign-oriented by scoring_v3's own convention (negative =
+        # stress, consistently, across every factor). A genuinely reliable
+        # factor correctly shows a NEGATIVE IC here (low contribution really
+        # does predict the bad outcome) -- multiplying by that signed,
+        # negative IC would flip the factor's own already-correct sign,
+        # corrupting the composite. This was a real bug, caught by the
+        # drawdown-target test showing an impossible, backwards sign
+        # (positive IC against drawdown risk) before being trusted.
         total_abs_ic = sum(abs(factor_ic.get(k, 0.0)) for k in contributions)
         if total_abs_ic < 1e-9:
             return 0.0
-        return sum(factor_ic.get(k, 0.0) * v for k, v in contributions.items()) / total_abs_ic
+        return sum(abs(factor_ic.get(k, 0.0)) * v for k, v in contributions.items()) / total_abs_ic
 
     for label, subset in [("IN-SAMPLE", in_sample_series), ("OUT-OF-SAMPLE", oos_series)]:
         cluster_scores, ic_weighted_scores, forwards = [], [], []
