@@ -53,7 +53,7 @@ export function ResearchPage() {
         <SignalValidationSection
           strategyKey="macro_regime_composite"
           title="Macro regime factors"
-          description="Number of factors != number of independent bets. PCA on the 8 macro factors' real pairwise correlation matrix, over the same sealed dataset."
+          description="Number of factors != number of independent bets. The current exact-runtime audit covers 13 transformed macro contributions; production research should compare the contributions actually consumed by the score, not raw FRED levels."
         />
         <SignalValidationSection
           strategyKey="cross_sectional_momentum"

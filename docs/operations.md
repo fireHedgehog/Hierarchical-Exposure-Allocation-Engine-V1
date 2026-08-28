@@ -44,6 +44,14 @@ The first-draft run record stores stage state, start and finish times, record co
 
 All six compute stages (`fetch_data` through `instrument_engine`) are implemented against live free-tier data; a full manual run now completes real regime, factor, allocation, and instrument computation and only stops at the still-scaffolded `publish_snapshot` stage. That blocker is deliberate and visible in the UI. Dry preflight still records later stages as skipped without fetching data. See [engine milestones](engine-milestones.md) for current stage-by-stage status.
 
+`Macro · stored data` is the provider-free recompute path. It selects the newest
+sealed real dataset, reruns validation without mutating that dataset, skips FRED
+and Yahoo entirely, and recomputes the local decision stages through
+`instrument_engine`. Recomputing the complete desk snapshot is intentional: a
+macro-only shell would become the latest snapshot and make the Today page lose
+its symbol, allocation, and instrument surfaces. Dataset-scoped event rows are
+reused, not written again.
+
 ## Scheduling gate
 
 Do not add cron merely because the command works once. Scheduling becomes eligible after the manual pipeline has:

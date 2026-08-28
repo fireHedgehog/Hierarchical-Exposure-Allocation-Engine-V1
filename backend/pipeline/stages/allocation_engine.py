@@ -21,7 +21,7 @@ def run_allocation_engine_stage(
     dataset_snapshot_id: str | None,
     desk_snapshot_id: str | None,
 ) -> StageOutcome:
-    """Real top-down risk envelope: regime confidence (already computed by
+    """Real top-down risk envelope: the macro adverse-frequency reference (already computed by
     regime_filter) scales gross exposure; factor_engine's per-symbol tilts
     roll up into sleeve targets. Updates the still-open desk snapshot in
     place (does not insert a new one) and adds the decision graph
@@ -189,13 +189,13 @@ def run_allocation_engine_stage(
     worst_sleeve = min(envelope.sleeves, key=lambda item: item.avg_composite_score)
     point_rows = [
         (desk_snapshot_id, "rationale",
-         f"Regime confidence {desk['regime_confidence']:.0%} sets a {envelope.gross_multiplier:.2f}x gross-exposure multiplier against the equal-weight baseline.", 1),
+         f"Six-month adverse-frequency reference {desk['regime_confidence']:.1%} sets a {envelope.gross_multiplier:.2f}x staging gross-exposure multiplier against the equal-weight baseline.", 1),
         (desk_snapshot_id, "rationale",
          f"Strongest sleeve by average cross-sectional composite: {_humanize(best_sleeve.category)} ({best_sleeve.avg_composite_score:+.2f}).", 2),
         (desk_snapshot_id, "rationale",
          f"Weakest sleeve: {_humanize(worst_sleeve.category)} ({worst_sleeve.avg_composite_score:+.2f}).", 3),
         (desk_snapshot_id, "invalidation",
-         "Reassess if regime confidence crosses back through 50% (the neutral multiplier point) or the composite regime score flips sign.", 1),
+         "Reassess when the macro state changes between adverse, mixed, and supportive, or when the composite score flips sign.", 1),
     ]
     connection.executemany(
         "INSERT INTO recommendation_points (snapshot_id, point_type, text, sort_order) VALUES (?, ?, ?, ?)",

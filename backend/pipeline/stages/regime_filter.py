@@ -100,15 +100,15 @@ def run_regime_filter_stage(
             0,
             "regime-engine-v3",
             "Hierarchical desk decision snapshot",
-            "Real regime + cross-sectional state computed from free data; allocation/instrument stages not yet implemented.",
-            "REAL DATA, NAIVE FIRST-PASS FORMULAS. Downstream allocation and instrument stages are not implemented. "
-            "No recommendation, weight, or trade should be treated as investment advice or an executable order.",
+            "Real macro state computed from stored free-tier data; downstream decision stages attach to this snapshot when run.",
+            "REAL DATA, STAGING ALGORITHMS. Allocation and instrument outputs may be computed, but remain unvalidated "
+            "research decision support. No recommendation, weight, or trade is investment advice or an executable order.",
             regime.label,
             regime.confidence,
             regime.percentile_rank,
             regime.summary,
             "not_available",
-            "Allocation and instrument stages are not implemented yet; regime and cross-sectional symbol signals are real in this snapshot.",
+            "Macro state is computed; downstream recommendation remains pending until allocation runs.",
             None,
             None,
             None,
@@ -116,7 +116,7 @@ def run_regime_filter_stage(
             None,
             None,
             None,
-            "Regime and factor engines are not yet connected to a portfolio allocation engine.",
+            "Macro state initialized; downstream allocation has not yet run for this snapshot.",
             None,
             engine_mode,
         ),
@@ -212,7 +212,10 @@ def run_regime_filter_stage(
     written = 1 + len(filter_rows) + len(weight_rows) + len(contribution_rows) + len(evidence_rows)
     return StageOutcome(
         status="completed",
-        message=f"Published real regime state {desk_id}: {regime.label} (confidence {regime.confidence:.2f}).",
+        message=(
+            f"Published real regime state {desk_id}: {regime.label} "
+            f"(six-month adverse-frequency reference {regime.confidence:.1%})."
+        ),
         records_read=len(rows),
         records_written=written,
         dataset_snapshot_id=dataset_snapshot_id,

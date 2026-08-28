@@ -107,6 +107,12 @@ export function formatTimestamp(value: string | null | undefined): string {
 
 export function formatDate(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return NOT_AVAILABLE;
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(
+      new Date(Date.UTC(year, month - 1, day)),
+    );
+  }
   const parsed = typeof value === "number" ? new Date(value * 1000) : new Date(value);
   if (Number.isNaN(parsed.getTime())) return String(value);
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: MARKET_TIME_ZONE }).format(parsed);

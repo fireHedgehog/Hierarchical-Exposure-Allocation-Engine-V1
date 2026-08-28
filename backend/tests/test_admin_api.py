@@ -410,6 +410,12 @@ def test_pipeline_stop_after_fetch_data_runs_only_that_stage(
 
     fetch_stage = next(stage for stage in run["stages"] if stage["key"] == "fetch_data")
     assert fetch_stage["status"] == "completed"
+    inventory = client.get("/api/v1/admin/data?scope=watchlist").json()
+    core_pce = next(asset for asset in inventory["assets"] if asset["key"] == "fred_pcepilfe")
+    assert core_pce["latest_value"] == 122.4
+    assert core_pce["latest_value_at"] == NOW.date().isoformat()
+    assert core_pce["provider_returned"] is True
+    assert core_pce["stored_locally"] is True
     for stage in run["stages"]:
         if stage["key"] in ("preflight", "fetch_data"):
             continue
@@ -922,6 +928,20 @@ def test_readiness_uses_latest_matching_real_evidence_and_rejects_demo_fetch(
         )
         connection.execute(
             """
+            INSERT INTO fred_observations (
+                dataset_snapshot_id, series_id, observation_date, value,
+                realtime_start, realtime_end, units, frequency, source_key,
+                observed_at, available_at, ingested_at
+            ) VALUES (
+                'real-macro-readiness', 'TEST', '2026-08-01', 1.0,
+                '2026-08-24', '9999-12-31', 'Index', 'Monthly', 'fred',
+                '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z',
+                '2026-08-24T11:56:00Z'
+            )
+            """
+        )
+        connection.execute(
+            """
             INSERT INTO pipeline_runs (
                 run_id, pipeline_key, pipeline_version, trigger_type, dry_run,
                 requested_at, started_at, status, dataset_snapshot_id, summary
@@ -962,6 +982,52 @@ def test_readiness_uses_latest_matching_real_evidence_and_rejects_demo_fetch(
         evidence["record_id"] == "real-macro-readiness"
         and evidence["status"] == "qualifying"
         for evidence in real_gates["macro_pit_ingestion"]["evidence"]
+    )
+
+    # A newer stored-data recompute is not a new fetch attempt. Its skipped
+    # fetch stage must leave the last substantive ingestion evidence intact.
+    with connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO pipeline_runs (
+                run_id, pipeline_key, pipeline_version, trigger_type, dry_run,
+                requested_at, started_at, finished_at, status,
+                dataset_snapshot_id, summary
+            ) VALUES (
+                'stored-recompute-run', 'daily_desk', '0.1.0', 'manual', 0,
+                '2026-08-24T11:57:30Z', '2026-08-24T11:57:30Z',
+                NULL, 'running',
+                'real-macro-readiness', 'Stored-data recompute.'
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO pipeline_stage_runs (
+                run_id, stage_key, stage_order, status, started_at, finished_at,
+                records_read, records_written, message
+            ) VALUES (
+                'stored-recompute-run', 'fetch_data', 20, 'skipped',
+                '2026-08-24T11:57:30Z', '2026-08-24T11:57:31Z',
+                0, 0, 'Reused stored data; no provider was contacted.'
+            )
+            """
+        )
+        connection.execute(
+            """
+            UPDATE pipeline_runs
+            SET finished_at = '2026-08-24T11:57:31Z', status = 'completed'
+            WHERE run_id = 'stored-recompute-run'
+            """
+        )
+
+    stored_readiness = client.get("/api/v1/admin/overview").json()["readiness"]
+    stored_gates = {gate["key"]: gate for gate in stored_readiness["gates"]}
+    assert stored_gates["macro_pit_ingestion"]["status"] == "passed"
+    assert any(
+        evidence["record_id"] == "real-fetch-run:fetch_data"
+        and evidence["status"] == "qualifying"
+        for evidence in stored_gates["macro_pit_ingestion"]["evidence"]
     )
 
     with connect(database) as connection:
@@ -1119,9 +1185,57 @@ def test_manual_pipeline_preflight_requires_current_healthy_verification(
     assert actual["desk_snapshot_id"] is not None
 
     with connect(database) as connection:
+        dataset_count_before = connection.execute(
+            "SELECT COUNT(*) FROM dataset_snapshots"
+        ).fetchone()[0]
+        event_count_before = connection.execute(
+            "SELECT COUNT(*) FROM symbol_events WHERE dataset_snapshot_id = ?",
+            (actual["dataset_snapshot_id"],),
+        ).fetchone()[0]
         connection.execute(
             "UPDATE operator_providers SET enabled = 0 WHERE provider_key = 'fred'"
         )
+
+    # A stored-data recompute remains available with the provider disabled:
+    # it selects the sealed real dataset, performs no raw-data write, and
+    # publishes a complete new desk snapshot instead of a macro-only shell.
+    stored = client.post(
+        "/api/v1/admin/pipeline/runs",
+        json={
+            "dry_run": False,
+            "stop_after": "instrument_engine",
+            "reuse_latest_dataset": True,
+        },
+        headers=operator_headers("pipeline.run"),
+    ).json()["run"]
+    assert stored["status"] == "completed"
+    assert stored["dataset_snapshot_id"] == actual["dataset_snapshot_id"]
+    assert stored["desk_snapshot_id"] != actual["desk_snapshot_id"]
+    assert "without a provider fetch" in stored["summary"]
+    stored_fetch = next(stage for stage in stored["stages"] if stage["key"] == "fetch_data")
+    assert stored_fetch["status"] == "skipped"
+    assert "no provider was contacted" in stored_fetch["detail"]
+
+    with connect(database) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM dataset_snapshots").fetchone()[0] == dataset_count_before
+        assert connection.execute(
+            "SELECT COUNT(*) FROM symbol_events WHERE dataset_snapshot_id = ?",
+            (actual["dataset_snapshot_id"],),
+        ).fetchone()[0] == event_count_before
+        assert connection.execute(
+            "SELECT COUNT(*) FROM regime_filters WHERE snapshot_id = ?",
+            (stored["desk_snapshot_id"],),
+        ).fetchone()[0] == 13
+        assert connection.execute(
+            "SELECT COUNT(*) FROM symbols WHERE snapshot_id = ?",
+            (stored["desk_snapshot_id"],),
+        ).fetchone()[0] > 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM decision_nodes WHERE snapshot_id = ?",
+            (stored["desk_snapshot_id"],),
+        ).fetchone()[0] > 0
+    assert client.get("/api/v1/desk/latest").json()["snapshot"]["id"] == stored["desk_snapshot_id"]
+
     disabled = client.post(
         "/api/v1/admin/pipeline/runs",
         json={"dry_run": True},
@@ -2329,16 +2443,18 @@ def test_legacy_demo_gets_complete_versioned_v3_fixture_on_reseed(tmp_path: Path
         # grouped into 3 evidence-based clusters (H-MACRO08's real redundancy
         # finding), replacing v1/v2's hand-picked per-factor weights that
         # unintentionally gave one correlated cluster 2.5x the weight of
-        # others; confidence is now a real, out-of-sample-validated
-        # historical drawdown likelihood, not a naive linear transform --
-        # see docs/hypotheses/macro-research/. Each strategy's earlier
+        # others; confidence retains a provisional historical drawdown mapping
+        # from the earlier specification. The exact-runtime V2 audit supports
+        # the risk-context direction but does not yet provide release-time-PIT
+        # probability calibration. Each strategy's earlier
         # version keeps its own component rows (where it has any) as an
         # unedited historical record; each version promotion adds one
         # lifecycle event.
         assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 9
         assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 14
         assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 30
-        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 16
+        # 16 original events plus 2 append-only translation clarifications.
+        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 18
         assert connection.execute("SELECT COUNT(*) FROM strategy_components").fetchone()[0] == 7
         synthetic_assets = connection.execute(
             """

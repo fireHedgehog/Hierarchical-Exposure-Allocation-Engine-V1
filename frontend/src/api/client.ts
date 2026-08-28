@@ -158,22 +158,30 @@ export type PipelineStageKey =
   | "fetch_data" | "validate_data" | "regime_filter"
   | "factor_engine" | "allocation_engine" | "instrument_engine";
 
-export function runPipeline<T>(dryRun = true, stopAfter?: PipelineStageKey): Promise<T> {
+export function runPipeline<T>(dryRun = true, stopAfter?: PipelineStageKey, reuseLatestDataset = false): Promise<T> {
   return operatorJson<T>("/api/v1/admin/pipeline/runs", {
     method: "POST",
     action: "pipeline.run",
-    body: stopAfter ? { dry_run: dryRun, stop_after: stopAfter } : { dry_run: dryRun },
+    body: {
+      dry_run: dryRun,
+      ...(stopAfter ? { stop_after: stopAfter } : {}),
+      ...(reuseLatestDataset ? { reuse_latest_dataset: true } : {}),
+    },
   });
 }
 
 /** Starts a real run in the background and returns immediately with an id
  * to poll -- real, direct user request for live progress instead of one
  * opaque blocking request. Poll endpoints.adminPipelineRunProgress(id). */
-export function startBackgroundPipelineRun<T>(dryRun = true, stopAfter?: PipelineStageKey): Promise<T> {
+export function startBackgroundPipelineRun<T>(dryRun = true, stopAfter?: PipelineStageKey, reuseLatestDataset = false): Promise<T> {
   return operatorJson<T>("/api/v1/admin/pipeline/runs/start", {
     method: "POST",
     action: "pipeline.run",
-    body: stopAfter ? { dry_run: dryRun, stop_after: stopAfter } : { dry_run: dryRun },
+    body: {
+      dry_run: dryRun,
+      ...(stopAfter ? { stop_after: stopAfter } : {}),
+      ...(reuseLatestDataset ? { reuse_latest_dataset: true } : {}),
+    },
   });
 }
 

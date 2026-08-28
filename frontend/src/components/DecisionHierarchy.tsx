@@ -25,7 +25,7 @@ export function RegimeConsole({ regime }: { regime?: Regime | null }) {
           <p>{regime?.summary || "No persisted regime summary is available."}</p>
         </div>
         <div className="regime-confidence">
-          <span>Confidence</span>
+          <span>6M adverse frequency</span>
           <strong>{formatPercent(regime?.confidence)}</strong>
         </div>
       </div>
@@ -42,14 +42,8 @@ export function RegimeConsole({ regime }: { regime?: Regime | null }) {
   );
 }
 
-// Real tercile cutoffs from the 2004-2026 backtest (composite-forward-risk.md,
-// its out-of-sample split, and threshold-sensitivity check) -- 33/67, not
-// rounded to a cleaner 35/65. Position on the 0-100 bar is a real, exact
-// percentile rank against that same history; only the 3 zone boundaries
-// carry a further-tested predictive claim (P(real drawdown) differs by
-// zone) -- fine position within a zone is honest positioning, not itself a
-// validated forecast (a real decile-level check found that gradient noisy
-// at finer granularity).
+// The zones are the runtime policy boundaries; the 0-100 position uses the
+// exact 13-factor current-vintage reference distribution from S3-CV.
 const GAUGE_STRESSED_CUTOFF = 33;
 const GAUGE_CALM_CUTOFF = 67;
 
@@ -59,11 +53,11 @@ function RegimePercentileGauge({ percentileRank }: { percentileRank?: number | n
   }
   const clamped = Math.max(0, Math.min(100, percentileRank));
   const zoneLabel =
-    clamped <= GAUGE_STRESSED_CUTOFF ? "Risk-off" : clamped >= GAUGE_CALM_CUTOFF ? "Risk-on" : "Neutral";
+    clamped <= GAUGE_STRESSED_CUTOFF ? "Risk-off" : clamped >= GAUGE_CALM_CUTOFF ? "Risk-on" : "Balanced";
 
   return (
     <div className="regime-gauge">
-      <p className="regime-gauge__title">Risk regime scale</p>
+      <p className="regime-gauge__title">Macro environment position</p>
 
       <div className="regime-gauge__pointer-row" style={{ "--gauge-position": `${clamped}%` } as React.CSSProperties}>
         <div className="regime-gauge__pointer">
@@ -72,7 +66,7 @@ function RegimePercentileGauge({ percentileRank }: { percentileRank?: number | n
         </div>
       </div>
 
-      <div className="regime-gauge__track" role="img" aria-label={`${clamped.toFixed(0)}th percentile, ${zoneLabel}`}>
+      <div className="regime-gauge__track" role="img" aria-label={`${clamped.toFixed(0)} of 100 on the macro environment scale, ${zoneLabel}`}>
         <div className="regime-gauge__zone regime-gauge__zone--off" style={{ width: `${GAUGE_STRESSED_CUTOFF}%` }} />
         <div
           className="regime-gauge__zone regime-gauge__zone--neutral"
@@ -91,13 +85,13 @@ function RegimePercentileGauge({ percentileRank }: { percentileRank?: number | n
 
       <div className="regime-gauge__zone-labels">
         <span>Risk-off</span>
-        <span>Neutral</span>
+        <span>Balanced</span>
         <span>Risk-on</span>
       </div>
 
       <p className="regime-gauge__readout">
-        Today: <strong>{clamped.toFixed(0)}th percentile</strong> of real 2004-2026 history ({zoneLabel}). Position
-        is exact; only the 3 zones carry a real, out-of-sample-tested forward-drawdown claim.
+        Today: <strong>{clamped.toFixed(0)}/100</strong> macro environment position ({zoneLabel}). Higher is more
+        risk-on; lower is more risk-off.
       </p>
     </div>
   );
@@ -311,8 +305,8 @@ function RegimeFactorDetail({
   weights?: Regime["weights"];
   contributions?: Regime["contributions"];
 }) {
-  const weightByName = new Map((weights ?? []).map((item) => [item.name, item]));
-  const contributionByName = new Map((contributions ?? []).map((item) => [item.name, item]));
+  const weightByKey = new Map((weights ?? []).map((item) => [item.key || item.name, item]));
+  const contributionByKey = new Map((contributions ?? []).map((item) => [item.key || item.name, item]));
   const rows = filters ?? [];
 
   if (!rows.length) {
@@ -344,8 +338,9 @@ function RegimeFactorDetail({
           </thead>
           <tbody>
             {rows.map((filter) => {
-              const weight = weightByName.get(filter.name);
-              const contribution = contributionByName.get(filter.name);
+              const factorKey = filter.key || filter.name;
+              const weight = weightByKey.get(factorKey);
+              const contribution = contributionByKey.get(factorKey);
               const hasDetail = Boolean(filter.explanation || contribution?.explanation || contribution?.evidence?.length);
               return (
                 <tr key={filter.name}>

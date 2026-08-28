@@ -43,10 +43,14 @@ def _stage_definition(
 
 
 def _latest_stage_attempt(
-    connection: sqlite3.Connection, stage_key: str
+    connection: sqlite3.Connection,
+    stage_key: str,
+    *,
+    include_skipped: bool = True,
 ) -> sqlite3.Row | None:
+    skipped_clause = "" if include_skipped else "AND stage.status <> 'skipped'"
     return connection.execute(
-        """
+        f"""
         SELECT stage.stage_key, stage.status AS stage_status,
                stage.started_at AS stage_started_at,
                stage.finished_at AS stage_finished_at,
@@ -59,6 +63,7 @@ def _latest_stage_attempt(
         WHERE run.pipeline_key = 'daily_desk'
           AND run.dry_run = 0
           AND stage.stage_key = ?
+          {skipped_clause}
         ORDER BY run.requested_at DESC, run.rowid DESC
         LIMIT 1
         """,
@@ -236,7 +241,12 @@ def _evaluate_macro_pit_ingestion(
     connection: sqlite3.Connection, _providers: dict[str, dict[str, Any]]
 ) -> tuple[str, list[dict[str, Any]]]:
     definition = _stage_definition(connection, "fetch_data")
-    attempt = _latest_stage_attempt(connection, "fetch_data")
+    # A stored-data recompute deliberately records fetch_data as skipped. It is
+    # not a new ingestion attempt and must not erase the last real fetch from
+    # readiness. Failed/blocked real fetch attempts remain visible here.
+    attempt = _latest_stage_attempt(
+        connection, "fetch_data", include_skipped=False
+    )
     evidence = [
         _definition_evidence("fetch_data", definition),
         _stage_evidence("fetch_data", attempt),
@@ -247,43 +257,41 @@ def _evaluate_macro_pit_ingestion(
         return "action_required", evidence
     if attempt["stage_status"] != "completed":
         return "failed", evidence
-    assets = connection.execute(
+    dataset = _real_dataset(
+        connection, attempt["dataset_snapshot_id"], immutable=False
+    )
+    observations = connection.execute(
         """
-        SELECT asset.*, dataset.is_demo AS dataset_is_demo,
-               dataset.data_classification AS dataset_classification
-        FROM data_assets AS asset
-        LEFT JOIN dataset_snapshots AS dataset
-          ON dataset.id = asset.dataset_snapshot_id
-        WHERE asset.provider_key = 'fred'
-        ORDER BY asset.updated_at DESC, asset.asset_key
-        """
-    ).fetchall()
-    qualifying = [
-        asset
-        for asset in assets
-        if asset["classification"] == "real"
-        and asset["status"] == "ready"
-        and asset["row_count"] > 0
-        and asset["dataset_snapshot_id"] == attempt["dataset_snapshot_id"]
-        and asset["dataset_is_demo"] == 0
-        and asset["dataset_classification"] == "real"
-    ]
-    if qualifying:
+        SELECT COUNT(*) AS row_count, COUNT(DISTINCT series_id) AS series_count,
+               MAX(ingested_at) AS latest_ingested_at
+        FROM fred_observations
+        WHERE dataset_snapshot_id = ?
+        """,
+        (attempt["dataset_snapshot_id"],),
+    ).fetchone()
+    qualifies = bool(
+        dataset is not None
+        and observations is not None
+        and observations["row_count"] > 0
+    )
+    if qualifies:
         evidence.append(
             _readiness_evidence(
                 "data_inventory",
-                f"{len(qualifying)} ready real FRED inventory record(s) refer to dataset {attempt['dataset_snapshot_id']}.",
+                f"Dataset {attempt['dataset_snapshot_id']} contains "
+                f"{observations['row_count']} stored real FRED observation(s) "
+                f"across {observations['series_count']} series.",
                 status="qualifying",
                 record_id=attempt["dataset_snapshot_id"],
-                observed_at=max(asset["updated_at"] for asset in qualifying),
+                observed_at=observations["latest_ingested_at"],
             )
         )
         return "passed", evidence
     evidence.append(
         _readiness_evidence(
             "data_inventory",
-            "The completed fetch has no ready real FRED inventory with rows on its non-demo dataset.",
-            status="non_qualifying" if assets else "missing",
+            "The completed fetch has no stored FRED observations on its real non-demo dataset.",
+            status="non_qualifying" if dataset is not None else "missing",
             record_id=attempt["dataset_snapshot_id"],
         )
     )

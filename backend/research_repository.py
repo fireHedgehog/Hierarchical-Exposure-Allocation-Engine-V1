@@ -14,6 +14,7 @@ from backend.engine.factors.momentum_v2 import _pooled_ic_samples
 from backend.engine.factors.types import Bar
 from backend.engine.indicators import compute_macd, compute_rsi
 from backend.engine.regime import InsufficientSeriesDataError, compute_regime_v3
+from backend.engine.regime.scoring_v3 import CLUSTERS
 from backend.engine.regime.types import SeriesObservation
 from backend.engine.research import (
     FORWARD_HORIZON_TRADING_DAYS,
@@ -325,20 +326,18 @@ class UnsupportedSignalValidationFamilyError(ValueError):
 def _macro_factor_series(
     connection: sqlite3.Connection, dataset_snapshot_id: str
 ) -> dict[str, list[float]]:
-    """Real, point-in-time-aligned series for all 8 macro factors: for each
-    of CPIAUCSL's own real monthly observation dates (the anchor -- any
-    always-present monthly series would do), take every factor's nearest
-    real observation at or before that date (same "nearest available, never
-    future" rule already used in factor_symbol_correlation.py). An anchor
-    is dropped entirely if any one factor has no observation yet at that
-    point -- every returned series has the same length, corresponding to
-    the exact same real dates, by construction rather than by trimming."""
+    """Aligned exact-runtime transformed contributions for all 13 macro
+    factors. Each CPI observation date truncates the stored history, calls
+    the same compute_regime_v3 used by the application, and keeps an anchor
+    only when all current factors are present. Research therefore measures
+    the values the score actually consumes, not correlations among raw FRED
+    levels with unrelated units and transformations."""
 
     factor_observations: dict[str, list[SeriesObservation]] = {}
     for series_id in SERIES_METADATA:
         rows = connection.execute(
             """
-            SELECT observation_date, value FROM fred_observations
+            SELECT observation_date, value, observed_at, available_at FROM fred_observations
             WHERE dataset_snapshot_id = ? AND series_id = ? AND value IS NOT NULL
             ORDER BY observation_date
             """,
@@ -346,31 +345,32 @@ def _macro_factor_series(
         ).fetchall()
         if rows:
             factor_observations[series_id] = [
-                SeriesObservation(observation_date=row["observation_date"], value=row["value"], observed_at="", available_at="")
+                SeriesObservation(
+                    observation_date=row["observation_date"],
+                    value=row["value"],
+                    observed_at=row["observed_at"],
+                    available_at=row["available_at"],
+                )
                 for row in rows
             ]
 
     anchor_dates = sorted({obs.observation_date for obs in factor_observations.get("CPIAUCSL", [])})
-    lookup = {
-        series_id: (
-            [obs.observation_date for obs in sorted(observations, key=lambda o: o.observation_date)],
-            [obs.value for obs in sorted(observations, key=lambda o: o.observation_date)],
-        )
-        for series_id, observations in factor_observations.items()
-    }
-
-    series_by_key: dict[str, list[float]] = {series_id: [] for series_id in factor_observations}
+    factor_keys = [member[0] for members in CLUSTERS.values() for member in members]
+    series_by_key: dict[str, list[float]] = {key: [] for key in factor_keys}
     for anchor in anchor_dates:
-        row_values: dict[str, float] = {}
-        for series_id, (dates, values) in lookup.items():
-            idx = bisect.bisect_right(dates, anchor) - 1
-            if idx < 0:
-                break
-            row_values[series_id] = values[idx]
-        if len(row_values) != len(lookup):
+        truncated = {
+            series_id: [observation for observation in observations if observation.observation_date <= anchor]
+            for series_id, observations in factor_observations.items()
+        }
+        try:
+            result = compute_regime_v3(truncated, date.fromisoformat(anchor))
+        except InsufficientSeriesDataError:
             continue
-        for series_id, value in row_values.items():
-            series_by_key[series_id].append(value)
+        contributions = {factor.key: factor.contribution for factor in result.factors}
+        if not all(key in contributions for key in factor_keys):
+            continue
+        for key in factor_keys:
+            series_by_key[key].append(contributions[key])
     return series_by_key
 
 
@@ -448,7 +448,7 @@ def run_signal_validation_research(
     research for a factor family -- "number of factors != number of
     independent bets" (Milestone 4, step 2), generalized as a reusable
     research pass rather than a one-off script. Currently supports the two
-    factor families this project actually has: macro_regime_composite's 8
+    factor families this project actually has: macro_regime_composite's 13
     factors and cross_sectional_momentum's 3 horizons. Adding a third means
     one new extraction function, not new math or new tables.
     """

@@ -613,6 +613,7 @@ def create_app(
                     fred_observation_fetcher=fred_fetcher,
                     price_fetcher=price_fetcher_fn,
                     stop_after=payload.stop_after,
+                    reuse_latest_dataset=payload.reuse_latest_dataset,
                 )
         except PipelineNotFoundError as error:
             raise _not_found("pipeline_not_found", "The daily desk pipeline is not available.") from error
@@ -647,6 +648,7 @@ def create_app(
                         price_fetcher=price_fetcher_fn,
                         stop_after=payload.stop_after,
                         progress_run_id=progress_run_id,
+                        reuse_latest_dataset=payload.reuse_latest_dataset,
                     )
                 finish_background_run(progress_run_id, result)
             except Exception as error:  # a background thread's exception must be captured, not silently lost

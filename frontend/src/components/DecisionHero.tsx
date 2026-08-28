@@ -74,7 +74,7 @@ export function DecisionHero({
           <div
             className={`confidence-dial__graphic ${confidenceAvailable ? "" : "confidence-dial__graphic--unknown"}`.trim()}
             style={confidenceAvailable ? { "--confidence": recommendation.confidence } as React.CSSProperties : undefined}
-            aria-label={confidenceAvailable ? `Decision confidence ${formatPercent(recommendation.confidence)}` : "Decision confidence unavailable"}
+            aria-label={confidenceAvailable ? `Six-month adverse frequency ${formatPercent(recommendation.confidence)}` : "Six-month adverse frequency unavailable"}
           >
             <span>
               <Gauge aria-hidden="true" size={18} />
@@ -82,8 +82,8 @@ export function DecisionHero({
             </span>
           </div>
           <div>
-            <strong>Decision confidence</strong>
-            <span>Uncertainty is retained in sizing.</span>
+            <strong>6M adverse frequency</strong>
+            <span>Historical reference used by staging sizing.</span>
           </div>
         </div>
 

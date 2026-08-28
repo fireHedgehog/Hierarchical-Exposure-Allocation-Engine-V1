@@ -51,6 +51,7 @@ export interface EvidenceItem {
 }
 
 export interface RegimeFilter extends Provenance {
+  key?: Nullable<string>;
   name: string;
   value?: Nullable<Scalar>;
   threshold?: Nullable<Scalar>;
@@ -59,12 +60,14 @@ export interface RegimeFilter extends Provenance {
 }
 
 export interface WeightDatum {
+  key?: Nullable<string>;
   name: string;
   value?: Nullable<number>;
   unit?: Nullable<string>;
 }
 
 export interface ContributionDatum {
+  key?: Nullable<string>;
   name: string;
   value?: Nullable<number>;
   unit?: Nullable<string>;
@@ -745,6 +748,10 @@ export interface AdminDataAsset {
   frequency?: Nullable<string>;
   classification?: Nullable<string>;
   row_count?: Nullable<number>;
+  latest_value?: Nullable<number>;
+  latest_value_at?: Nullable<string>;
+  provider_returned?: Nullable<boolean>;
+  stored_locally?: Nullable<boolean>;
   period_start?: Nullable<string>;
   period_end?: Nullable<string>;
   last_observation_at?: Nullable<string>;

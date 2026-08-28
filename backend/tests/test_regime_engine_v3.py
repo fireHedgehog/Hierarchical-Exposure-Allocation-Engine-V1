@@ -67,7 +67,11 @@ def _full_series(overrides: dict[str, list[SeriesObservation]] | None = None) ->
 
 def test_every_output_traces_to_a_real_input_value() -> None:
     result = compute_regime_v3(_full_series(), AS_OF)
-    assert result.label in {"Risk-on / expansion-leaning", "Risk-off / contraction-leaning", "Mixed / transition"}
+    assert result.label in {
+        "Supportive macro-financial state",
+        "Adverse macro-financial state",
+        "Mixed macro-financial state",
+    }
     assert 0.0 <= result.confidence <= 1.0
     expected_keys = {
         "growth", "employment", "gdp", "inflation", "pce", "ppi",
@@ -151,34 +155,32 @@ def test_zscore_near_trailing_mean_is_near_neutral_extreme_reading_is_not() -> N
     assert spiked_vix.contribution < -0.3
 
 
-def test_confidence_is_a_real_historical_hit_rate_not_a_naive_linear_transform() -> None:
-    """v3's real fix over v1/v2: confidence is one of exactly 3 disclosed,
-    real, backtested historical drawdown-likelihood numbers, not
-    0.5 + composite/2."""
+def test_legacy_confidence_field_is_an_exact_runtime_adverse_frequency() -> None:
+    """The compatibility field carries one of three disclosed current-vintage
+    frequencies, not model confidence or a naive linear transform."""
 
     from backend.engine.regime.scoring_v3 import (
-        HISTORICAL_DRAWDOWN_RATE_CALM,
-        HISTORICAL_DRAWDOWN_RATE_MIDDLE,
-        HISTORICAL_DRAWDOWN_RATE_STRESSED,
+        CURRENT_VINTAGE_ADVERSE_FREQUENCY_ADVERSE,
+        CURRENT_VINTAGE_ADVERSE_FREQUENCY_MIXED,
+        CURRENT_VINTAGE_ADVERSE_FREQUENCY_SUPPORTIVE,
     )
 
     result = compute_regime_v3(_full_series(), AS_OF)
     assert result.confidence in {
-        HISTORICAL_DRAWDOWN_RATE_STRESSED, HISTORICAL_DRAWDOWN_RATE_MIDDLE, HISTORICAL_DRAWDOWN_RATE_CALM,
+        CURRENT_VINTAGE_ADVERSE_FREQUENCY_ADVERSE,
+        CURRENT_VINTAGE_ADVERSE_FREQUENCY_MIXED,
+        CURRENT_VINTAGE_ADVERSE_FREQUENCY_SUPPORTIVE,
     }
 
 
-def test_percentile_rank_is_real_bounded_and_monotonic() -> None:
-    """percentile_rank is a real, exact positioning against the 2004-2026
-    backtest distribution (0-100), not a further-validated forecast --
-    just checked here for the honest contract: bounded, and a more
-    negative composite always ranks lower than a less negative one."""
+def test_exact_runtime_environment_position_is_bounded_and_monotonic() -> None:
 
     from backend.engine.regime.scoring_v3 import _percentile_rank
 
-    assert _percentile_rank(-5.0) == 0.0  # clamped at the real historical minimum
-    assert _percentile_rank(5.0) == 100.0  # clamped at the real historical maximum
-    assert _percentile_rank(0.0106) == pytest.approx(50.0, abs=0.5)  # the real historical median
+    assert _percentile_rank(-5.0) == 0.0
+    assert _percentile_rank(5.0) == 100.0
+    assert _percentile_rank(0.0043) == pytest.approx(50.0, abs=0.1)
+    assert _percentile_rank(0.0220) == pytest.approx(55.0, abs=0.1)
 
     result = compute_regime_v3(_full_series(), AS_OF)
     assert result.percentile_rank is not None

@@ -16,6 +16,8 @@ def run_validate_data_stage(
     connection: sqlite3.Connection,
     now: datetime,
     dataset_snapshot_id: str | None,
+    *,
+    persist_status: bool = True,
 ) -> StageOutcome:
     """Validate freshness/completeness of macro series and price bars.
 
@@ -107,10 +109,13 @@ def run_validate_data_stage(
             dataset_snapshot_id=dataset_snapshot_id,
         )
 
-    connection.execute(
-        "UPDATE dataset_snapshots SET status = 'validated' WHERE id = ?",
-        (dataset_snapshot_id,),
-    )
+    # A stored-data recompute reads an already-sealed dataset. Re-run every
+    # validation check, but never try to mutate that immutable input record.
+    if persist_status:
+        connection.execute(
+            "UPDATE dataset_snapshots SET status = 'validated' WHERE id = ?",
+            (dataset_snapshot_id,),
+        )
     message = (
         "Validation passed with warnings: " + "; ".join(warnings)
         if warnings

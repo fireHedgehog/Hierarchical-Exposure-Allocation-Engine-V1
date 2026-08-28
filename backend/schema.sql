@@ -76,9 +76,8 @@ CREATE TABLE IF NOT EXISTS desk_snapshots (
     disclaimer TEXT NOT NULL,
     regime_label TEXT NOT NULL,
     regime_confidence REAL,
-    -- Real historical percentile rank (0-100) of today's composite score
-    -- against the 2004-2026 backtest distribution -- naive-v3 only, NULL
-    -- for v1/v2 snapshots. See backend/engine/regime/scoring_v3.py.
+    -- Current-vintage empirical position (0-100) of today's exact-runtime
+    -- composite score; not a release-time-PIT probability. NULL for v1/v2.
     regime_percentile_rank REAL CHECK (regime_percentile_rank IS NULL OR (regime_percentile_rank >= 0 AND regime_percentile_rank <= 100)),
     regime_summary TEXT NOT NULL,
     recommendation_posture TEXT NOT NULL,
@@ -1151,7 +1150,7 @@ CREATE TABLE IF NOT EXISTS strategy_components (
 -- decorrelation, decay, fitted weights) is what promotes a version past
 -- naive-v1; decay_rate/estimated_capacity_usd stay NULL until it does.
 INSERT OR IGNORE INTO strategies (strategy_key, name, family, summary, status, current_version, added_at, retired_at, retirement_reason, public_spec_url, created_at, updated_at) VALUES
-    ('macro_regime_composite', 'Macro regime composite', 'macro_regime', 'Real z-score composite across 3 evidence-based clusters (growth/inflation, rate level, market stress -- 13 factors) mapped to a regime label and a real, calibrated historical drawdown-likelihood confidence.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
+    ('macro_regime_composite', 'Macro regime composite', 'macro_regime', 'Real 13-factor macro-financial state across 3 cluster-balanced groups. Its six-month adverse-move rate and 0-100 reference position are provisional Staging V1 translations pending exact-spec recalibration.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
     ('cross_sectional_momentum', 'Cross-sectional momentum ranking', 'cross_sectional_discovery', 'Blended 1M/3M/6M z-score momentum ranking across the staging universe.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
     ('macd_rsi_single_name_timing', 'Single-name timing', 'single_name_timing', 'Long-only MACD(12,26,9) bullish-crossover entry, MACD bearish-crossover or RSI(14)>=70 exit, per symbol -- an ensemble of independently retireable components (see Registry record), not one fixed formula.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
     ('risk_envelope_allocation', 'Risk envelope allocation', 'portfolio_construction', 'Regime confidence scales a gross-exposure multiplier (0.5x-1.5x) against the equal-weight baseline; sleeve targets aggregate factor_engine''s per-symbol tilts.', 'active', 'naive-v1', '2026-08-24', NULL, NULL, NULL, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'),
@@ -1267,7 +1266,7 @@ INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurre
      'naive-v2');
 
 -- naive-v3 (2026-08-27): a real research arc, not a guess -- see
--- docs/hypotheses/macro-research/ (H-MACRO01-09, indicator-redundancy,
+-- docs/hypotheses/archive/staging_1/macro-research/ (H-MACRO01-09, indicator-redundancy,
 -- composite-methodology-v1, composite-forward-risk, its out-of-sample
 -- split, and the threshold-sensitivity check). Two real fixes over v2:
 -- (1) H-MACRO08's real pairwise correlation + effective-number-of-bets
@@ -1280,11 +1279,11 @@ INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurre
 -- outvote another just by having more correlated names in it. (2) each
 -- factor's surprise score now divides by its own real trailing standard
 -- deviation (an adaptive z-score) instead of a hand-picked `scale`
--- constant. `confidence` is now a real, calibrated historical drawdown
--- likelihood (composite-forward-risk.md, out-of-sample validated: a
--- stressed reading precedes a real >=10% SPY drawdown within 6 months
--- 34.5% of the time vs. 7.1% when calm) instead of v1/v2's naive linear
--- transform of the composite score. A 4th real cluster (policy operations:
+-- constant. The legacy `confidence` field now carries a provisional
+-- six-month adverse-excursion rate inherited from an earlier 11-factor,
+-- unclipped experiment; exact calibration of the current 13-factor clipped
+-- runtime score remains a Staging V2 translation task. A 4th real cluster
+-- (policy operations:
 -- WALCL/WTREGEN/IORB/SOFR) is deliberately excluded -- its sign is
 -- genuinely ambiguous, a real disclosed gap, not guessed (see
 -- composite-methodology-v1.md). This is explicitly a risk-context read,
@@ -1293,24 +1292,25 @@ INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurre
 -- sealed under either stays honestly reproducible.
 INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
     ('macro_regime_composite', 'naive-v3', '2026-08-27T00:00:00Z',
-     'A composite built from real, evidence-based factor clusters (not a hand-picked weight per raw indicator) and calibrated against real historical drawdown likelihood (not a naive linear transform of the score) is a more honest -- though still naive -- read of macro risk than v1/v2.',
-     'A real, out-of-sample-validated relationship exists between this composite and forward SPY drawdown risk (composite-forward-risk.md, composite-forward-risk-oos.md: r=+0.28-0.32, p<0.05 both in-sample and out-of-sample). This is evidence for the composite as a risk-context read, not a claim of tradable alpha -- nothing here executes, and it does not say when.',
-     'naive-v3: real z-score per factor (trailing stdev, not a hand-picked scale) grouped into 3 evidence-based clusters (H-MACRO08) with cluster-balanced weighting, replacing v1/v2''s hand-picked per-factor WEIGHTS; confidence is now a real calibrated historical drawdown-likelihood, not a naive linear transform. 5 new factors added (GDP, 30-year yield, 10-year real yield, HY/IG credit spreads); policy-operations cluster deliberately excluded (ambiguous sign, disclosed).',
+     'A 13-factor composite built from cluster-balanced, clipped z-score contributions is a usable staging description of the macro-financial state; its state calculation and later risk calibration are separate claims.',
+     'The earlier 11-factor, unclipped experiment found a relationship with forward SPY adverse excursion. That evidence supports a provisional risk-context translation, not exact calibration of this 13-factor runtime score, tradable alpha, or entry timing.',
+     'naive-v3: real z-score per factor grouped into 3 cluster-balanced groups; 5 factors added (GDP, 30-year yield, 10-year real yield, HY/IG credit spreads). The inherited six-month risk rates and 0-100 reference mapping are now explicitly provisional pending exact-spec recalibration; policy operations remain excluded because their sign is ambiguous.',
      '{"clusters":{"growth_inflation":["growth","employment","gdp","inflation","pce","ppi"],"rate_level":["rates_10y","rates_30y","real_yield_10y"],"market_stress":["liquidity","volatility","credit_hy","credit_ig"]},"stressed_tercile_cutoff":-0.33,"calm_tercile_cutoff":0.33,"historical_drawdown_rate_stressed":0.345,"historical_drawdown_rate_middle":0.238,"historical_drawdown_rate_calm":0.071,"drawdown_threshold":-0.10,"drawdown_window_days":126}',
      'backend/engine/regime/scoring_v3.py', '2026-08-27T00:00:00Z', '2027-02-27');
 
 UPDATE strategies SET current_version = 'naive-v3', updated_at = '2026-08-27T00:00:00Z'
 WHERE strategy_key = 'macro_regime_composite';
 
--- Summary corrected to match naive-v3's real shape (13 factors in 3
--- clusters, not the naive-v1/v2 fixed 8) -- an existing database gets this
--- from the UPDATE below (matches only the stale naive-v1/v2 text, so it
--- never re-fires once corrected); a fresh clone gets it from the seed row
--- above being replaced in a future schema cleanup, same "correction, not a
--- fresh row" pattern already used for this project's other summary fixes.
-UPDATE strategies SET summary = 'Real z-score composite across 3 evidence-based clusters (growth/inflation, rate level, market stress -- 13 factors) mapped to a regime label and a real, calibrated historical drawdown-likelihood confidence.'
-WHERE strategy_key = 'macro_regime_composite'
-  AND summary = '8-factor macro composite (growth, inflation, PPI, core PCE, employment, liquidity, volatility, rates) mapped to a regime label and confidence.';
+-- Staging records are mutable: keep the registry wording aligned with what the
+-- current runtime and its evidence actually support.
+UPDATE strategies SET summary = 'Real 13-factor macro-financial state across 3 cluster-balanced groups. Its six-month adverse-move rate and 0-100 reference position are provisional Staging V1 translations pending exact-spec recalibration.'
+WHERE strategy_key = 'macro_regime_composite';
+
+UPDATE strategy_versions SET
+    thesis = 'A 13-factor composite built from cluster-balanced, clipped z-score contributions is a usable staging description of the macro-financial state; its state calculation and later risk calibration are separate claims.',
+    expected_edge = 'The earlier 11-factor, unclipped experiment found a relationship with forward SPY adverse excursion. That evidence supports a provisional risk-context translation, not exact calibration of this 13-factor runtime score, tradable alpha, or entry timing.',
+    change_summary = 'naive-v3: real z-score per factor grouped into 3 cluster-balanced groups; 5 factors added. The inherited six-month risk rates and 0-100 reference mapping are explicitly provisional pending exact-spec recalibration.'
+WHERE strategy_key = 'macro_regime_composite' AND version = 'naive-v3';
 
 INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, label, value, unit, status, window_label, as_of, description, sort_order) VALUES
     ('macro_regime_composite', 'naive-v3', 'decay_rate', 'Signal decay rate', NULL, 'fraction_per_period', 'not_computed', NULL, NULL,
@@ -1320,51 +1320,69 @@ INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, l
 
 INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
     ('naive-v3-macro_regime_composite-promoted', 'macro_regime_composite', '2026-08-27T00:00:00Z', 'active', 'active',
-     'Promoted naive-v2 -> naive-v3: real z-score normalization and redundancy-aware cluster weighting (H-MACRO08), replacing v1/v2''s hand-picked scale constants and per-factor weights that unintentionally gave one correlated cluster 2.5x the weight of others. Confidence is now a real, out-of-sample-validated historical drawdown likelihood (composite-forward-risk.md and its OOS/threshold-sensitivity follow-ups), not a naive linear transform. A genuine risk-context read -- explicitly not a timing signal, nothing here executes.',
+     'Promoted naive-v2 -> naive-v3: real z-score normalization and cluster-balanced weighting replaced hand-picked scales and per-factor weights. The later review clarified that its six-month risk rates came from an earlier 11-factor unclipped specification and are provisional for the current 13-factor clipped runtime. Risk context only; no timing or execution claim.',
+     'naive-v3');
+
+INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
+    ('naive-v3-macro-translation-clarified-2026-08-28', 'macro_regime_composite', '2026-08-28T09:00:00Z', 'active', 'active',
+     'Translation clarified without changing the running score: six-month risk rates and the 0-100 reference mapping came from an earlier 11-factor unclipped experiment and are provisional for the current 13-factor clipped runtime. Risk context only; no timing or execution claim.',
      'naive-v3');
 
 -- naive-v2 (2026-08-28): real, direction-corrected fix, found by H-MACRO10
--- (docs/hypotheses/macro-research/exposure-policy-calibration.md). naive-v1's
+-- (docs/hypotheses/archive/staging_1/macro-research/exposure-policy-calibration.md). naive-v1's
 -- `multiplier = clamp(confidence * 2.0, 0.5, 1.5)` was written before the
 -- naive-v3 macro promotion, when `regime_confidence` meant a roughly
--- symmetric v1/v2 score. Since naive-v3, `confidence` is a real, calibrated,
--- ONE-SIDED P(drawdown) -- 0.071 (calm) to 0.345 (stressed) -- and naive-v1's
+-- symmetric v1/v2 score. Since naive-v3, `confidence` carries a provisional,
+-- one-sided adverse-excursion rate -- 0.071 (calm) to 0.345 (stressed) -- and naive-v1's
 -- unchanged formula collapsed badly under that new range: stressed
 -- (0.345*2=0.69) got MORE exposure than calm or middle (both floor at 0.5,
 -- since 0.071*2 and 0.238*2 are both under the floor) -- backwards, and calm/
 -- middle became indistinguishable. Live-verified, not just reasoned about: a
 -- real pipeline run at confidence=0.24 published exactly a 0.50x multiplier,
 -- this exact bug, already live in production before this fix. Corrected via
--- real, monotonically decreasing linear interpolation between the SAME two
--- real, already-validated calibration endpoints (no new numbers invented) --
+-- monotonically decreasing linear interpolation between the same two disclosed
+-- Staging V1 endpoints --
 -- calm maps to the top of the existing 0.5x-1.5x band, stressed to the
 -- bottom. v1's code stays untouched and importable so any dataset snapshot
 -- already sealed under it stays honestly reproducible; this is a NEW version
 -- row, not a rewrite.
 INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
     ('risk_envelope_allocation', 'naive-v2', '2026-08-28T00:00:00Z',
-     'A gross-exposure multiplier should decrease as the real, calibrated probability of a forward drawdown increases -- naive-v1''s formula, inherited unchanged from before the naive-v3 confidence semantics changed, did the opposite over the real production range.',
-     'None claimed as a tradable edge -- this fixes a real directional bug, it does not yet prove the corrected rule beats static exposure on real out-of-sample Sharpe/drawdown (that is H-MACRO10''s own next, separate checkpoint).',
-     'naive-v2: multiplier now linearly interpolates, decreasing, between HISTORICAL_DRAWDOWN_RATE_CALM (-> 1.5x) and HISTORICAL_DRAWDOWN_RATE_STRESSED (-> 0.5x), replacing v1''s `confidence * 2.0` which collapsed calm and middle to the same floor and gave stressed more exposure than calm at the real, current confidence range.',
+     'A gross-exposure multiplier should decrease as the provisional adverse-move estimate rises. This is a staging decision policy, separate from calibration of the upstream macro score.',
+     'H-MACRO10 supports the direction correction and a modest historical path improvement. It does not establish exact endpoints, tradable alpha, or exact calibration of the current 13-factor score.',
+     'naive-v2: multiplier linearly decreases between the disclosed Staging V1 calm rate (-> 1.5x) and adverse rate (-> 0.5x), replacing v1''s backwards `confidence * 2.0` rule.',
      '{"min_multiplier":0.5,"max_multiplier":1.5,"calm_confidence":0.071,"stressed_confidence":0.345,"interpolation":"linear_decreasing"}',
      'backend/engine/allocation/envelope_v2.py', '2026-08-28T00:00:00Z', '2027-02-28');
 
 UPDATE strategies SET current_version = 'naive-v2', updated_at = '2026-08-28T00:00:00Z'
 WHERE strategy_key = 'risk_envelope_allocation';
 
-UPDATE strategies SET summary = 'Regime confidence (a real, calibrated P(drawdown)) scales a gross-exposure multiplier (0.5x-1.5x), now correctly decreasing as drawdown risk rises; sleeve targets aggregate factor_engine''s per-symbol tilts.'
-WHERE strategy_key = 'risk_envelope_allocation'
-  AND summary = 'Regime confidence scales a gross-exposure multiplier (0.5x-1.5x) against the equal-weight baseline; sleeve targets aggregate factor_engine''s per-symbol tilts.';
+UPDATE strategies SET summary = 'A provisional macro adverse-move estimate scales a 0.5x-1.5x staging gross-exposure multiplier, decreasing as estimated risk rises. Direction is tested; exact current-spec calibration is pending.'
+WHERE strategy_key = 'risk_envelope_allocation';
+
+UPDATE strategy_versions SET
+    thesis = 'A gross-exposure multiplier should decrease as the provisional adverse-move estimate rises. This is a staging decision policy, separate from calibration of the upstream macro score.',
+    expected_edge = 'H-MACRO10 supports the direction correction and a modest historical path improvement. It does not establish exact endpoints, tradable alpha, or exact calibration of the current 13-factor score.',
+    change_summary = 'naive-v2: multiplier linearly decreases between the disclosed Staging V1 calm rate and adverse rate, replacing v1''s backwards confidence-times-two rule.'
+WHERE strategy_key = 'risk_envelope_allocation' AND version = 'naive-v2';
 
 INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, label, value, unit, status, window_label, as_of, description, sort_order) VALUES
     ('risk_envelope_allocation', 'naive-v2', 'decay_rate', 'Signal decay rate', NULL, 'fraction_per_period', 'not_computed', NULL, NULL,
-     'Not yet measured. This version fixes a real directional bug; whether the corrected rule beats static exposure at all is H-MACRO10''s own separate, not-yet-run backtest.', 1),
+     'H-MACRO10 found a modest, directionally consistent path improvement over static exposure. Exact current-score calibration and decay remain unmeasured.', 1),
     ('risk_envelope_allocation', 'naive-v2', 'estimated_capacity_usd', 'Estimated capacity', NULL, 'usd', 'not_computed', NULL, NULL,
      'Not yet measured. Requires liquidity/market-impact modeling not yet built.', 2);
 
 INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
     ('naive-v2-risk_envelope_allocation-promoted', 'risk_envelope_allocation', '2026-08-28T00:00:00Z', 'active', 'active',
      'Promoted naive-v1 -> naive-v2: fixed a real directional bug found by H-MACRO10 -- naive-v1''s multiplier formula was inherited unchanged from before the naive-v3 macro promotion and collapsed badly at confidence''s new, real, one-sided range (stressed got more exposure than calm; calm and middle were indistinguishable). Live-verified in production before the fix, not just reasoned about. Does not yet claim the corrected rule beats static exposure -- that is a separate, not-yet-run checkpoint.',
+     'naive-v2');
+
+UPDATE strategy_diagnostics SET description = 'H-MACRO10 found a modest, directionally consistent path improvement over static exposure. Exact current-score calibration and decay remain unmeasured.'
+WHERE strategy_key = 'risk_envelope_allocation' AND version = 'naive-v2' AND metric_key = 'decay_rate';
+
+INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version) VALUES
+    ('naive-v2-risk-envelope-translation-clarified-2026-08-28', 'risk_envelope_allocation', '2026-08-28T09:00:00Z', 'active', 'active',
+     'Translation clarified without changing the running policy: H-MACRO10 supports the corrected exposure direction and a modest historical path improvement, while exact calibration to the current 13-factor macro score remains pending.',
      'naive-v2');
 
 -- naive-v2: cross_sectional_momentum's horizon blend weights (v1: fixed

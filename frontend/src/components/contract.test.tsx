@@ -49,6 +49,21 @@ describe("canonical backend contract rendering", () => {
     expect(markup).toContain("Not available");
   });
 
+  it("joins regime weights to factors by stable key instead of display name", () => {
+    const regime: Regime = {
+      label: "Mixed",
+      filters: [{ key: "employment", name: "Employment growth", value: 0, threshold: 0, status: "pass" }],
+      weights: [{ key: "employment", name: "Employment", value: 1 / 18, unit: "fraction" }],
+      contributions: [{ key: "employment", name: "Employment growth", value: 0.2, direction: "positive" }],
+    };
+
+    const markup = renderToStaticMarkup(<DecisionHierarchy regime={regime} graph={{ nodes: [], edges: [] }} />);
+
+    expect(markup).toContain("Employment growth");
+    expect(markup).toContain("5.6%");
+    expect(markup).toContain("Positive");
+  });
+
   it("renders object blockers, nested greeks, and matrix provenance", () => {
     const position: PositionCandidate = {
       id: "spread",
@@ -158,7 +173,7 @@ describe("canonical backend contract rendering", () => {
     const markup = renderToStaticMarkup(<DecisionHero recommendation={recommendation} snapshot={snapshot} />);
 
     expect(markup).toContain("confidence-dial__graphic--unknown");
-    expect(markup).toContain("Decision confidence unavailable");
+    expect(markup).toContain("Six-month adverse frequency unavailable");
     expect(markup).not.toContain("--confidence:");
     expect(markup).toContain('<span class="exposure-delta direction-up"><small>Delta</small><b>2%</b></span>');
     expect(markup).toContain('<span class="exposure-delta direction-flat"><small>Delta</small><b>0%</b></span>');

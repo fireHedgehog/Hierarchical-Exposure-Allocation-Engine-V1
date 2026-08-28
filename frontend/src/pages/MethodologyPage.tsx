@@ -25,17 +25,17 @@ interface Layer {
 const LAYERS: Layer[] = [
   {
     key: "macro_regime",
-    name: "Macro regime composite",
+    name: "Macro-financial state composite",
     implemented: true,
     codeReference: "backend/engine/regime/scoring_v3.py",
     strategyKey: "macro_regime_composite",
-    summary: "13 real FRED series -> a regime label and a real, calibrated confidence. Each factor scores as a real z-score against its own trailing history; factors are grouped into 3 real, evidence-based clusters (not weighted individually) so correlated factors can't outvote a smaller, independent group.",
-    topParameter: "composite = mean(cluster_mean for cluster in {growth_inflation (6 factors), rate_level (3), market_stress (4)}). confidence = a real historical P(SPY drawdown >= 10% within 6mo), by which real tercile today's score falls into -- 34.5% stressed / 23.8% middle / 7.1% calm, out-of-sample validated 2004-2026. This is a risk-context read, not a timing signal -- it does not say when, and nothing here executes a trade.",
+    summary: "State Description: 13 real FRED series become one supportive, mixed, or adverse macro-financial state. Three cluster means prevent a large correlated group from winning by factor count alone.",
+    topParameter: "contribution = clamp(sign * trailing_z / 2.5); state = mean(cluster_mean for growth_inflation[6], rate_level[3], market_stress[4]). The 0-100 environment position and 6-month adverse-frequency reference now use this exact runtime's current-vintage history.",
     literature: [
       "Andersen, Bollerslev, Diebold & Vega (2003). Micro effects of macro announcements. American Economic Review, 93(1), 38-62.",
       "Muth (1961). Rational expectations and the theory of price movements. Econometrica, 29(3), 315-335.",
     ],
-    granularityNote: "A 4th real cluster (policy operations: Fed balance sheet, TGA, IORB/SOFR) is deliberately excluded -- its sign is genuinely ambiguous (balance-sheet expansion can mean either crisis liquidity injection or accommodative ease, context-dependent), a disclosed gap, not guessed. Liquidity and Guidance (from the separate Fed-reaction-function research track) aren't part of this composite at all. Full research arc: docs/hypotheses/macro-research/ in the repo.",
+    granularityNote: "Exact-runtime tests support 3M/6M volatility, adverse-excursion, and direction context, not forward-return magnitude. Release-time-PIT probability calibration remains unavailable. Policy operations stay excluded; Warsh observations remain separate research.",
   },
   {
     key: "cross_sectional_momentum",
@@ -70,8 +70,8 @@ const LAYERS: Layer[] = [
     implemented: true,
     codeReference: "backend/engine/allocation/envelope_v2.py",
     strategyKey: "risk_envelope_allocation",
-    summary: "Regime confidence (a real, calibrated P(drawdown)) -> one gross-exposure multiplier, decreasing as drawdown risk rises -> sleeve targets.",
-    topParameter: "multiplier interpolates linearly, decreasing, between calm confidence 0.071 (-> 1.5x) and stressed confidence 0.345 (-> 0.5x). Fixes a real naive-v1 bug: the old confidence*2 formula went directionally backwards once naive-v3 made confidence a real, one-sided drawdown probability -- stressed got more exposure than calm. Every sleeve still gets the same multiplier -- no covariance-aware sizing yet.",
+    summary: "Decision Policy: the macro adverse-frequency reference maps monotonically to one staging gross-exposure multiplier. Higher adverse frequency means lower exposure.",
+    topParameter: "linear map: 4.8% supportive frequency -> 1.5x; 35.5% adverse frequency -> 0.5x. The direction is supported; the 0.5x-1.5x endpoints remain staging policy rather than an optimized production mandate. Every sleeve still receives the same multiplier.",
     literature: null,
     granularityNote: null,
   },
@@ -131,7 +131,7 @@ export function MethodologyPage() {
     <div className="workspace operator-page methodology-page">
       <OperatorPageHeader
         title="Methodology"
-        description={`Every named desk, top to bottom -- ${implementedCount} of ${LAYERS.length} real, the rest explicitly null. A fast map, not a derivation: each card names its top-level parameter and where the real implementation lives; deeper structural detail (versions, sub-components, diagnostics) lives in the database -- see the Registry record link on each card.`}
+        description={`A concise map of what each desk consumes, produces, and still assumes -- ${implementedCount} of ${LAYERS.length} implemented. Registry records hold version detail; this page explains the business meaning.`}
       />
 
       <Panel>
@@ -140,12 +140,9 @@ export function MethodologyPage() {
           title="What this page is and isn't"
           description={
             <>
-              This is a proof-of-concept staging desk, not a production trading platform. Every implemented card is a
-              real function over real data; the top-level parameter line names exactly what's hand-picked so a future
-              contributor knows where to plug in a better weight without guessing. Updated on request at milestones,
-              not automatically -- check git history/blame on this file for when it was last actually reviewed
-              against the code. See <Link to="/operations/strategies">Strategies</Link> for the live, DB-driven
-              registry this page only summarizes.
+              This staging desk may run naive or provisional methods so the application remains usable. A card says
+              what actually runs and its nearest material limitation; implementation is not evidence of trading
+              validity. See <Link to="/operations/strategies">Strategies</Link> for version and component detail.
             </>
           }
         />

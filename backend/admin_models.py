@@ -36,6 +36,9 @@ class PipelineRunRequest(BaseModel):
         "fetch_data", "validate_data", "regime_filter",
         "factor_engine", "allocation_engine", "instrument_engine",
     ] | None = None
+    # Recompute decision stages from the newest sealed real dataset. This is
+    # deliberately provider-free: no FRED/Yahoo request and no raw-data write.
+    reuse_latest_dataset: bool = False
 
 
 class EngineModeWriteRequest(BaseModel):

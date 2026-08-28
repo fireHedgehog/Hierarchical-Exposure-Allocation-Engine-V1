@@ -187,7 +187,7 @@ export function DataManagementPage() {
             <SectionHeading
               eyebrow={`Inventory as of ${formatTimestamp(watchlistTable.state.data.as_of)}`}
               title="Local dataset inventory"
-              description="Row counts, observation time, fetch time, and freshness are independent. A successful fetch does not make an old observation current."
+              description="Latest value, reference period, provider return, local storage, observation time, and fetch time are separate facts."
             />
             {assets.length ? <DataInventoryTable assets={assets} /> : (
               <Unavailable title="No managed datasets" detail="The database contains no data-asset inventory records." />
@@ -418,6 +418,8 @@ function DataInventoryTable({ assets }: { assets: AdminDataAsset[] }) {
           <tr>
             <th>Dataset</th>
             <th>Rows</th>
+            <th>Latest value</th>
+            <th>Evidence</th>
             <th>Coverage</th>
             <th>Last observation</th>
             <th>Last fetch</th>
@@ -438,8 +440,22 @@ function DataInventoryTable({ assets }: { assets: AdminDataAsset[] }) {
                 </div>
               </td>
               <td data-label="Rows"><strong className="mono-value">{formatNumber(asset.row_count)}</strong></td>
+              <td data-label="Latest value">
+                <span className="table-stack">
+                  <b className="mono-value">{formatNumber(asset.latest_value, { maximumFractionDigits: 4 })}</b>
+                  <small>Reference {formatDate(asset.latest_value_at)}</small>
+                </span>
+              </td>
+              <td data-label="Evidence">
+                {asset.provider_key === "fred" ? (
+                  <span className="table-stack">
+                    <b>FRED returned: {formatBooleanEvidence(asset.provider_returned)}</b>
+                    <small>Stored locally: {formatBooleanEvidence(asset.stored_locally)}</small>
+                  </span>
+                ) : NOT_AVAILABLE}
+              </td>
               <td data-label="Coverage"><span className="table-stack"><b>{formatDate(asset.period_start)}</b><small>to {formatDate(asset.period_end)}</small></span></td>
-              <td data-label="Last observation"><span className="table-stack"><b>{formatTimestamp(asset.last_observation_at)}</b><small>Age {formatAge(asset.age_seconds)} · limit {formatAge(asset.max_age_seconds)}</small></span></td>
+              <td data-label="Last observation"><span className="table-stack"><b>{asset.provider_key === "fred" && asset.latest_value_at ? formatDate(asset.latest_value_at) : formatTimestamp(asset.last_observation_at)}</b><small>Age {formatAge(asset.age_seconds)} · limit {formatAge(asset.max_age_seconds)}</small></span></td>
               <td data-label="Last fetch"><span className="table-stack"><b>{formatTimestamp(asset.last_fetched_at)}</b><small>{asset.classification || NOT_AVAILABLE}</small></span></td>
               <td data-label="Freshness"><div className="table-status-stack"><StatusPill value={asset.freshness} /><StatusPill value={asset.status} /></div></td>
             </tr>
@@ -448,6 +464,11 @@ function DataInventoryTable({ assets }: { assets: AdminDataAsset[] }) {
       </table>
     </div>
   );
+}
+
+function formatBooleanEvidence(value: boolean | null | undefined): string {
+  if (value === null || value === undefined) return NOT_AVAILABLE;
+  return value ? "Yes" : "No";
 }
 
 function formatAge(seconds: number | null | undefined): string {

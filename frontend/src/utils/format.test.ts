@@ -7,6 +7,7 @@ import {
   NOT_AVAILABLE,
   toneForDirection,
   toneForStatus,
+  formatDate,
   formatTimestamp,
 } from "./format";
 import { columnExtent, heatCell } from "./matrix";
@@ -22,6 +23,10 @@ describe("honest value formatting", () => {
   it("formats a valid timestamp without an incompatible Intl option set", () => {
     expect(formatTimestamp("2026-08-21T20:00:00Z")).not.toBe(NOT_AVAILABLE);
     expect(formatTimestamp("2026-08-21T20:00:00Z")).toContain("2026");
+  });
+
+  it("keeps a date-only reference period on its stored calendar date", () => {
+    expect(formatDate("2026-07-01")).toBe("Jul 1, 2026");
   });
 
   it("formats exposure ratios and derives deltas only from complete values", () => {

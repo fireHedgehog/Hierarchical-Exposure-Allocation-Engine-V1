@@ -1,5 +1,8 @@
 # Warsh Fed reaction function (H-W01)
 
+> Staging V1 context. The active V2 observation record is
+> [`H-MACRO-S7-001`](../staging_v2/macro/h-macro-s7-001-warsh-reaction-function.md).
+
 Status: observing
 Version: v0.1
 Registered: 2026-08-25

@@ -32,7 +32,7 @@ SERIES_METADATA: dict[str, dict[str, Any]] = {
     "NFCI": {"frequency": "weekly", "max_age_days": 21, "label": "Chicago Fed national financial conditions index"},
     "VIXCLS": {"frequency": "daily", "max_age_days": 10, "label": "CBOE volatility index"},
     "DGS10": {"frequency": "daily", "max_age_days": 10, "label": "10-year Treasury constant maturity rate"},
-    # docs/hypotheses/macro-research/ layer-1 input signals, added 2026-08-27.
+    # docs/hypotheses/archive/staging_1/macro-research/ layer-1 inputs, added 2026-08-27.
     # All 14 verified live against the real FRED API before being wired in
     # here (a wrong series_id returns zero observations, which hard-fails
     # this stage's entire fetch, not just this one series). Real start dates

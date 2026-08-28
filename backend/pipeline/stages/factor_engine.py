@@ -36,6 +36,8 @@ def run_factor_engine_stage(
     dataset_snapshot_id: str | None,
     desk_snapshot_id: str | None,
     engine_mode: str,
+    *,
+    persist_dataset_events: bool = True,
 ) -> StageOutcome:
     """Rank the staging universe by naive-v3 IC-weighted cross-sectional momentum AND run a
     naive per-symbol reversal-entry/RSI-exit backtest (naive-v3), attaching both to the
@@ -543,7 +545,10 @@ def run_factor_engine_stage(
         """,
         recommendation_rows,
     )
-    if event_rows:
+    # Recomputing from a sealed dataset may create a fresh desk snapshot, but
+    # must not append duplicate timing/backtest annotations to immutable raw
+    # data. The same events already belong to the dataset's original run.
+    if event_rows and persist_dataset_events:
         connection.executemany(
             """
             INSERT OR IGNORE INTO symbol_events (
@@ -582,7 +587,7 @@ def run_factor_engine_stage(
         + len(factor_value_rows)
         + len(signal_rows)
         + len(recommendation_rows)
-        + len(event_rows)
+        + (len(event_rows) if persist_dataset_events else 0)
         + len(metric_rows)
         + 1
         + len(desk_backtest_metric_rows)
@@ -592,7 +597,11 @@ def run_factor_engine_stage(
         message=(
             f"Ranked {universe_size} staging symbols by naive-v3 IC-weighted cross-sectional momentum "
             f"and ran a real reversal-entry/RSI-exit backtest for {backtests_run} of them "
-            f"({sum(1 for row in event_rows if row[4] == 'backtest_entry_fill')} entries logged). "
+            + (
+                f"({sum(1 for row in event_rows if row[4] == 'backtest_entry_fill')} entries logged). "
+                if persist_dataset_events
+                else "(dataset event ledger reused without writes). "
+            )
             + (
                 f"Desk-level aggregate: mean return {aggregate.mean_total_return:+.1%} vs. mean buy-and-hold "
                 f"{aggregate.mean_buy_hold_return:+.1%}."

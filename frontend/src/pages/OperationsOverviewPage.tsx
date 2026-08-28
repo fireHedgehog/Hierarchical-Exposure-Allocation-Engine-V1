@@ -23,7 +23,7 @@ export function OperationsOverviewPage() {
   const overview = useApi<AdminOverviewResponse>(endpoints.adminOverview);
   const pipeline = useApi<PipelineResponse>(endpoints.adminPipeline);
   const [latestRun, setLatestRun] = useState<PipelineRun | null>(null);
-  const [running, setRunning] = useState<"dry" | "full" | PipelineStageKey | null>(null);
+  const [running, setRunning] = useState<"dry" | "full" | "stored" | PipelineStageKey | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [liveProgress, setLiveProgress] = useState<PipelineRunProgress | null>(null);
   const pollTimer = useRef<number | null>(null);
@@ -42,9 +42,9 @@ export function OperationsOverviewPage() {
 
   useEffect(() => stopPolling, []);
 
-  const startRun = async (dryRun: boolean, stopAfter?: PipelineStageKey) => {
+  const startRun = async (dryRun: boolean, stopAfter?: PipelineStageKey, reuseLatestDataset = false) => {
     if (!dryRun && !stopAfter && !window.confirm("Run every currently implemented stage? A successful run may publish a new immutable decision snapshot, but it will never place orders.")) return;
-    setRunning(stopAfter ?? (dryRun ? "dry" : "full"));
+    setRunning(reuseLatestDataset ? "stored" : stopAfter ?? (dryRun ? "dry" : "full"));
     setActionError(null);
     setLiveProgress(null);
 
@@ -52,7 +52,7 @@ export function OperationsOverviewPage() {
     // enough. Real runs use the background+poll path for live progress.
     if (dryRun) {
       try {
-        const result = await runPipeline<{ run: PipelineRun }>(true);
+        const result = await runPipeline<{ run: PipelineRun }>(true, undefined, reuseLatestDataset);
         setLatestRun(result.run);
         refresh();
       } catch (error) {
@@ -64,7 +64,7 @@ export function OperationsOverviewPage() {
     }
 
     try {
-      const { progress_run_id: progressRunId } = await startBackgroundPipelineRun<{ progress_run_id: string }>(false, stopAfter);
+      const { progress_run_id: progressRunId } = await startBackgroundPipelineRun<{ progress_run_id: string }>(false, stopAfter, reuseLatestDataset);
       pollTimer.current = window.setInterval(async () => {
         try {
           const response = await fetch(endpoints.adminPipelineRunProgress(progressRunId));
@@ -158,11 +158,11 @@ export function OperationsOverviewPage() {
                 <button
                   className="button button--quiet"
                   type="button"
-                  onClick={() => startRun(false, "regime_filter")}
+                  onClick={() => startRun(false, "instrument_engine", true)}
                   disabled={running !== null}
-                  title="Runs fetch, validate, and regime -- a fresh macro reading without ranking or allocating positions."
+                  title="Reuses the newest sealed dataset with no FRED/Yahoo request. Recomputes a complete local decision snapshot so the macro reading updates without removing other desk features."
                 >
-                  <LineChart aria-hidden="true" size={15} /> {running === "regime_filter" ? "Running…" : "Macro reading only"}
+                  <LineChart aria-hidden="true" size={15} /> {running === "stored" ? "Recomputing…" : "Macro · stored data"}
                 </button>
                 <button className="button operator-run-button" type="button" onClick={() => startRun(false)} disabled={running !== null}>
                   <PlayCircle aria-hidden="true" size={16} /> {running === "full" ? "Starting…" : "Run available stages"}

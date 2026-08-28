@@ -1,5 +1,8 @@
 # Gold reaction function: fiscal dominance vs. Fed-dovish (H-SECT06)
 
+> Staging V1 context. The active V2 observation record is
+> [`H-XSEC-S7-001`](../staging_v2/cross-sectional/h-xsec-s7-001-gold-reaction-function.md).
+
 Status: observing
 Version: v0.1
 Registered: 2026-08-27

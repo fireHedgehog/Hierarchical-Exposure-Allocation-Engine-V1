@@ -70,6 +70,28 @@ describe("FastAPI error envelopes", () => {
     );
   });
 
+  it("requests a provider-free stored-data recompute explicitly", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ run: { id: "run-stored", dry_run: false } }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runPipeline(false, "instrument_engine", true);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/admin/pipeline/runs",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          dry_run: false,
+          stop_after: "instrument_engine",
+          reuse_latest_dataset: true,
+        }),
+      }),
+    );
+  });
+
   it("never exposes a response under a different resource path", () => {
     const spy = { symbol: "SPY" };
     expect(selectResourceData({ path: "/api/v1/symbols/SPY", data: spy }, "/api/v1/symbols/SPY")).toBe(spy);

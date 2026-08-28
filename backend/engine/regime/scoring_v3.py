@@ -13,7 +13,7 @@ from backend.engine.regime.types import (
 
 # naive-v3: real z-score normalization + redundancy-aware cluster weighting,
 # replacing v2's hand-picked-scale surprise score and v1's hand-picked
-# per-factor weights (see docs/hypotheses/macro-research/README.md for the
+# per-factor weights (see docs/hypotheses/archive/staging_1/macro-research/README.md for the
 # full research arc this is built from).
 #
 # Real problem v1/v2 had, found by H-MACRO08 (real pairwise correlation +
@@ -37,53 +37,32 @@ from backend.engine.regime.types import (
 # excluded -- its sign is genuinely ambiguous (balance-sheet expansion can
 # mean either crisis liquidity injection, risk-off cause, or accommodative
 # ease, risk-on outcome, context-dependent) -- a real, disclosed gap, not
-# guessed (see docs/hypotheses/macro-research/composite-methodology-v1.md).
+# guessed (see docs/hypotheses/archive/staging_1/macro-research/composite-methodology-v1.md).
 #
-# `confidence` is now a real, calibrated number instead of v1/v2's naive
-# linear transform of the composite score: real historical hit-rates from
-# a real, out-of-sample-validated backtest
-# (docs/hypotheses/macro-research/composite-forward-risk.md,
-# composite-forward-risk-oos.md, composite-threshold-sensitivity.md) --
-# P(a real >=10% SPY drawdown within 6 months), by which real historical
-# tercile today's composite falls into. This is NOT a trading signal and
-# must never be described as one -- it answers "how likely is elevated
-# market stress ahead," not "what should I do," consistent with every
-# other naive-v1 desk in this project (regime state informs; nothing here
-# executes).
-#
-# Real tercile boundaries and hit-rates below are hardcoded, disclosed
-# constants computed once from the real 2004-2026 backtest (n=252, monthly
-# stride) -- not recomputed live on every pipeline run (that would re-walk
-# 20+ years of history on every request, a real but disproportionate cost
-# for a first pass) and not fit/optimized. Revisit if the composite's own
-# real distribution drifts materially once more history accumulates.
+# `confidence` is a legacy schema name. The value is the current-vintage
+# historical six-month adverse-excursion frequency for the runtime's state
+# zone, not model confidence and not a release-time-PIT probability. The exact
+# 13-factor translation is H-MACRO-S3-CV-001. Nothing here is a timing or
+# trading signal.
 
 STRESSED_TERCILE_CUTOFF = -0.33
 CALM_TERCILE_CUTOFF = 0.33
-# P(real SPY drawdown <= -10% within the following 6 months), by tercile --
-# composite-forward-risk.md / composite-forward-risk-oos.md / composite-
-# threshold-sensitivity.md, real backtest, out-of-sample validated.
-HISTORICAL_DRAWDOWN_RATE_STRESSED = 0.345
-HISTORICAL_DRAWDOWN_RATE_MIDDLE = 0.238
-HISTORICAL_DRAWDOWN_RATE_CALM = 0.071
+# Current-vintage historical frequency of SPY falling at least 10% below the
+# anchor close within six months, by exact-runtime zone (H-MACRO-S3-CV-001).
+# These preserve a numeric staging output while remaining explicitly distinct
+# from a release-time-PIT calibrated probability.
+CURRENT_VINTAGE_ADVERSE_FREQUENCY_ADVERSE = 11 / 31
+CURRENT_VINTAGE_ADVERSE_FREQUENCY_MIXED = 43 / 200
+CURRENT_VINTAGE_ADVERSE_FREQUENCY_SUPPORTIVE = 1 / 21
 
-# Real (composite score, percentile) checkpoints, computed once from the
-# same 2004-2026 backtest (n=252) -- linear-interpolated between points for
-# a real, exact percentile *position*, never estimated. This positioning is
-# real and precise by construction (it is just a rank, not a probability
-# estimate); it is NOT a claim that fine-grained position within a zone
-# carries further-tested predictive precision -- a real decile-level check
-# (docs/hypotheses/macro-research/composite-forward-risk.md's own follow-up)
-# found the forward-drawdown gradient genuinely noisy at that granularity
-# (small per-bucket samples, ~25). Only the 3 broad zones (stressed/middle/
-# calm, the tercile cutoffs above) carry a real, out-of-sample-tested
-# predictive claim -- the percentile number itself is honest positioning,
-# not a validated finer-grained forecast.
+# Exact 13-factor current-vintage (composite score, empirical percentile)
+# checkpoints from H-MACRO-S3-CV-001's 258 monthly-strided runtime anchors.
+# The persisted column retains its old name for compatibility.
 PERCENTILE_CHECKPOINTS: tuple[tuple[float, float], ...] = (
-    (-2.78, 0.0), (-1.2367, 5.0), (-1.0010, 10.0), (-0.6919, 20.0),
-    (-0.5111, 25.0), (-0.3359, 33.0), (-0.1972, 40.0), (0.0106, 50.0),
-    (0.1576, 60.0), (0.3271, 67.0), (0.4994, 75.0), (0.5799, 80.0),
-    (0.8162, 90.0), (1.0378, 95.0), (1.7306, 100.0),
+    (-0.6053, 0.0), (-0.4216, 5.0), (-0.3533, 10.0), (-0.2280, 20.0),
+    (-0.1776, 25.0), (-0.1034, 33.0), (-0.0643, 40.0), (0.0043, 50.0),
+    (0.0220, 55.0), (0.0512, 60.0), (0.1075, 67.0), (0.1665, 75.0),
+    (0.2206, 80.0), (0.2852, 90.0), (0.3676, 95.0), (0.6299, 100.0),
 )
 
 
@@ -217,13 +196,10 @@ CLUSTERS: dict[str, list[tuple[str, str, str, float, bool, int]]] = {
 
 
 def compute_regime_v3(series: dict[str, list[SeriesObservation]], as_of: date) -> RegimeResult:
-    """naive-v3 regime composite: real z-score per factor, 3 real evidence-
-    based clusters (H-MACRO08), redundancy-aware weighting, and a real,
-    calibrated confidence (historical drawdown-likelihood, not a naive
-    linear transform of the score). See module docstring for the full
-    research this replaces and the honest limits it still carries (policy-
-    operations cluster excluded; Liquidity/Guidance dimensions from the
-    Fed-response research track are a separate, unrelated concern).
+    """naive-v3 regime composite: real z-score per factor, 3 evidence-based
+    clusters (H-MACRO08), redundancy-aware weighting, and an exact-runtime
+    current-vintage adverse-frequency reference. Policy operations remain excluded; Liquidity/Guidance from
+    the Fed-response research track are a separate concern.
 
     Null-tolerant by cluster and by factor, matching this project's
     established macro convention: a missing series (e.g. credit spreads
@@ -275,33 +251,33 @@ def compute_regime_v3(series: dict[str, list[SeriesObservation]], as_of: date) -
     composite = statistics.fmean(cluster_means)
 
     if composite <= STRESSED_TERCILE_CUTOFF:
-        historical_rate = HISTORICAL_DRAWDOWN_RATE_STRESSED
+        historical_rate = CURRENT_VINTAGE_ADVERSE_FREQUENCY_ADVERSE
         tercile = "stressed"
     elif composite >= CALM_TERCILE_CUTOFF:
-        historical_rate = HISTORICAL_DRAWDOWN_RATE_CALM
+        historical_rate = CURRENT_VINTAGE_ADVERSE_FREQUENCY_SUPPORTIVE
         tercile = "calm"
     else:
-        historical_rate = HISTORICAL_DRAWDOWN_RATE_MIDDLE
+        historical_rate = CURRENT_VINTAGE_ADVERSE_FREQUENCY_MIXED
         tercile = "middle"
     confidence = historical_rate
     percentile_rank = _percentile_rank(composite)
 
     if composite >= 0.15:
-        label = "Risk-on / expansion-leaning"
+        label = "Supportive macro-financial state"
     elif composite <= -0.15:
-        label = "Risk-off / contraction-leaning"
+        label = "Adverse macro-financial state"
     else:
-        label = "Mixed / transition"
+        label = "Mixed macro-financial state"
 
     cluster_summary = ", ".join(
         f"{name} {statistics.fmean(scores):+.2f}" for name, scores in cluster_scores.items()
     )
     summary = (
-        f"naive-v3 real z-score composite {composite:+.2f} ({cluster_summary}) -- {percentile_rank:.0f}th "
-        "percentile of its own real 2004-2026 history. Real historical calibration (out-of-sample validated, "
-        f"see docs/hypotheses/macro-research/): a reading in the '{tercile}' tercile has preceded a real SPY "
-        f"drawdown of 10% or more within 6 months {historical_rate:.0%} of the time. This is a risk-context "
-        "read, not a timing signal -- it does not say when, and nothing here executes a trade."
+        f"Staging-v3 macro-financial state {composite:+.2f} ({cluster_summary}); {percentile_rank:.0f}/100 "
+        "on the exact 13-factor current-vintage environment distribution. In historical anchors from the "
+        f"same runtime, the '{tercile}' zone was followed by SPY falling at least 10% below its anchor close "
+        f"within six months {historical_rate:.1%} of the time. This is an adverse-frequency reference, not "
+        "a release-time-PIT probability. Use as risk context, not entry timing or a trade instruction."
     )
 
     return RegimeResult(

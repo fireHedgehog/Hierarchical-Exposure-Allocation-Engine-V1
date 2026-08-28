@@ -725,6 +725,44 @@ def get_data_inventory(
         "invalid": 0,
     }
     for row in rows:
+        latest_value = None
+        latest_value_at = None
+        provider_returned: bool | None = None
+        stored_locally: bool | None = None
+        if row["provider_key"] == "fred":
+            stored_locally = False
+            dataset_id = row["dataset_snapshot_id"]
+            asset_key = row["asset_key"]
+            series_id = asset_key.removeprefix("fred_").upper()
+            if dataset_id and asset_key.startswith("fred_"):
+                latest = connection.execute(
+                    """
+                    SELECT observation_date, value
+                    FROM fred_observations
+                    WHERE dataset_snapshot_id = ? AND series_id = ?
+                    ORDER BY observation_date DESC, realtime_start DESC
+                    LIMIT 1
+                    """,
+                    (dataset_id, series_id),
+                ).fetchone()
+                if latest is not None:
+                    latest_value = latest["value"]
+                    latest_value_at = latest["observation_date"]
+                    stored_locally = True
+
+                snapshot = connection.execute(
+                    "SELECT source_manifest_json FROM dataset_snapshots WHERE id = ?",
+                    (dataset_id,),
+                ).fetchone()
+                if snapshot is not None:
+                    manifest = _json(snapshot["source_manifest_json"])
+                    returned = manifest.get("macro_series")
+                    failed = manifest.get("macro_series_failed")
+                    if isinstance(returned, list):
+                        provider_returned = series_id in returned
+                    elif isinstance(failed, Mapping) and series_id in failed:
+                        provider_returned = False
+
         observation_at = _parse_time(row["last_observation_at"])
         age_seconds = (
             int((now - observation_at).total_seconds()) if observation_at else None
@@ -762,6 +800,10 @@ def get_data_inventory(
                 "frequency": row["frequency"],
                 "classification": row["classification"],
                 "row_count": row["row_count"],
+                "latest_value": latest_value,
+                "latest_value_at": latest_value_at,
+                "provider_returned": provider_returned,
+                "stored_locally": stored_locally,
                 "period_start": row["period_start"],
                 "period_end": row["period_end"],
                 "last_observation_at": row["last_observation_at"],
@@ -1033,14 +1075,14 @@ def run_pipeline(
     pipeline_key: str = "daily_desk",
     stop_after: str | None = None,
     progress_run_id: str | None = None,
+    reuse_latest_dataset: bool = False,
 ) -> dict[str, Any]:
     """`stop_after`: run stages in the normal order, but stop once the
     named stage (e.g. 'fetch_data') completes -- real, direct user request
-    ("sometimes I only want to get data"). Deliberately "run through stage
-    N," not "run only stage N in isolation": starting a later stage
-    (e.g. regime_filter alone) would need to safely reuse a possibly-stale
-    dataset snapshot, a real, separate design question not solved here --
-    every stop_after run still starts fresh from fetch_data.
+    ("sometimes I only want to get data"). `reuse_latest_dataset` is the
+    explicit provider-free counterpart: select the newest sealed real
+    dataset, revalidate it without mutation, and recompute a complete desk
+    snapshot. It never calls FRED/Yahoo or writes raw dataset children.
     """
     pipeline = get_pipeline(connection, pipeline_key)["definition"]
     if not pipeline["enabled"]:
@@ -1049,14 +1091,36 @@ def run_pipeline(
     timestamp = iso_z(now)
     run_id = f"run-{uuid.uuid4()}"
     engine_mode = get_engine_mode(connection)["mode"]
+    stored_dataset = None
+    if reuse_latest_dataset:
+        stored_dataset = connection.execute(
+            """
+            SELECT dataset.id
+            FROM dataset_snapshots AS dataset
+            WHERE dataset.immutable = 1
+              AND dataset.data_classification = 'real'
+              AND dataset.is_demo = 0
+              AND EXISTS (
+                  SELECT 1 FROM fred_observations AS observation
+                  WHERE observation.dataset_snapshot_id = dataset.id
+              )
+              AND EXISTS (
+                  SELECT 1 FROM symbol_bars AS bar
+                  WHERE bar.dataset_snapshot_id = dataset.id
+              )
+            ORDER BY dataset.as_of DESC, dataset.rowid DESC
+            LIMIT 1
+            """
+        ).fetchone()
     provider_rows = {
         row["provider_key"]: row
         for row in connection.execute("SELECT * FROM operator_providers").fetchall()
     }
+    provider_stages = [] if reuse_latest_dataset else pipeline["stages"]
     required = sorted(
         {
             key
-            for stage in pipeline["stages"]
+            for stage in provider_stages
             for key in stage["required_provider_keys"]
         }
     )
@@ -1096,7 +1160,8 @@ def run_pipeline(
             "unhealthy": [],
             "pilot_mode_restricted": [],
         }
-        for key in stage["required_provider_keys"]:
+        required_keys = [] if reuse_latest_dataset else stage["required_provider_keys"]
+        for key in required_keys:
             state = provider_states.get(key, "missing")
             if state != "healthy":
                 issues[state].append(key)
@@ -1118,9 +1183,10 @@ def run_pipeline(
     # universe, never just the curated dashboard watchlist -- an invalid
     # future-dated record on a non-watchlist symbol (e.g. AAPL/NVDA/TLT/IEF)
     # must still block/warn the pipeline.
-    inventory = get_data_inventory(connection, now, scope="all")
-    invalid_data = inventory["summary"]["invalid"]
-    preflight_issues = provider_issues or invalid_data > 0
+    inventory = get_data_inventory(connection, now, scope="all") if not reuse_latest_dataset else None
+    invalid_data = inventory["summary"]["invalid"] if inventory is not None else 0
+    missing_stored_dataset = reuse_latest_dataset and stored_dataset is None
+    preflight_issues = provider_issues or invalid_data > 0 or missing_stored_dataset
     preflight_status = "completed_with_warnings" if preflight_issues else "completed"
     preflight_parts = []
     for stage in pipeline["stages"]:
@@ -1150,17 +1216,25 @@ def run_pipeline(
             f"{invalid_data} (assets {inventory['summary']['invalid_assets']}, "
             f"symbols {inventory['summary']['invalid_symbols']})"
         )
-    preflight_message = (
-        "Provider readiness — " + "; ".join(preflight_parts) + "."
-        if preflight_parts
-        else "All required providers have a current healthy smoke verification; data has not been fetched."
-    )
+    if missing_stored_dataset:
+        preflight_parts.append("no sealed real dataset with both macro observations and price bars is available")
+    if reuse_latest_dataset and not preflight_parts:
+        preflight_message = (
+            f"Stored-data recompute will use sealed dataset {stored_dataset['id']}; "
+            "provider access and network fetch are not required."
+        )
+    else:
+        preflight_message = (
+            "Provider readiness — " + "; ".join(preflight_parts) + "."
+            if preflight_parts
+            else "All required providers have a current healthy smoke verification; data has not been fetched."
+        )
     stage_results.append(
         (run_id, "preflight", 10, preflight_status, timestamp, timestamp, 0, 0, preflight_message, "preflight_not_ready" if preflight_issues else None)
     )
 
     remaining = [stage for stage in pipeline["stages"] if stage["key"] != "preflight"]
-    dataset_snapshot_id: str | None = None
+    dataset_snapshot_id: str | None = stored_dataset["id"] if stored_dataset is not None else None
     desk_snapshot_id: str | None = None
     if dry_run:
         for stage in remaining:
@@ -1174,6 +1248,14 @@ def run_pipeline(
         stopped = False
         stage_statuses: list[str] = []
         for stage in remaining:
+            if reuse_latest_dataset and stage["key"] == "fetch_data":
+                stage_results.append(
+                    (
+                        run_id, stage["key"], stage["order"], "skipped", timestamp, timestamp,
+                        0, 0, "Skipped: reusing the newest sealed real dataset; no provider was contacted.", None,
+                    )
+                )
+                continue
             if stopped:
                 stage_results.append(
                     (run_id, stage["key"], stage["order"], "skipped", None, None, None, None, f"Not run: this run stopped after '{stop_after}', per request.", None)
@@ -1223,12 +1305,16 @@ def run_pipeline(
                     on_item_progress=item_progress_callback,
                 )
             elif stage["key"] == "validate_data":
-                outcome = run_validate_data_stage(connection, now, dataset_snapshot_id)
+                outcome = run_validate_data_stage(
+                    connection, now, dataset_snapshot_id,
+                    persist_status=not reuse_latest_dataset,
+                )
             elif stage["key"] == "regime_filter":
                 outcome = run_regime_filter_stage(connection, now, dataset_snapshot_id, engine_mode)
             elif stage["key"] == "factor_engine":
                 outcome = run_factor_engine_stage(
-                    connection, now, dataset_snapshot_id, desk_snapshot_id, engine_mode
+                    connection, now, dataset_snapshot_id, desk_snapshot_id, engine_mode,
+                    persist_dataset_events=not reuse_latest_dataset,
                 )
             elif stage["key"] == "allocation_engine":
                 outcome = run_allocation_engine_stage(connection, now, dataset_snapshot_id, desk_snapshot_id)
@@ -1273,6 +1359,8 @@ def run_pipeline(
         summary = (
             "Manual run stopped safely before publishing a full downstream snapshot."
             if run_status in {"blocked", "failed"}
+            else "Stored-data recompute completed without a provider fetch."
+            if reuse_latest_dataset
             else "Manual run completed."
         )
         # Stages publish into one open dataset/desk snapshot pair (created by

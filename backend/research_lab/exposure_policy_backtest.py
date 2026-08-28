@@ -16,9 +16,9 @@ import statistics
 from backend.database import connect, resolve_database_path
 from backend.engine.regime.scoring_v3 import (
     CALM_TERCILE_CUTOFF,
-    HISTORICAL_DRAWDOWN_RATE_CALM,
-    HISTORICAL_DRAWDOWN_RATE_MIDDLE,
-    HISTORICAL_DRAWDOWN_RATE_STRESSED,
+    CURRENT_VINTAGE_ADVERSE_FREQUENCY_ADVERSE,
+    CURRENT_VINTAGE_ADVERSE_FREQUENCY_MIXED,
+    CURRENT_VINTAGE_ADVERSE_FREQUENCY_SUPPORTIVE,
     STRESSED_TERCILE_CUTOFF,
 )
 from backend.research_lab.regime_conditioned_sleeve_return import BENCHMARK, SLEEVES, STRIDE_DAYS, _closes, _macro_composite_series
@@ -30,10 +30,10 @@ MIN_MULTIPLIER, MAX_MULTIPLIER = 0.5, 1.5
 
 def _confidence_for(composite: float) -> float:
     if composite <= STRESSED_TERCILE_CUTOFF:
-        return HISTORICAL_DRAWDOWN_RATE_STRESSED
+        return CURRENT_VINTAGE_ADVERSE_FREQUENCY_ADVERSE
     if composite >= CALM_TERCILE_CUTOFF:
-        return HISTORICAL_DRAWDOWN_RATE_CALM
-    return HISTORICAL_DRAWDOWN_RATE_MIDDLE
+        return CURRENT_VINTAGE_ADVERSE_FREQUENCY_SUPPORTIVE
+    return CURRENT_VINTAGE_ADVERSE_FREQUENCY_MIXED
 
 
 def _multiplier_v1(confidence: float) -> float:
@@ -41,9 +41,12 @@ def _multiplier_v1(confidence: float) -> float:
 
 
 def _multiplier_v2(confidence: float) -> float:
-    clamped = max(HISTORICAL_DRAWDOWN_RATE_CALM, min(HISTORICAL_DRAWDOWN_RATE_STRESSED, confidence))
-    span = HISTORICAL_DRAWDOWN_RATE_STRESSED - HISTORICAL_DRAWDOWN_RATE_CALM
-    fraction = (clamped - HISTORICAL_DRAWDOWN_RATE_CALM) / span
+    clamped = max(
+        CURRENT_VINTAGE_ADVERSE_FREQUENCY_SUPPORTIVE,
+        min(CURRENT_VINTAGE_ADVERSE_FREQUENCY_ADVERSE, confidence),
+    )
+    span = CURRENT_VINTAGE_ADVERSE_FREQUENCY_ADVERSE - CURRENT_VINTAGE_ADVERSE_FREQUENCY_SUPPORTIVE
+    fraction = (clamped - CURRENT_VINTAGE_ADVERSE_FREQUENCY_SUPPORTIVE) / span
     return MAX_MULTIPLIER - fraction * (MAX_MULTIPLIER - MIN_MULTIPLIER)
 
 

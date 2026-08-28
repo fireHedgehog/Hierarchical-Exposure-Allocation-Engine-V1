@@ -1,0 +1,81 @@
+# Staging Research V2
+
+This is the active, disposable research workspace. It is a restart point, not a
+paper library or runtime configuration system.
+
+## Restart here
+
+1. Open the README for the relevant research type.
+2. Review its initial loop, frozen choices, and result-table shape.
+3. Change the design freely while it is wrong or incomplete.
+4. Run nothing until the design and dataset are manually approved.
+5. Translate an accepted result into application code by hand.
+
+Research reads data prepared by Admin Operations. It does not fetch provider
+data, write to the application database, switch strategy versions, or dispatch
+another experiment automatically.
+
+## Research types
+
+| Type | Question |
+| --- | --- |
+| [Macro](macro/README.md) | What macro-financial state exists, what follows it, and how much total risk should it eventually permit? |
+| [Cross-Sectional](cross-sectional/README.md) | Which asset or sleeve is stronger relative to a declared peer group? |
+| [Timing](timing/README.md) | When should an already-selected candidate be entered, held, trimmed, or exited? |
+| [Theme](theme/README.md) | Once a theme is recognized, how broad is it and how long does it survive? |
+
+Add another type only when its experiment genuinely cannot fit one of these.
+Do not create empty folders in anticipation.
+
+## Study roles
+
+| Code | Role | Allowed claim |
+| --- | --- | --- |
+| S1 | State Description | What is observable now |
+| S2 | Predictive Relationship | What tends to follow or covary with it |
+| S3 | Risk Probability | How often a defined event follows |
+| S4 | Decision Policy | What action consumes an accepted state or probability |
+| S5 | Trading Implementation | Whether an action survives real implementation constraints |
+| S6 | Structural Diagnosis | Whether inputs are redundant, unstable, or misdefined |
+| S7 | Human Observation | A dated qualitative observation before structured evidence exists |
+
+One file may loop many signals, targets, and horizons when they share one method
+and one primary role. Do not create one paper per p-value. Keep S2, S3, and S4
+separate when a relationship is translated into a probability or policy.
+
+## Naming and minimal header
+
+Use `H-<TYPE>-S<ROLE>-<NNN>` and a lowercase filename. Type codes are `MACRO`,
+`XSEC`, `TIME`, and `THEME`.
+
+```markdown
+# H-<TYPE>-S<ROLE>-<NNN> - <Role> - <Title>
+
+| Field | Value |
+| --- | --- |
+| Study ID | H-<TYPE>-S<ROLE>-<NNN> |
+| Legacy ID | None |
+| Status | Design / Preregistered / Running / Confirmed / Rejected / Inconclusive |
+| Dataset | Exact local dataset |
+| Input | Exact observable input |
+| Target | Exact measured outcome |
+| Production use | None, unless manually accepted later |
+| Does not claim | Nearest tempting overclaim |
+```
+
+The type README may hold its first matrix design. Create another file only when
+an independent result or observation log needs its own lifecycle.
+
+## Working rules
+
+- Prefer one ranked result table to repeated prose.
+- Show effect size, sample size, stability, raw p-value, and adjusted q-value.
+- A low p-value is not a business decision.
+- Preserve nulls and failed results.
+- No hashes, approval chains, or research-specific SQL schema are required.
+- Git is sufficient history for disposable work.
+- A running staging algorithm may remain naive or wrong; research labels it
+  honestly without disabling the application.
+
+Prior experiments remain under [Staging V1](../archive/staging_1/README.md) only
+as temporary code and result context. Do not expand that archive.
