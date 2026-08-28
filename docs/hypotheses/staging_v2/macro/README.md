@@ -13,8 +13,9 @@ current-vintage diagnostic rather than a production probability calibration.
 | --- | --- | --- | --- |
 | [Warsh Reaction Function](h-macro-s7-001-warsh-reaction-function.md) | S7 | Observing | None |
 | H-MACRO-S2-001 - Exact Runtime Outcome Matrix | S2 | Completed; PIT-limited | Risk-context interpretation only |
+| [Indicator-Outcome Routing Matrix](h-macro-s2-002-indicator-outcome-routing-matrix.md) | S2 | Completed; PIT-limited | None |
 | H-MACRO-S3-CV-001 - Numeric Environment Translation | S3 diagnostic | Accepted for staging | Percentage and environment position |
-| [Direct Risk Appetite Policy](h-macro-s4-002-direct-risk-appetite-policy.md) | S4 | Design; grid not frozen | None |
+| [Direct Risk Appetite Policy](h-macro-s4-002-direct-risk-appetite-policy.md) | S4 | Inconclusive; macro baseline-dominated | None |
 | H-MACRO-S6-001 - Runtime Contribution Redundancy | S6 | Completed | Keep current weights pending better evidence |
 
 ## H-MACRO-S2-001 initial design
@@ -58,6 +59,17 @@ realized volatility, and direction. Forward return magnitude does not survive
 the corrected test. This supports a risk-context interpretation, not an entry
 signal or return forecast.
 
+## H-MACRO-S2-002 routed indicator matrix
+
+The [independent study](h-macro-s2-002-indicator-outcome-routing-matrix.md) uses
+all 26 stored FRED series as 24 non-duplicated economic indicators in one loop
+against 35 outcome routes. It preserves VIX as a fast volatility input while
+routing fundamentals, rates, liquidity, and transmission variables to the
+outcomes they actually inform. No input survived for SPY return magnitude;
+stable relationships instead appeared in adverse excursion, volatility,
+leadership, duration, breakeven, Fed-response, and gold routes. This changes the
+research abstraction, not the runtime score or exposure policy.
+
 ## H-MACRO-S3-CV-001 numeric translation
 
 Preserve both numeric product outputs without calling either a calibrated
@@ -83,9 +95,9 @@ and supportive test buckets remain visibly uncertain.
 
 The independent [experiment document](h-macro-s4-002-direct-risk-appetite-policy.md)
 holds the finite engineering grid, asymmetric long-only utility, literature
-anchors, validation design, confidence translation, result-table shape, and
-manual stopping rules. It is still a design: no grid has been frozen and no
-result is implied.
+anchors, validation design, and Phase A v1.1 results. The current macro
+families were baseline-dominated; the only weak surviving dynamic policy used
+VIX alone, so no exposure-policy translation is authorized.
 
 ## H-MACRO-S6-001 initial design
 
@@ -127,7 +139,6 @@ to claim a release-time-PIT probability.
 1. S2 and S6 are complete.
 2. S3-CV supplies an honest current-vintage percentage; calibrated S3 remains
    blocked by release-time PIT.
-3. The application retains its current 0.5x-1.5x staging policy band. S4-002
-   may test 0x-1.5x, but cannot change the application without a separately
-   accepted result and manual translation.
+3. S4-002 Phase A v1.1 is inconclusive and changes no application policy. A
+   new revision must be preregistered rather than tuning the same grid further.
 4. Later result changes still require a separate manual translation decision.

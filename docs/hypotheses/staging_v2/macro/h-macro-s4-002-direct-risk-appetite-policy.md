@@ -4,7 +4,7 @@
 | --- | --- |
 | Study ID | H-MACRO-S4-002 |
 | Legacy ID | None |
-| Status | Design; grid and literature choices not frozen |
+| Status | Inconclusive - Phase A v1.1; macro families baseline-dominated |
 | Dataset | Phase A: sealed current-vintage dataset `real-macro-0f184797-d738-4ecd-a615-83b0020c5753`; Phase B requires release-time PIT data or an approved lag convention |
 | Input | Macro-financial state candidates built from the core 11 factors; the recent 13-factor set is an extension |
 | Target | Net long-only exposure-policy utility on SPY, with QQQ, DIA, and long-history XL ETFs as robustness panels |
@@ -78,7 +78,9 @@ must not be silently mixed with true PIT data.
 ## Candidate families and finite grid
 
 The first screen compares a few interpretable families; it does not search
-arbitrary formulas or one model per factor.
+arbitrary formulas or one model per factor. The broad design space below is a
+roadmap. The smaller Phase A v1 contract immediately after it is the frozen
+first run.
 
 | Axis | Initial grid |
 | --- | --- |
@@ -94,9 +96,48 @@ arbitrary formulas or one model per factor.
 | Financing spread | `0`, `50`, `100` bps above the frozen cash/financing proxy |
 | Preference profile | Return-seeking; balanced; capital-preservation |
 
-Exact penalty values for the three preference profiles remain an open design
-choice. Literature review and a scale audit must set them before Phase A runs;
-they may not be selected from whichever values produce the best backtest.
+### Frozen Phase A v1 contract
+
+The first run deliberately tests defense before leverage. The core history
+starts in 2006, while the stored real SOFR series starts in 2018. Full-history
+selection therefore uses only `0x-1x` and a conservative zero cash return. A
+later `1.25x/1.5x` extension must use the real SOFR period and remains
+descriptive until it has enough time folds.
+
+| Choice | Frozen value |
+| --- | --- |
+| Decision path | Non-overlapping 21-SPY-trading-day segments; state observed at each segment start |
+| Outer tests | 2015-2018; 2019-2022; 2023-latest, each with expanding prior training |
+| Inner selection | Three expanding two-year validation blocks inside each outer training period |
+| Primary asset | SPY |
+| Robustness | QQQ, DIA, XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY |
+| State families | Exact three-cluster runtime; four-block activity/price/rates/stress score; VIX-only baseline |
+| Deferred family | Sign-constrained regularized model; add only after the simple policy machinery passes |
+| Factor set | Core 11 only; credit-spread/all-13 history is too short for the outer folds |
+| Normalization | Runtime lookback multiplied by `0.5`, `1`, or `2` |
+| Tail clipping | `2.0`, `2.5`, `3.0` z-score bands |
+| Smoothing | 1 or 3 monthly anchors |
+| Policy | Training-score terciles mapped monotonically to `0x, 0.25x, 0.5x, 0.75x, 1x`; supportive tercile must be `1x`; only the explicit benchmark may ignore state |
+| Cash / financing | Zero cash return; no leverage in v1 |
+| Explicit cost | 5 bps per one-way `1x` turnover; 1 and 10 bps sensitivities |
+| Return-seeking utility | `lambda_dd=0.25`, `lambda_down=0.10`, `lambda_turn=0` |
+| Balanced utility | `lambda_dd=0.75`, `lambda_down=0.25`, `lambda_turn=0.001` |
+| Capital-preservation utility | `lambda_dd=1.50`, `lambda_down=0.50`, `lambda_turn=0.0025` |
+| Selection | Highest mean inner-fold timing utility versus a static policy with the same test-fold mean exposure; simplest configuration wins within one standard error |
+
+The penalty profiles are transparent preference scenarios, not estimates from
+the return sample. The scale audit treats annualized return, drawdown magnitude,
+and annualized downside volatility as decimal returns; turnover is annual
+one-way multiplier turnover. Changing these values after seeing results creates
+a new design revision.
+
+The first v1 machinery run exposed a structural degeneracy before any result
+was accepted: capital-preservation utility could select permanent `0x`, which
+measures unconditional risk aversion rather than macro timing. V1.1 therefore
+requires the supportive state to return to `1x` and decomposes every result
+into (a) allocation utility versus `1x`, and (b) timing utility versus a static
+policy with the same mean exposure. A macro warning has research value only if
+timing utility is positive; lowering exposure by itself is not evidence.
 
 ## Validation and selection
 
@@ -139,21 +180,57 @@ effective multiplier = 1 + confidence * (candidate multiplier - 1)
 where confidence is expressed from `0` to `1`. Low confidence therefore means
 “stay near baseline,” not “take the opposite trade.”
 
-## Minimum result tables
+## Phase A v1.1 results
 
-One run produces three compact tables, not one document per parameter.
+Run 2026-08-28 with
+[`macro_s4_long_biased_policy.py`](../../../../backend/research_lab/macro_s4_long_biased_policy.py):
+224 non-overlapping policy periods from 2007-12-03 through 2026-08-17,
+54 state variants, 757 admissible policy specifications, and three expanding
+outer tests. All results use the frozen sealed dataset and remain
+current-vintage diagnostics.
 
-| Candidate | Factor set | Utility profile | SPY OOS delta utility | CAGR | Max DD | Downside vol | Turnover | Cost | Worst fold | Selected |
-| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| Pending | Pending | Pending |  |  |  |  |  |  |  |  |
+| Utility profile | Selected family by outer fold | Mean OOS timing U | Allocation U vs 1x | Mean CAGR | Worst max DD | Annual turnover | Worst timing fold | Verdict |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Return-seeking | static / VIX / VIX | -0.0041 | -0.0164 | 11.70% | 27.60% | 1.42 | -0.0100 | rejected |
+| Balanced | static / VIX / VIX | +0.0066 | +0.0091 | 12.45% | 27.60% | 1.14 | +0.0000 | baseline-only; inconclusive |
+| Capital-preservation | static / VIX / VIX | +0.0305 | +0.0539 | 10.97% | 24.47% | 1.48 | +0.0000 | preference-specific VIX defense |
 
-| Robustness asset | Delta utility | Max-DD change | Direction agrees | No-leverage agrees | High-cost agrees | Verdict |
-| --- | ---: | ---: | --- | --- | --- | --- |
-| Pending |  |  |  |  |  |  |
+Balanced family isolation is the decisive comparison. Each row is allowed to
+select only that state family or static `1x`.
 
-| Risk-appetite band | N | Mean chosen exposure | Adverse-event rate | Policy win rate | Confidence calibration | Stability |
-| --- | ---: | ---: | ---: | ---: | ---: | --- |
-| Pending |  |  |  |  |  |  |
+| Allowed state family | Mean OOS timing U | Allocation U vs 1x | Worst timing fold | Positive timing folds | Verdict |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Exact three-cluster runtime | -0.0144 | -0.0124 | -0.0490 | 1/3 | baseline-dominated |
+| Four-block activity/price/rates/stress | -0.0211 | -0.0105 | -0.0451 | 0/3 | baseline-dominated |
+| VIX-only | +0.0026 | -0.0009 | +0.0000 | 1/3 | weak and selection-unstable |
+
+The globally selected balanced VIX policy reduced SPY average outer-fold
+maximum drawdown by 3.77 percentage points and remained positive at 1 and 10
+bps costs. It failed on QQQ (`-0.0254` timing utility), XLK (`-0.0258`), and
+XLY (`-0.0240`); DIA and seven of nine long-history XL sectors were positive.
+That is useful risk-engineering evidence, but not broad confirmation.
+
+| Balanced exposure band | N | Mean exposure | 6M adverse-event rate | 1M policy win rate | Confidence |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Defensive below 0.5x | 0 | n/a | n/a | n/a | not calibrated |
+| Cautious 0.5-0.75x | 20 | 0.50x | 35.0% | 20.0% | not calibrated |
+| Baseline 1x | 114 | 1.00x | 20.2% | 100.0% by equality | not calibrated |
+
+## Interpretation and stopping decision
+
+Phase A v1.1 does not support translating the current 11-factor macro score
+into exposure. The simple VIX baseline was chosen whenever any dynamic policy
+survived, while both macro families had negative mean timing utility. Balanced
+and capital-preservation benefits are therefore evidence for a fast market-risk
+overlay and a stated loss preference, not evidence that slow macro inputs time
+equity exposure.
+
+The result also changes when the allowed family set changes under the
+one-standard-error rule. That candidate-set dependence is a selection-stability
+warning. Do not tune v1.1 further on the same outcomes. A new revision must
+either test a preregistered slow-macro-plus-fast-VIX architecture against
+VIX-only, add the deferred sign-constrained risk model, or wait for honest PIT
+history. The current production/staging algorithm remains untouched.
 
 ## Decision rules
 
