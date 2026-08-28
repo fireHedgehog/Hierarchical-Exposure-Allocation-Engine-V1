@@ -27,11 +27,25 @@ the real code on 2026-08-28, not asserted from memory.
    fully-revised value, not the value actually known/published at that
    historical date. A true point-in-time backtest needs a separate ALFRED
    vintage query per historical anchor date; this project has never done
-   that (see "Parked" below). **Real impact is concentrated, not uniform**:
-   `INDPRO`, `PAYEMS`, `GDPC1`, `CPIAUCSL`, `PCEPILFE`, `PPIACO` (the
-   `growth_inflation` cluster) are real BLS/BEA survey data with genuine
-   historical revisions — any paper using `macro_regime_composite` or these
-   factors directly inherits this risk (`macro-research/` in full;
+   that (see "Parked" below). **Real impact measured, not guessed**
+   (`research_lab/point_in_time_revision_magnitude_check.py`, live ALFRED
+   comparison): `GDPC1`'s raw *level* for Q3 2008 differs by ~44% between
+   its first-release vintage and today — but that's dominated by BEA's
+   periodic chained-dollar base-year rebasing, which largely cancels out
+   in a ratio. The number that actually matters — the real YoY growth
+   rate `scoring_v3.py` computes (`is_yoy=True`) — differs by only
+   **-0.48 percentage points** (+0.74% as known in Dec 2008 vs. +0.27%
+   as known today) for that same quarter, the single highest-IC case in
+   H-MACRO11. `PAYEMS` and `CPIAUCSL` level revisions were already small
+   at the source (-0.2 to -0.4% and +0.13% respectively). **Honest
+   verdict: real, but modest, not the dominant driver of any finding in
+   this tree** — this project's own choice to z-score YoY *growth rates*
+   rather than raw levels (made for economic reasons, not for this) turns
+   out to also provide real, if partial, protection against exactly this
+   gap. Concentrated in `INDPRO`, `PAYEMS`, `GDPC1`, `CPIAUCSL`,
+   `PCEPILFE`, `PPIACO` (the `growth_inflation` cluster) — any paper
+   using `macro_regime_composite` or these factors directly inherits
+   this, now-measured, modest exposure (`macro-research/` in full;
    `asset-selection-research/`'s regime-conditioned addenda in H-STREV,
    H-SECT02/05/09/11). Daily market-observed series (`DGS10`, `DGS30`,
    `DFII10`, `VIXCLS`, credit spreads) and every **pure-price** paper
@@ -66,8 +80,10 @@ real remedy) is a real, substantial software change — re-architecting
 meaningfully slower against the real FRED API. Deliberately not
 undertaken now, per direct instruction: research validity gaps get
 disclosed and worked around statistically where possible, not used to
-justify a radical software rewrite. Revisit if/when this specific gap
-becomes the binding constraint on a real decision.
+justify a radical software rewrite. The measured, modest real impact
+above (-0.48pp on the single highest-IC case) makes this an easier
+park, not a harder one — revisit if/when this specific gap becomes the
+binding constraint on a real decision, not before.
 
 ## Data sources, by type
 

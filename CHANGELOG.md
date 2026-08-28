@@ -4,6 +4,13 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research — measured, not guessed: how big is the point-in-time gap, really
+
+- User's direct follow-up to the methodology audit: does the point-in-time gap influence findings a lot, or only minor -- answered with real, live ALFRED evidence instead of a qualitative guess.
+- New `research_lab/point_in_time_revision_magnitude_check.py`: real, live comparison of each series' first-release vintage vs. today's fully-revised vintage, for the specific dates that matter most (Q3/Q4 2008 -- the crisis quarters driving H-MACRO11's largest ICs -- plus a calm 2023 contrast).
+- Real, dramatic-looking raw result: `GDPC1`'s level differs by ~44% for Q3 2008. But that's dominated by BEA's periodic chained-dollar base-year rebasing, not a genuine data-content revision -- checked directly by computing the actual YoY growth rate `scoring_v3.py` uses (not the raw level): the real difference is only -0.48 percentage points (+0.74% as known in Dec 2008 vs. +0.27% as known today) for the single highest-IC case in this whole tree. `PAYEMS`/`CPIAUCSL` level revisions were already small at the source (-0.2% to -0.4%, +0.13%).
+- Honest verdict, now measured: real, but modest -- not the dominant driver of any finding here. This project's own choice to z-score YoY growth rather than raw levels (made for economic reasons) turns out to also provide real, partial protection against this specific gap. `docs/hypotheses/README.md`'s methodology-limitations note updated with the real numbers, replacing the earlier qualitative "concentrated, not uniform" language.
+
 ### Docs — real methodology-limitations audit: point-in-time gap confirmed, OOS language corrected, significance re-checked with block-permutation
 
 - User-supplied external audit of this session's macro research, verified against the real code rather than accepted or dismissed: (1) `fetch_data.py` pins FRED's `realtime_start`/`realtime_end` to the pipeline's own run date for the *entire* historical fetch -- confirmed real, every historical row gets today's fully-revised value, not what was actually known then. Concentrated in the `growth_inflation` cluster (`INDPRO`/`PAYEMS`/`GDPC1`/`CPIAUCSL`/`PCEPILFE`/`PPIACO`, real BLS/BEA data with genuine revisions); daily market series and every pure-price paper are unaffected. (2) The 2019-01-01 OOS split has been reused across many papers -- real, individual walk-forward discipline held within each test, but "OOS = opposite of overfitting" language was overclaiming across the growing set. (3) `STRIDE_DAYS=21` sampling against 63/126-day forward windows leaves real overlap; naive Pearson/Fisher significance tests assume independence they don't have.
