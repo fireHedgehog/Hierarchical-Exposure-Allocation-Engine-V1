@@ -135,6 +135,24 @@ Research experiments live in the isolated research area. They run
 disposable code and write simple experiment reports into `docs/hypotheses`;
 the code lives in `backend/research_lab`.
 
+A precise line worth stating explicitly (added 2026-08-28, after a real
+near-miss): *fetching and storing data is an admin/production concern,
+never a research one.* `research_lab/` scripts only ever read a dataset
+some earlier fetch already produced — they never call a provider and
+never write a row, no exceptions. When the staging universe grew to
+include a broader reference library (`backend/universe/`) for real
+cross-sectional membership work, the temptation was to call the code
+that fetches those symbols' price history "research fetch." That's the
+wrong name even though the code itself was safe: fetching is admin work
+by this project's own rule, full stop, so it lives under Operations
+(`backend/universe/library_fetch.py`, the "Fetch data library" button),
+not under a "research" label — keeping the sharp line intact rather than
+quietly writing an exception into it. Once fetched, that data is exactly
+as available to a `research_lab/` script as anything the six-stage
+pipeline produces — the boundary is about who does the fetching and
+where the button lives, not about what a research script may eventually
+read.
+
 That means we can register and test many hypotheses without constantly
 changing staging-mode code.
 

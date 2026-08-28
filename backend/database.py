@@ -3,6 +3,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from backend.universe.loader import load_all_frozen_universes
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATABASE_PATH = PROJECT_ROOT / "data" / "desk.db"
@@ -76,6 +78,7 @@ def initialize_database(database_path: str | Path | None = None) -> Path:
             prelude = _catalog_compatibility_prelude(connection)
             connection.executescript(f"BEGIN IMMEDIATE;\n{prelude}\n{schema}")
             _install_compatible_columns(connection)
+            load_all_frozen_universes(connection)
             _install_immutability_guards(connection)
         except BaseException:
             connection.rollback()
@@ -218,6 +221,40 @@ def _install_compatible_columns(connection: sqlite3.Connection) -> None:
         "UPDATE staging_symbols SET research_scope = 'reference_only' "
         "WHERE symbol = 'BTC-USD' AND research_scope != 'reference_only'"
     )
+    # A real, corrected design: a personal dashboard watchlist must be
+    # editable directly (add/remove API), not a column whose only writer is
+    # this migration. Reverted immediately (2026-08-28, never shipped) in
+    # favor of the real watchlist_symbols table below. One-time cleanup for
+    # any local dev database that already has the stray column from the
+    # first, incorrect attempt -- SQLite 3.35+ DROP COLUMN, harmless once
+    # already gone.
+    if "watchlist" in staging_symbol_columns:
+        connection.execute("ALTER TABLE staging_symbols DROP COLUMN watchlist")
+
+    if "fetch_only" not in staging_symbol_columns:
+        connection.execute(
+            "ALTER TABLE staging_symbols ADD COLUMN fetch_only INTEGER NOT NULL DEFAULT 0 "
+            "CHECK (fetch_only IN (0, 1))"
+        )
+
+    membership_table = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'staging_universe_membership'"
+    ).fetchone()
+    if membership_table is not None:
+        membership_columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(staging_universe_membership)").fetchall()
+        }
+        # Existing rows (an earlier, index-only version of this table) are
+        # all real 'index' anchors -- a safe, accurate default for the
+        # backfill, not a guess.
+        if "anchor_kind" not in membership_columns:
+            connection.execute(
+                "ALTER TABLE staging_universe_membership ADD COLUMN anchor_kind TEXT "
+                "NOT NULL DEFAULT 'index' CHECK (anchor_kind IN ('index', 'thematic_etf'))"
+            )
+        if "weight_pct" not in membership_columns:
+            connection.execute("ALTER TABLE staging_universe_membership ADD COLUMN weight_pct REAL")
 
     event_columns = {
         row["name"]

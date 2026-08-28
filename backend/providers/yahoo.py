@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+import time
 from datetime import datetime, timezone
 from typing import Any, NamedTuple
 
@@ -28,6 +30,29 @@ class PriceFetchError(RuntimeError):
 # so it is the pilot-tier choice for equity/ETF/crypto-reference price bars.
 CHART_ENDPOINT = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 
+# Real courtesy pacing (added 2026-08-28, direct user request: "we don't
+# want to get blocked by yahoo"). This is the ONE place every real call to
+# this unofficial, keyless endpoint funnels through -- the live pipeline's
+# fetch_data_stage and the separate library_fetch batch path both call this
+# same function per symbol, so pacing it here protects both at once rather
+# than duplicating a delay in each caller. A module-level lock + timestamp
+# is enough for this local-first, single-operator tool (no real concurrent-
+# request fan-out to guard against, just the two admin-triggered fetch
+# paths that could in principle run close together).
+MIN_REQUEST_INTERVAL_SECONDS = 0.25
+_pacing_lock = threading.Lock()
+_last_request_at: float = 0.0
+
+
+def _wait_for_pacing_slot() -> None:
+    global _last_request_at
+    with _pacing_lock:
+        now = time.monotonic()
+        wait = MIN_REQUEST_INTERVAL_SECONDS - (now - _last_request_at)
+        if wait > 0:
+            time.sleep(wait)
+        _last_request_at = time.monotonic()
+
 
 def fetch_daily_bars(symbol: str, *, range_: str = "1y", start_date: str | None = None) -> list[PriceBar]:
     """start_date (an ISO date), when given, requests an explicit
@@ -48,6 +73,7 @@ def fetch_daily_bars(symbol: str, *, range_: str = "1y", start_date: str | None 
         params["period2"] = int(datetime.now(timezone.utc).timestamp())
     else:
         params["range"] = range_
+    _wait_for_pacing_slot()
     try:
         with httpx.Client(
             timeout=httpx.Timeout(15.0, connect=5.0),

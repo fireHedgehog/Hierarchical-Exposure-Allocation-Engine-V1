@@ -1,35 +1,94 @@
-import { AlertTriangle, CheckCircle2, Clock3, PlayCircle, RefreshCw, ShieldCheck } from "lucide-react";
-import { useState } from "react";
-import { endpoints, operatorErrorMessage, runPipeline, useApi } from "../api/client";
+import { AlertTriangle, CheckCircle2, Clock3, Download, LineChart, Loader2, PlayCircle, RefreshCw, ShieldCheck } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  endpoints, operatorErrorMessage, runPipeline, startBackgroundPipelineRun,
+  type PipelineRunProgress, type PipelineStageKey, useApi,
+} from "../api/client";
 import { OperatorPageHeader } from "../components/OperatorPageHeader";
 import { ProductReadinessPanel } from "../components/ProductReadinessPanel";
 import { Panel, ResourceState, SectionHeading, StatusPill, Unavailable } from "../components/Ui";
 import type { AdminOverviewResponse, PipelineResponse, PipelineRun } from "../types";
 import { formatNumber, formatTimestamp, NOT_AVAILABLE } from "../utils/format";
 
+const STAGE_LABELS: Record<PipelineStageKey, string> = {
+  fetch_data: "Fetching real data",
+  validate_data: "Validating",
+  regime_filter: "Scoring regime",
+  factor_engine: "Ranking symbols",
+  allocation_engine: "Sizing allocation",
+  instrument_engine: "Proposing instruments",
+};
+
 export function OperationsOverviewPage() {
   const overview = useApi<AdminOverviewResponse>(endpoints.adminOverview);
   const pipeline = useApi<PipelineResponse>(endpoints.adminPipeline);
   const [latestRun, setLatestRun] = useState<PipelineRun | null>(null);
-  const [running, setRunning] = useState<"dry" | "full" | null>(null);
+  const [running, setRunning] = useState<"dry" | "full" | PipelineStageKey | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [liveProgress, setLiveProgress] = useState<PipelineRunProgress | null>(null);
+  const pollTimer = useRef<number | null>(null);
 
   const refresh = () => {
     overview.reload();
     pipeline.reload();
   };
 
-  const startRun = async (dryRun: boolean) => {
-    if (!dryRun && !window.confirm("Run every currently implemented stage? A successful run may publish a new immutable decision snapshot, but it will never place orders.")) return;
-    setRunning(dryRun ? "dry" : "full");
+  const stopPolling = () => {
+    if (pollTimer.current !== null) {
+      window.clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    }
+  };
+
+  useEffect(() => stopPolling, []);
+
+  const startRun = async (dryRun: boolean, stopAfter?: PipelineStageKey) => {
+    if (!dryRun && !stopAfter && !window.confirm("Run every currently implemented stage? A successful run may publish a new immutable decision snapshot, but it will never place orders.")) return;
+    setRunning(stopAfter ?? (dryRun ? "dry" : "full"));
     setActionError(null);
+    setLiveProgress(null);
+
+    // Dry runs are fast (no real fetch) -- the simple, synchronous call is
+    // enough. Real runs use the background+poll path for live progress.
+    if (dryRun) {
+      try {
+        const result = await runPipeline<{ run: PipelineRun }>(true);
+        setLatestRun(result.run);
+        refresh();
+      } catch (error) {
+        setActionError(operatorErrorMessage(error, "The pipeline request failed."));
+      } finally {
+        setRunning(null);
+      }
+      return;
+    }
+
     try {
-      const result = await runPipeline<{ run: PipelineRun }>(dryRun);
-      setLatestRun(result.run);
-      refresh();
+      const { progress_run_id: progressRunId } = await startBackgroundPipelineRun<{ progress_run_id: string }>(false, stopAfter);
+      pollTimer.current = window.setInterval(async () => {
+        try {
+          const response = await fetch(endpoints.adminPipelineRunProgress(progressRunId));
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const progress: PipelineRunProgress = await response.json();
+          setLiveProgress(progress);
+          if (progress.finished) {
+            stopPolling();
+            setRunning(null);
+            if (progress.error) {
+              setActionError(progress.error);
+            } else if (progress.result) {
+              setLatestRun(progress.result.run);
+              refresh();
+            }
+          }
+        } catch (error) {
+          stopPolling();
+          setRunning(null);
+          setActionError(operatorErrorMessage(error, "Lost contact with the running pipeline."));
+        }
+      }, 700);
     } catch (error) {
-      setActionError(operatorErrorMessage(error, "The pipeline request failed."));
-    } finally {
+      setActionError(operatorErrorMessage(error, "The pipeline request failed to start."));
       setRunning(null);
     }
   };
@@ -49,6 +108,8 @@ export function OperationsOverviewPage() {
           </button>
         )}
       />
+
+      {liveProgress && !liveProgress.finished ? <LivePipelineProgress progress={liveProgress} /> : null}
 
       <ResourceState loading={overview.loading} error={overview.error} onRetry={overview.reload} resource="operator overview" />
 
@@ -84,6 +145,24 @@ export function OperationsOverviewPage() {
               <div className="operator-run-actions">
                 <button className="button button--quiet" type="button" onClick={() => startRun(true)} disabled={running !== null}>
                   <ShieldCheck aria-hidden="true" size={15} /> {running === "dry" ? "Checking…" : "Dry preflight"}
+                </button>
+                <button
+                  className="button button--quiet"
+                  type="button"
+                  onClick={() => startRun(false, "fetch_data")}
+                  disabled={running !== null}
+                  title="Runs only the fetch stage -- refreshes real data without recomputing regime, ranking, or allocation."
+                >
+                  <Download aria-hidden="true" size={15} /> {running === "fetch_data" ? "Fetching…" : "Fetch data only"}
+                </button>
+                <button
+                  className="button button--quiet"
+                  type="button"
+                  onClick={() => startRun(false, "regime_filter")}
+                  disabled={running !== null}
+                  title="Runs fetch, validate, and regime -- a fresh macro reading without ranking or allocating positions."
+                >
+                  <LineChart aria-hidden="true" size={15} /> {running === "regime_filter" ? "Running…" : "Macro reading only"}
                 </button>
                 <button className="button operator-run-button" type="button" onClick={() => startRun(false)} disabled={running !== null}>
                   <PlayCircle aria-hidden="true" size={16} /> {running === "full" ? "Starting…" : "Run available stages"}
@@ -144,6 +223,31 @@ function OverviewMetric({ label, value, denominator, status }: { label: string; 
   );
 }
 
+function LivePipelineProgress({ progress }: { progress: PipelineRunProgress }) {
+  const stageLabel = progress.stage ? STAGE_LABELS[progress.stage] || progress.stage : "Starting…";
+  const item = progress.item_progress;
+  const itemPercent = item && item.total > 0 ? Math.round((item.done / item.total) * 100) : null;
+  return (
+    <div className="live-pipeline-progress">
+      <div className="live-pipeline-progress__header">
+        <Loader2 aria-hidden="true" size={16} className="live-pipeline-progress__spinner" />
+        <strong>Stage {progress.stage_index} of {progress.total_stages}: {stageLabel}</strong>
+      </div>
+      <div className="live-pipeline-progress__bar">
+        <div className="live-pipeline-progress__bar-fill" style={{ width: `${(progress.stage_index / progress.total_stages) * 100}%` }} />
+      </div>
+      {item ? (
+        <div className="live-pipeline-progress__item">
+          <span>{item.done} / {item.total}{item.current ? ` — ${item.current}` : ""}</span>
+          <div className="live-pipeline-progress__bar live-pipeline-progress__bar--item">
+            <div className="live-pipeline-progress__bar-fill" style={{ width: `${itemPercent ?? 0}%` }} />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function PipelineRunCard({ run }: { run: PipelineRun }) {
   return (
     <div className="pipeline-run-card">
@@ -158,7 +262,13 @@ function PipelineRunCard({ run }: { run: PipelineRun }) {
       <div className="pipeline-run-stages">
         {(run.stages ?? []).map((stage, index) => (
           <article key={`${stage.key}-${index}`}>
-            {stage.status === "complete" || stage.status === "completed" ? <CheckCircle2 aria-hidden="true" size={15} /> : <Clock3 aria-hidden="true" size={15} />}
+            {stage.status === "complete" || stage.status === "completed" ? (
+              <CheckCircle2 aria-hidden="true" size={15} />
+            ) : stage.status === "completed_with_warnings" ? (
+              <AlertTriangle aria-hidden="true" size={15} className="pipeline-stage-warning-icon" />
+            ) : (
+              <Clock3 aria-hidden="true" size={15} />
+            )}
             <div>
               <strong>{stage.key}</strong>
               <span>{stage.message || "No stage output was recorded."}</span>

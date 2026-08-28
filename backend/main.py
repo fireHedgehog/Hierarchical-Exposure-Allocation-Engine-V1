@@ -8,7 +8,7 @@ import uuid
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncIterator, Callable, Iterator, Mapping
+from typing import Any, AsyncIterator, Callable, Iterator, Literal, Mapping
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -28,6 +28,8 @@ from backend.admin_repository import (
     PipelineNotFoundError,
     ProviderNotFoundError,
     StrategyNotFoundError,
+    SymbolNotInStagingUniverseError,
+    add_to_watchlist,
     get_data_inventory,
     get_overview,
     get_pipeline,
@@ -36,7 +38,9 @@ from backend.admin_repository import (
     list_providers,
     list_staging_symbols,
     list_strategies,
+    list_watchlist,
     mark_credential_changed,
+    remove_from_watchlist,
     run_pipeline,
     set_engine_mode,
     utc_now,
@@ -45,9 +49,15 @@ from backend.admin_repository import (
 from backend.admin_security import direct_loopback_guard, operator_guard, validate_admin_origins
 from backend.database import PROJECT_ROOT, connect, initialize_database, resolve_database_path
 from backend.pipeline.stages import FredFetcher, PriceFetcher
+from backend.pipeline.stages.common import STAGING_UNIVERSE_START_DATE
+from backend.pipeline_progress import finish_run as finish_background_run
+from backend.pipeline_progress import get_progress
+from backend.pipeline_progress import start_run as start_background_run
+from backend.universe.library_fetch import DEFAULT_BATCH_SIZE as DEFAULT_LIBRARY_FETCH_BATCH_SIZE
+from backend.universe.library_fetch import fetch_library_batch
 from backend.providers import ProviderVerifier
 from backend.providers.fred import FredV2Verifier, fetch_series_observations
-from backend.providers.yahoo import fetch_daily_bars
+from backend.providers.yahoo import PriceFetchError, fetch_daily_bars
 from backend.repository import (
     SnapshotNotFoundError,
     SymbolNotFoundError,
@@ -263,9 +273,9 @@ def create_app(
             ) from error
 
     @application.get("/api/v1/symbols", tags=["symbols"])
-    def symbols() -> dict[str, Any]:
+    def symbols(scope: Literal["watchlist", "all"] = "watchlist") -> dict[str, Any]:
         with connect(path, read_only=True) as connection:
-            return list_latest_symbols(connection)
+            return list_latest_symbols(connection, scope=scope)
 
     @application.get("/api/v1/symbols/{symbol}", tags=["symbols"])
     def symbol_detail(symbol: str) -> dict[str, Any]:
@@ -466,9 +476,20 @@ def create_app(
         tags=["operator"],
         dependencies=[Depends(direct_loopback_guard)],
     )
-    def admin_data() -> dict[str, Any]:
+    def admin_data(
+        scope: Literal["watchlist", "all"] = "watchlist",
+        q: str | None = None,
+        page: int = 1,
+        page_size: int = 25,
+        health: Literal["all", "unhealthy"] = "all",
+        sort: str = "symbol",
+        order: Literal["asc", "desc"] = "asc",
+    ) -> dict[str, Any]:
         with connect(path, read_only=True) as connection:
-            return get_data_inventory(connection, now_fn())
+            return get_data_inventory(
+                connection, now_fn(), scope=scope, q=q, page=page, page_size=page_size,
+                health=health, sort=sort, order=order,
+            )
 
     @application.get(
         "/api/v1/admin/universe",
@@ -478,6 +499,90 @@ def create_app(
     def admin_universe() -> dict[str, Any]:
         with connect(path, read_only=True) as connection:
             return list_staging_symbols(connection)
+
+    @application.get(
+        "/api/v1/admin/watchlist",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_watchlist_list() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            return list_watchlist(connection)
+
+    @application.post(
+        "/api/v1/admin/watchlist/{symbol}",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_watchlist_add(symbol: str) -> dict[str, Any]:
+        with connect(path) as connection:
+            try:
+                return add_to_watchlist(connection, symbol, now_fn())
+            except SymbolNotInStagingUniverseError as error:
+                raise _not_found(
+                    "symbol_not_in_universe",
+                    f"{error} is not a fetched symbol -- it must exist in the data library before it can be watched.",
+                ) from error
+
+    @application.delete(
+        "/api/v1/admin/watchlist/{symbol}",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_watchlist_remove(symbol: str) -> dict[str, Any]:
+        with connect(path) as connection:
+            return remove_from_watchlist(connection, symbol)
+
+    @application.post(
+        "/api/v1/admin/data/{symbol}/test-fetch",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_data_test_fetch(symbol: str) -> dict[str, Any]:
+        # Deliberately a diagnostic probe only -- no database write. Every
+        # SEALED, PRODUCTION dataset snapshot in this schema is
+        # architecturally "one coherent full-universe fetch"; patching a
+        # single symbol into one of those would violate that invariant
+        # everywhere downstream. This answers "is this symbol's real fetch
+        # broken right now," nothing more. Real, persisting per-symbol
+        # fetches for the extended data library go through
+        # admin_library_fetch_batch below instead -- admin/production work
+        # (fetching and storing data always is, per developer-letter.md),
+        # writing into its own separate, always-mutable dataset snapshot,
+        # never a sealed production one.
+        normalized = symbol.strip().upper()
+        try:
+            bars = price_fetcher_fn(normalized, start_date=STAGING_UNIVERSE_START_DATE)
+        except PriceFetchError as error:
+            return {"symbol": normalized, "ok": False, "error": str(error)}
+        if not bars:
+            return {"symbol": normalized, "ok": False, "error": "Provider returned zero usable bars."}
+        return {
+            "symbol": normalized,
+            "ok": True,
+            "bar_count": len(bars),
+            "period_start": min(bar.time for bar in bars),
+            "period_end": max(bar.time for bar in bars),
+        }
+
+    @application.post(
+        "/api/v1/admin/library-fetch",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_library_fetch_batch(batch_size: int = DEFAULT_LIBRARY_FETCH_BATCH_SIZE) -> dict[str, Any]:
+        # Real, per-symbol atomic fetch for staging_symbols.fetch_only=1
+        # rows (the stage-2 extended data library) -- admin/production
+        # work, deliberately NOT called "research fetch" (see developer-
+        # letter.md) and deliberately NOT the live pipeline's
+        # fetch_data_stage; never touches active=1 or the live product's
+        # dataset. One bad symbol in this batch never blocks the rest, and
+        # never blocks the live Today-desk product's own daily refresh.
+        # Naturally resumable -- already-fetched symbols are skipped, so
+        # repeated clicks over multiple sessions just continue.
+        safe_batch_size = max(1, min(batch_size, 100))
+        with connect(path) as connection:
+            return fetch_library_batch(connection, price_fetcher_fn, now_fn(), batch_size=safe_batch_size)
 
     @application.get(
         "/api/v1/admin/pipeline",
@@ -507,9 +612,59 @@ def create_app(
                     runtime_id=runtime_id,
                     fred_observation_fetcher=fred_fetcher,
                     price_fetcher=price_fetcher_fn,
+                    stop_after=payload.stop_after,
                 )
         except PipelineNotFoundError as error:
             raise _not_found("pipeline_not_found", "The daily desk pipeline is not available.") from error
+
+    @application.post(
+        "/api/v1/admin/pipeline/runs/start",
+        tags=["operator"],
+        dependencies=[Depends(operator_guard("pipeline.run", admin_origins))],
+    )
+    def admin_start_pipeline_run(payload: PipelineRunRequest) -> dict[str, Any]:
+        # Real, direct user request: live progress ("step 1 fetching
+        # 1/22..."), which needs the run to happen in the background --
+        # one HTTP request can't stay open long enough to stream it, and
+        # blocking the request until the whole pipeline finishes is
+        # exactly the opaque black box being fixed here. This starts a
+        # real background thread with its own DB connection (SQLite
+        # connections aren't safe to share across threads) and returns
+        # immediately; poll admin_pipeline_run_progress for live status.
+        progress_run_id = str(uuid.uuid4())
+        start_background_run(progress_run_id)
+
+        def _execute() -> None:
+            try:
+                with connect(path) as thread_connection:
+                    result = run_pipeline(
+                        thread_connection,
+                        secrets,
+                        now_fn(),
+                        dry_run=payload.dry_run,
+                        runtime_id=runtime_id,
+                        fred_observation_fetcher=fred_fetcher,
+                        price_fetcher=price_fetcher_fn,
+                        stop_after=payload.stop_after,
+                        progress_run_id=progress_run_id,
+                    )
+                finish_background_run(progress_run_id, result)
+            except Exception as error:  # a background thread's exception must be captured, not silently lost
+                finish_background_run(progress_run_id, None, error=str(error))
+
+        threading.Thread(target=_execute, daemon=True).start()
+        return {"progress_run_id": progress_run_id}
+
+    @application.get(
+        "/api/v1/admin/pipeline/runs/{progress_run_id}/progress",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_pipeline_run_progress(progress_run_id: str) -> dict[str, Any]:
+        progress = get_progress(progress_run_id)
+        if progress is None:
+            raise _not_found("progress_not_found", "No background run with this id is known to this server.")
+        return progress
 
     @application.put(
         "/api/v1/admin/engine-mode",

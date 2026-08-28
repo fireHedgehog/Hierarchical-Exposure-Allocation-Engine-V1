@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -15,7 +16,7 @@ from backend.database import connect, initialize_database
 from backend.main import create_app
 from backend.providers import VerificationResult
 from backend.providers.fred import FredObservation, FredV2Verifier
-from backend.providers.yahoo import PriceBar
+from backend.providers.yahoo import PriceBar, PriceFetchError
 from backend.secrets import (
     KeyringEnvironmentSecretStore,
     SecretStoreUnavailable,
@@ -327,6 +328,95 @@ def test_empty_v6_database_has_operator_and_readiness_catalog_but_no_decision_sn
         ).fetchone()[0] == 14
 
 
+def test_background_pipeline_run_is_pollable_to_completion(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    # Real regression test for the actual design ask: a live-pollable
+    # background run, not one opaque blocking request. The start endpoint
+    # must return immediately with a progress id, and polling must reach
+    # finished=true with the real final run result, without ever blocking
+    # the initiating request itself.
+    _, client, _, _ = admin_context
+    client.put(
+        "/api/v1/admin/providers/fred/credential",
+        json={"secret": "progress-test"},
+        headers=operator_headers("credential.write"),
+    )
+    client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    )
+    started = client.post(
+        "/api/v1/admin/pipeline/runs/start",
+        json={"dry_run": False, "stop_after": "fetch_data"},
+        headers=operator_headers("pipeline.run"),
+    )
+    assert started.status_code == 200
+    progress_run_id = started.json()["progress_run_id"]
+    assert progress_run_id
+
+    # A real, full fetch across every staging symbol (709+ real rows,
+    # ~190k bar inserts even with an instant fake fetcher) genuinely takes
+    # real wall-clock time -- measured directly at ~10s on this machine.
+    # 30s leaves real margin for slower test hardware without masking an
+    # actual hang.
+    deadline = time.monotonic() + 30.0
+    final: dict | None = None
+    saw_live_progress = False
+    while time.monotonic() < deadline:
+        progress = client.get(f"/api/v1/admin/pipeline/runs/{progress_run_id}/progress").json()
+        if progress.get("item_progress"):
+            saw_live_progress = True
+        if progress.get("finished"):
+            final = progress
+            break
+        time.sleep(0.05)
+
+    assert final is not None, "background run never finished within the real test deadline"
+    assert final["error"] is None
+    assert saw_live_progress  # a real, live "N of M" item was observed mid-run, not just start/end
+    fetch_stage = next(stage for stage in final["result"]["run"]["stages"] if stage["key"] == "fetch_data")
+    assert fetch_stage["status"] == "completed"
+
+    # A progress id nobody started is a real, honest 404, not a silent empty result.
+    missing = client.get("/api/v1/admin/pipeline/runs/not-a-real-id/progress")
+    assert missing.status_code == 404
+
+
+def test_pipeline_stop_after_fetch_data_runs_only_that_stage(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    # Real regression test for a real, direct user request: "sometimes I
+    # only want to get data." stop_after='fetch_data' must run exactly
+    # that one real stage and mark every later stage 'skipped' (not
+    # 'pending'/'blocked' -- this was a deliberate choice, not a failure).
+    _, client, _, _ = admin_context
+    client.put(
+        "/api/v1/admin/providers/fred/credential",
+        json={"secret": "stop-after-test"},
+        headers=operator_headers("credential.write"),
+    )
+    client.post(
+        "/api/v1/admin/providers/fred/verify",
+        json={},
+        headers=operator_headers("provider.verify"),
+    )
+    run = client.post(
+        "/api/v1/admin/pipeline/runs",
+        json={"dry_run": False, "stop_after": "fetch_data"},
+        headers=operator_headers("pipeline.run"),
+    ).json()["run"]
+
+    fetch_stage = next(stage for stage in run["stages"] if stage["key"] == "fetch_data")
+    assert fetch_stage["status"] == "completed"
+    for stage in run["stages"]:
+        if stage["key"] in ("preflight", "fetch_data"):
+            continue
+        assert stage["status"] == "skipped"
+    assert run["status"] == "completed"  # a deliberate partial run is a real success, not a failure
+
+
 def test_real_pipeline_run_persists_backtest_events_and_metrics_per_symbol(
     admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
 ) -> None:
@@ -349,14 +439,19 @@ def test_real_pipeline_run_persists_backtest_events_and_metrics_per_symbol(
     factor = next(stage for stage in run["stages"] if stage["key"] == "factor_engine")
     assert factor["status"] == "completed"
 
-    symbols = client.get("/api/v1/symbols").json()["symbols"]
-    # 27 staging symbols, minus 4 macro_series, minus VXX (narrow_proxy) and
-    # BTC-USD (reference_only) -- both real research_scope exclusions, not a
-    # regression. BTC-USD's own long-standing note says "research reference
-    # only, never a position candidate"; it was incorrectly being ranked
-    # here before research_scope existed to enforce that -- a real bug fix,
-    # not just a count bump.
-    assert len(symbols) == 21
+    # scope=all: this asserts the full pipeline/research-scope contract, not
+    # the watchlist dashboard filter.
+    symbols = client.get("/api/v1/symbols?scope=all").json()["symbols"]
+    # 32 active staging symbols (27 original + IWM + SOXX/XBI/ARKX/CIBR,
+    # all real, active, deliberately-added trackable symbols), minus 4
+    # macro_series, minus VXX (narrow_proxy) and BTC-USD (reference_only)
+    # -- both real research_scope exclusions, not a regression. BTC-USD's
+    # own long-standing note says "research reference only, never a
+    # position candidate"; it was incorrectly being ranked here before
+    # research_scope existed to enforce that -- a real bug fix, not just a
+    # count bump. The 600+ stage-2 index/thematic-ETF constituent names
+    # never appear here -- loaded inactive, never fetched, by design.
+    assert len(symbols) == 26
     top = next(item for item in symbols if item["rank"] == 1)
 
     detail = client.get(f"/api/v1/symbols/{top['symbol']}").json()
@@ -391,8 +486,18 @@ def test_staging_universe_is_seeded_by_default_with_no_paid_provider_references(
         client=("127.0.0.1", 52000),
     ) as client:
         universe = client.get("/api/v1/admin/universe").json()
-    assert universe["summary"]["total"] == 27
-    assert universe["summary"]["active"] == 27
+    # 32 originally-curated symbols (27 + IWM + SOXX/XBI/ARKX/CIBR, all
+    # active) + 677 new stage-2 index/thematic-ETF constituents (frozen
+    # backend/universe/stage-2-2026-08-27.json, after a real, live-caught
+    # fix that dropped 14 non-ticker rows -- CUSIP-style earnout/contra
+    # identifiers and E-mini sector futures contracts, real artifacts of
+    # the source holdings files, never real tradeable tickers) loaded as
+    # active=0, fetch_only=1 -- real rows for real cross-sectional
+    # membership queries and real, deliberate admin-owned library fetching
+    # (library_fetch.py), deliberately not eligible for fetch_data_stage's
+    # live-pipeline fetch until someone deliberately activates them.
+    assert universe["summary"]["total"] == 709
+    assert universe["summary"]["active"] == 32
     assert universe["summary"]["by_category"]["macro_series"] == 4
     assert universe["summary"]["by_category"]["sector_equity_etf"] == 11
     symbols_by_key = {item["symbol"]: item for item in universe["symbols"]}
@@ -407,6 +512,127 @@ def test_staging_universe_is_seeded_by_default_with_no_paid_provider_references(
     assert symbols_by_key["SPY"]["production_provider_key"] == "intrinio"
     assert symbols_by_key["SPY"]["production_provider_name"] == "Intrinio"
     assert symbols_by_key["BTC-USD"]["production_provider_key"] is None
+
+
+def test_watchlist_is_independently_editable_from_the_staging_universe(
+    tmp_path: Path,
+) -> None:
+    # Real regression test for a real design mistake: watchlist membership
+    # was first (incorrectly) implemented as a column on staging_symbols --
+    # the table that governs what gets FETCHED, edited only via a migration
+    # script. Corrected to a separate table with a real add/remove API, so
+    # the dashboard watchlist stays a personal, freely-editable preference,
+    # independent of the data library it's drawn from.
+    database = initialize_database(tmp_path / "watchlist.db")
+    store = MemorySecretStore()
+    app = create_app(
+        database,
+        frontend_dist=tmp_path / "missing",
+        secret_store=store,
+        provider_verifiers={"fred_v2": FakeVerifier()},
+        now=lambda: NOW,
+    )
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+    ) as client:
+        starter = client.get("/api/v1/admin/watchlist").json()
+        starter_symbols = {item["symbol"] for item in starter["symbols"]}
+        assert "SPY" in starter_symbols
+        assert "AAPL" not in starter_symbols  # off by default, per the user's own starter set
+
+        # Adding a symbol already in the data library works and is reflected
+        # immediately, without any code/migration change.
+        added = client.post("/api/v1/admin/watchlist/aapl").json()  # lowercase, normalized
+        added_symbols = {item["symbol"] for item in added["symbols"]}
+        assert "AAPL" in added_symbols
+
+        # A symbol not in staging_symbols at all is rejected, not silently watched.
+        rejected = client.post("/api/v1/admin/watchlist/NOTREAL")
+        assert rejected.status_code == 404
+
+        # Removing works, and staging_symbols itself is never touched.
+        removed = client.delete("/api/v1/admin/watchlist/AAPL").json()
+        removed_symbols = {item["symbol"] for item in removed["symbols"]}
+        assert "AAPL" not in removed_symbols
+
+        universe = client.get("/api/v1/admin/universe").json()
+        assert universe["summary"]["total"] == 709  # data library untouched by watchlist edits
+
+
+def test_library_fetch_batch_is_per_symbol_atomic_and_never_touches_active_or_live_dataset(
+    tmp_path: Path,
+) -> None:
+    # Real regression test for the actual design ask: fetch real price data
+    # for staging_symbols.fetch_only=1 extended-library symbols (the
+    # stage-2 universe) without the live pipeline's all-or-nothing
+    # fetch_data_stage semantics, and without ever touching active=1 or a
+    # sealed production dataset snapshot. Admin-owned work, not "research
+    # fetch" -- see developer-letter.md's precise line on this.
+    database = initialize_database(tmp_path / "library-fetch.db")
+    store = MemorySecretStore()
+
+    calls: list[str] = []
+
+    def fetcher(symbol: str, *, range_: str = "1y", start_date: str | None = None) -> list[PriceBar]:
+        calls.append(symbol)
+        if symbol == "MRVL":
+            raise PriceFetchError("MRVL: simulated real fetch failure.")
+        bar_date = (date(2026, 8, 24) - timedelta(days=1)).isoformat()
+        return [PriceBar(symbol=symbol, time=bar_date, open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0)]
+
+    app = create_app(
+        database,
+        frontend_dist=tmp_path / "missing",
+        secret_store=store,
+        provider_verifiers={"fred_v2": FakeVerifier()},
+        price_fetcher=fetcher,
+        now=lambda: NOW,
+    )
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+    ) as client:
+        result = client.post("/api/v1/admin/library-fetch?batch_size=5").json()
+
+    fetched_symbols = {item["symbol"] for item in result["fetched"]}
+    failed_symbols = {item["symbol"] for item in result["failed"]}
+    assert len(fetched_symbols) + len(failed_symbols) == 5  # exactly the requested batch size
+    # MRVL's simulated failure never blocks the other 4 real symbols in the
+    # same batch -- the whole point of per-symbol atomicity.
+    if "MRVL" in failed_symbols:
+        assert len(fetched_symbols) == 4
+    assert result["dataset_snapshot_id"] == "library-fetch-ongoing"
+    assert result["remaining"] > 0  # far more than 5 fetch_only=1 symbols exist
+
+    # Never a sealed production snapshot -- a real, always-mutable library one.
+    connection = connect(database, read_only=True)
+    dataset = connection.execute(
+        "SELECT mode, immutable FROM dataset_snapshots WHERE id = ?", (result["dataset_snapshot_id"],)
+    ).fetchone()
+    assert dataset["mode"] == "research"
+    assert dataset["immutable"] == 0
+
+    # Fetched symbols must never have been touched by the live pipeline's
+    # active flag -- these stay research-only, fetch_only=1, active=0.
+    for symbol in fetched_symbols:
+        row = connection.execute(
+            "SELECT active, fetch_only FROM staging_symbols WHERE symbol = ?", (symbol,)
+        ).fetchone()
+        assert row["active"] == 0
+        assert row["fetch_only"] == 1
+
+    # Resumable: calling again skips already-fetched symbols, never re-fetches them.
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+    ) as client:
+        second = client.post("/api/v1/admin/library-fetch?batch_size=5").json()
+    second_fetched = {item["symbol"] for item in second["fetched"]}
+    assert fetched_symbols.isdisjoint(second_fetched)
 
 
 def test_seeded_admin_inventory_strategies_signals_and_chart_annotations(
@@ -425,7 +651,9 @@ def test_seeded_admin_inventory_strategies_signals_and_chart_annotations(
         "invalid_assets": 0,
         "invalid_symbols": 0,
     }
-    data = client.get("/api/v1/admin/data").json()
+    # scope=all: this asserts the full seeded inventory contract, not the
+    # watchlist dashboard filter.
+    data = client.get("/api/v1/admin/data?scope=all").json()
     demo = next(
         asset for asset in data["assets"] if asset["key"] == "demo_daily_bars"
     )
@@ -1274,6 +1502,166 @@ def test_verification_source_and_environment_runtime_must_match(
     assert restarted_verifier.calls == ["environment-runtime-two"]
 
 
+def test_fetch_data_stage_is_resilient_to_one_bad_symbol(
+    tmp_path: Path,
+) -> None:
+    # Real regression test for a real fix, direct user request: one bad
+    # symbol used to abort the entire fetch and discard everything already
+    # fetched -- "try catch, return the error one, keep doing." A single
+    # failing symbol among dozens must now degrade to
+    # completed_with_warnings, not blocked/failed, and every other real
+    # symbol's data must still be written and the dataset still sealed.
+    database = initialize_database(tmp_path / "resilient-fetch.db")
+    store = MemorySecretStore()
+    good_fetcher = make_price_fetcher(NOW.date())
+
+    def flaky_fetcher(symbol: str, *, range_: str = "1y", start_date: str | None = None) -> list[PriceBar]:
+        if symbol == "IWM":
+            raise PriceFetchError("IWM: simulated real fetch failure.")
+        return good_fetcher(symbol, range_=range_, start_date=start_date)
+
+    app = create_app(
+        database,
+        frontend_dist=tmp_path / "missing",
+        secret_store=store,
+        provider_verifiers={"fred_v2": FakeVerifier()},
+        fred_observation_fetcher=make_fred_fetcher(),
+        price_fetcher=flaky_fetcher,
+        now=lambda: NOW,
+    )
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+    ) as client:
+        client.put(
+            "/api/v1/admin/providers/fred/credential",
+            json={"secret": "resilience-test"},
+            headers=operator_headers("credential.write"),
+        )
+        client.post(
+            "/api/v1/admin/providers/fred/verify",
+            json={},
+            headers=operator_headers("provider.verify"),
+        )
+        run = client.post(
+            "/api/v1/admin/pipeline/runs",
+            json={"dry_run": False},
+            headers=operator_headers("pipeline.run"),
+        ).json()["run"]
+
+    fetch_stage = next(stage for stage in run["stages"] if stage["key"] == "fetch_data")
+    assert fetch_stage["status"] == "completed_with_warnings"
+    assert "IWM" in fetch_stage["detail"]
+
+    # The whole run must still proceed past fetch_data -- one bad symbol
+    # is a warning, not a hard block.
+    factor_stage = next(stage for stage in run["stages"] if stage["key"] == "factor_engine")
+    assert factor_stage["status"] == "completed"
+
+    connection = connect(database, read_only=True)
+    dataset = connection.execute(
+        "SELECT id FROM dataset_snapshots WHERE immutable = 1 ORDER BY as_of DESC LIMIT 1"
+    ).fetchone()
+    assert dataset is not None  # a real, sealed dataset was still written
+
+    iwm_bars = connection.execute(
+        """
+        SELECT COUNT(*) AS n FROM symbol_bars b
+        JOIN securities s ON s.security_id = b.security_id
+        WHERE s.primary_symbol = 'IWM' AND b.dataset_snapshot_id = ?
+        """,
+        (dataset["id"],),
+    ).fetchone()["n"]
+    assert iwm_bars == 0  # the one real failure, correctly absent
+
+    spy_bars = connection.execute(
+        """
+        SELECT COUNT(*) AS n FROM symbol_bars b
+        JOIN securities s ON s.security_id = b.security_id
+        WHERE s.primary_symbol = 'SPY' AND b.dataset_snapshot_id = ?
+        """,
+        (dataset["id"],),
+    ).fetchone()["n"]
+    assert spy_bars > 0  # every other real symbol still fetched and written
+
+
+def test_fetch_data_stage_commits_progressively_so_a_crash_preserves_earlier_symbols(
+    tmp_path: Path,
+) -> None:
+    # Real regression test for a real fix, direct user request: the whole
+    # fetch used to live in one open transaction, committed only once at
+    # the very end -- a process killed mid-fetch (it has happened) lost
+    # every bar already fetched. Fetch now commits after each symbol. This
+    # simulates an abrupt crash (a plain, uncaught exception -- not the
+    # PriceFetchError this stage already handles gracefully) partway
+    # through the symbol loop, then reconnects on a FRESH connection to
+    # confirm the symbols fetched before the crash are durably on disk.
+    database = initialize_database(tmp_path / "crash-mid-fetch.db")
+    store = MemorySecretStore()
+    good_fetcher = make_price_fetcher(NOW.date())
+    fetched_before_crash: list[str] = []
+
+    def crashing_fetcher(symbol: str, *, range_: str = "1y", start_date: str | None = None) -> list[PriceBar]:
+        if len(fetched_before_crash) >= 3:
+            raise RuntimeError("simulated abrupt process crash, not a normal fetch failure")
+        fetched_before_crash.append(symbol)
+        return good_fetcher(symbol, range_=range_, start_date=start_date)
+
+    app = create_app(
+        database,
+        frontend_dist=tmp_path / "missing",
+        secret_store=store,
+        provider_verifiers={"fred_v2": FakeVerifier()},
+        fred_observation_fetcher=make_fred_fetcher(),
+        price_fetcher=crashing_fetcher,
+        now=lambda: NOW,
+    )
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1:8000",
+        client=("127.0.0.1", 52000),
+        raise_server_exceptions=True,
+    ) as client:
+        client.put(
+            "/api/v1/admin/providers/fred/credential",
+            json={"secret": "crash-test"},
+            headers=operator_headers("credential.write"),
+        )
+        client.post(
+            "/api/v1/admin/providers/fred/verify",
+            json={},
+            headers=operator_headers("provider.verify"),
+        )
+        with pytest.raises(RuntimeError, match="simulated abrupt process crash"):
+            client.post(
+                "/api/v1/admin/pipeline/runs",
+                json={"dry_run": False},
+                headers=operator_headers("pipeline.run"),
+            )
+
+    assert len(fetched_before_crash) == 3  # confirms the crash really happened mid-loop
+
+    # A fresh connection to the same file -- exactly what "restart the app"
+    # looks like -- must still see every symbol fetched before the crash.
+    connection = connect(database, read_only=True)
+    dataset = connection.execute(
+        "SELECT id FROM dataset_snapshots WHERE immutable = 0 ORDER BY created_at DESC LIMIT 1"
+    ).fetchone()
+    assert dataset is not None  # the dataset row itself survived the crash
+
+    for symbol in fetched_before_crash:
+        bar_count = connection.execute(
+            """
+            SELECT COUNT(*) AS n FROM symbol_bars b
+            JOIN securities s ON s.security_id = b.security_id
+            WHERE s.primary_symbol = ? AND b.dataset_snapshot_id = ?
+            """,
+            (symbol, dataset["id"]),
+        ).fetchone()["n"]
+        assert bar_count > 0  # committed before the crash, so still there
+
+
 def test_same_timestamp_latest_rows_follow_insertion_order(
     admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
 ) -> None:
@@ -1412,7 +1800,9 @@ def test_future_observations_are_invalid_beyond_named_clock_tolerance(
         base_url="http://127.0.0.1:8000",
         client=("127.0.0.1", 52000),
     ) as client:
-        data = client.get("/api/v1/admin/data").json()
+        # scope=all: this asserts clock-tolerance/freshness detection across
+        # the full seeded inventory, not the watchlist dashboard filter.
+        data = client.get("/api/v1/admin/data?scope=all").json()
         bars = next(
             asset
             for asset in data["assets"]

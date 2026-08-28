@@ -29,6 +29,13 @@ class PipelineRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     dry_run: bool = True
+    # Real, direct user request: run stages in the normal order but stop
+    # once this one completes (e.g. 'fetch_data' -- "sometimes I only want
+    # to get data"). None runs the full pipeline, unchanged default.
+    stop_after: Literal[
+        "fetch_data", "validate_data", "regime_filter",
+        "factor_engine", "allocation_engine", "instrument_engine",
+    ] | None = None
 
 
 class EngineModeWriteRequest(BaseModel):

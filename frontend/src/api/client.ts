@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { PipelineRun } from "../types";
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
@@ -12,7 +13,13 @@ export const endpoints = {
   adminProviders: "/api/v1/admin/providers",
   adminUniverse: "/api/v1/admin/universe",
   adminData: "/api/v1/admin/data",
+  adminDataTestFetch: (symbol: string) => `/api/v1/admin/data/${encodeURIComponent(symbol)}/test-fetch`,
+  adminLibraryFetch: "/api/v1/admin/library-fetch",
+  adminWatchlist: "/api/v1/admin/watchlist",
+  adminWatchlistSymbol: (symbol: string) => `/api/v1/admin/watchlist/${encodeURIComponent(symbol)}`,
   adminPipeline: "/api/v1/admin/pipeline",
+  adminPipelineRunStart: "/api/v1/admin/pipeline/runs/start",
+  adminPipelineRunProgress: (progressRunId: string) => `/api/v1/admin/pipeline/runs/${encodeURIComponent(progressRunId)}/progress`,
   adminStrategies: "/api/v1/admin/strategies",
   adminStrategy: (key: string) => `/api/v1/admin/strategies/${safeAdminKey(key)}`,
   adminFactorSignificanceLatest: "/api/v1/admin/research/factor-significance/latest",
@@ -147,12 +154,38 @@ export function verifyProvider<T>(providerKey: string): Promise<T> {
   return operatorJson<T>(path, { method: "POST", action: "provider.verify", body: {} });
 }
 
-export function runPipeline<T>(dryRun = true): Promise<T> {
+export type PipelineStageKey =
+  | "fetch_data" | "validate_data" | "regime_filter"
+  | "factor_engine" | "allocation_engine" | "instrument_engine";
+
+export function runPipeline<T>(dryRun = true, stopAfter?: PipelineStageKey): Promise<T> {
   return operatorJson<T>("/api/v1/admin/pipeline/runs", {
     method: "POST",
     action: "pipeline.run",
-    body: { dry_run: dryRun },
+    body: stopAfter ? { dry_run: dryRun, stop_after: stopAfter } : { dry_run: dryRun },
   });
+}
+
+/** Starts a real run in the background and returns immediately with an id
+ * to poll -- real, direct user request for live progress instead of one
+ * opaque blocking request. Poll endpoints.adminPipelineRunProgress(id). */
+export function startBackgroundPipelineRun<T>(dryRun = true, stopAfter?: PipelineStageKey): Promise<T> {
+  return operatorJson<T>("/api/v1/admin/pipeline/runs/start", {
+    method: "POST",
+    action: "pipeline.run",
+    body: stopAfter ? { dry_run: dryRun, stop_after: stopAfter } : { dry_run: dryRun },
+  });
+}
+
+export interface PipelineRunProgress {
+  run_id: string;
+  stage: PipelineStageKey | null;
+  stage_index: number;
+  total_stages: number;
+  item_progress: { done: number; total: number; current: string | null } | null;
+  finished: boolean;
+  error: string | null;
+  result: { run: PipelineRun } | null;
 }
 
 export function setEngineMode<T>(mode: "pilot" | "production", reason?: string): Promise<T> {
@@ -187,6 +220,33 @@ export function runStrategyBacktestResearch<T>(strategyKey: "cross_sectional_mom
   });
 }
 
+// Lighter than operatorJson: the watchlist is a personal, reversible,
+// day-to-day preference (direct_loopback_guard only on the backend, no
+// operator-action header required) -- not a capital/credential-affecting
+// action, so it doesn't belong in the operatorJson allowlist above.
+async function watchlistJson<T>(symbol: string, method: "POST" | "DELETE"): Promise<T> {
+  const response = await fetch(endpoints.adminWatchlistSymbol(symbol), {
+    method,
+    headers: { Accept: "application/json" },
+  });
+  let payload: unknown = null;
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) payload = await response.json();
+  if (!response.ok) {
+    const detail = errorDetail(payload);
+    throw new ApiError(response.status, `Watchlist update failed with HTTP ${response.status}.`, detail.message, detail.code);
+  }
+  return payload as T;
+}
+
+export function addToWatchlist<T>(symbol: string): Promise<T> {
+  return watchlistJson<T>(symbol, "POST");
+}
+
+export function removeFromWatchlist<T>(symbol: string): Promise<T> {
+  return watchlistJson<T>(symbol, "DELETE");
+}
+
 function safeAdminKey(value: string): string {
   const key = value.trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(key)) {
@@ -203,6 +263,7 @@ function assertOperatorPath(path: string, method: OperatorMethod, action: Operat
     (providerCredential.test(path) && method === "DELETE" && action === "credential.delete") ||
     (providerVerify.test(path) && method === "POST" && action === "provider.verify") ||
     (path === "/api/v1/admin/pipeline/runs" && method === "POST" && action === "pipeline.run") ||
+    (path === "/api/v1/admin/pipeline/runs/start" && method === "POST" && action === "pipeline.run") ||
     (path === "/api/v1/admin/engine-mode" && method === "PUT" && action === "engine_mode.write") ||
     (path === "/api/v1/admin/research/factor-significance/runs" && method === "POST" && action === "research.run_factor_significance");
   if (!allowed) throw new Error("Blocked unsafe operator request.");

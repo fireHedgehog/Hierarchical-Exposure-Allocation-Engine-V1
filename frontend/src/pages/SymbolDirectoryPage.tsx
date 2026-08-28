@@ -1,14 +1,30 @@
-import { ArrowUpRight, RefreshCw, SearchX } from "lucide-react";
+import { useState, type MouseEvent } from "react";
+import { ArrowUpRight, RefreshCw, SearchX, Star } from "lucide-react";
 import { Link } from "react-router-dom";
-import { endpoints, useApi } from "../api/client";
+import { addToWatchlist, endpoints, removeFromWatchlist, useApi } from "../api/client";
 import { SnapshotBanner } from "../components/SnapshotBanner";
 import { Panel, ResourceState, SectionHeading, StatusPill } from "../components/Ui";
 import type { SymbolsResponse } from "../types";
 import { formatCurrency, formatNumber, formatTimestamp, NOT_AVAILABLE } from "../utils/format";
 
 export function SymbolDirectoryPage() {
-  const state = useApi<SymbolsResponse>(endpoints.symbols);
+  const [showAll, setShowAll] = useState(false);
+  const state = useApi<SymbolsResponse>(showAll ? `${endpoints.symbols}?scope=all` : endpoints.symbols);
   const symbols = state.data?.symbols ?? [];
+
+  const [pendingSymbol, setPendingSymbol] = useState<string | null>(null);
+  async function toggleWatchlist(event: MouseEvent, symbol: string, currentlyWatched: boolean) {
+    event.preventDefault();
+    event.stopPropagation();
+    setPendingSymbol(symbol);
+    try {
+      if (currentlyWatched) await removeFromWatchlist(symbol);
+      else await addToWatchlist(symbol);
+      state.reload();
+    } finally {
+      setPendingSymbol(null);
+    }
+  }
 
   return (
     <div className="workspace symbols-page">
@@ -18,9 +34,14 @@ export function SymbolDirectoryPage() {
           <h1>Symbol research</h1>
           <p>Open a security’s persisted decision lineage, bars, events, metrics, and proposed structures.</p>
         </div>
-        <button className="button button--quiet" type="button" onClick={state.reload} disabled={state.loading}>
-          <RefreshCw aria-hidden="true" size={15} /> Refresh universe
-        </button>
+        <div className="workspace-header__actions">
+          <button className="button button--quiet" type="button" onClick={() => setShowAll((value) => !value)}>
+            {showAll ? "Watchlist only" : "Show full data library"}
+          </button>
+          <button className="button button--quiet" type="button" onClick={state.reload} disabled={state.loading}>
+            <RefreshCw aria-hidden="true" size={15} /> Refresh universe
+          </button>
+        </div>
       </header>
 
       <ResourceState loading={state.loading} error={state.error} onRetry={state.reload} resource="symbol universe" />
@@ -40,12 +61,24 @@ export function SymbolDirectoryPage() {
         <Panel>
           <SectionHeading
             eyebrow={`${symbols.length} persisted securities`}
-            title="Latest snapshot universe"
+            title={showAll ? "Full data library" : "Watchlist"}
             description={state.data?.snapshot ? `As of ${formatTimestamp(state.data.snapshot.as_of)}` : "Snapshot metadata is not available."}
           />
           <div className="symbol-grid">
-            {symbols.map((symbol) => (
+            {symbols.map((symbol) => {
+              const watched = Boolean(symbol.watchlist);
+              return (
               <Link className="symbol-card" to={`/symbols/${encodeURIComponent(symbol.symbol)}`} key={symbol.symbol}>
+                <button
+                  type="button"
+                  className={`watchlist-star symbol-card__star ${watched ? "watchlist-star--active" : ""}`}
+                  onClick={(event) => toggleWatchlist(event, symbol.symbol, watched)}
+                  disabled={pendingSymbol === symbol.symbol}
+                  title={watched ? "Remove from watchlist" : "Add to watchlist"}
+                  aria-label={watched ? `Remove ${symbol.symbol} from watchlist` : `Add ${symbol.symbol} to watchlist`}
+                >
+                  <Star aria-hidden="true" size={13} fill={watched ? "currentColor" : "none"} />
+                </button>
                 <div className="symbol-card__topline">
                   <div>
                     <strong>{symbol.symbol}</strong>
@@ -66,7 +99,8 @@ export function SymbolDirectoryPage() {
                   <span>Price as of {formatTimestamp(symbol.price_as_of)}</span>
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </Panel>
       ) : null}

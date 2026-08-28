@@ -42,30 +42,43 @@ Declared explicitly in every paper here: *this research intentionally
 conditions on ex-post observed winners, but does not remove subsequent
 losers from an admitted cohort.*
 
-## Universe: ETF-anchor-only for V0, deliberately
+## Universe: real stage-2 data now exists, not yet activated
 
-No individual-stock data exists anywhere in this project — only ETFs
-and macro series (see `asset-selection-research/README.md`'s "Real
-universe" section, and [[project_deweight-timing-toward-beta]]).
-Fetching a single stock isn't technically harder (`fetch_daily_bars`
-is ticker-agnostic) — but this project has repeatedly, deliberately
-stayed at the ETF/beta level rather than single-name picking, and that
-is a real scope decision, not a technical one. V0 clusters are built
-entirely from multiple real ETF anchors per theme, giving a genuine
-1-vs-2-vs-3+ breadth count without crossing that line:
+Corrected 2026-08-28: individual-stock/ETF-constituent data now exists
+in this project (`backend/universe/stage-2-2026-08-27.json`, 693 real
+symbols, `staging_universe_membership`) — the "no individual-stock data
+exists" framing below was accurate when this paper was designed and no
+longer is. This project's own deliberate, repeated choice to stay at
+the ETF/beta level rather than single-name picking still holds
+([[project_deweight-timing-toward-beta]]) — stage-2's constituent rows
+exist for real cross-sectional *membership* research (which anchor(s) a
+symbol belongs to), not as an invitation to build single-name timing
+signals. They also load `active=0` on purpose (see
+`backend/universe/loader.py`'s own disclosed reasoning) — real,
+queryable rows, but not yet fetched, and deliberately not folded into
+the live product's cross-sectional universe without a separate,
+considered decision (see the `active` flag's own note there — it's
+overloaded with "feeds the live Today-desk ranking," not just "fetch
+this").
 
-| Theme | ETF anchors |
-| --- | --- |
-| Cybersecurity | `CIBR`, `HACK`, `IHAK`, `BUG` |
-| Semiconductor | `SOXX`, `SMH`, `PSI`, `XSD` |
-| Software | `IGV`, `SKYY`, `WCLD` |
-| Robotics / AI | `ROBO`, `BOTZ`, `ARKQ` |
+**Real anchor coverage, as actually compiled** (not the earlier,
+aspirational 4-per-theme table this section used to show):
 
-Hand-picked, disclosed, not fit — same convention as every naive
-scoring rule elsewhere in this project. If V0 shows a real, stratified
-survival curve, that result is the justification for spending the
-bigger scope decision (individual names) later, not a prerequisite for
-running V0 at all.
+| Theme | Real stage-2 anchor(s) | Gap |
+| --- | --- | --- |
+| Cybersecurity | `CIBR` | `HACK`/`BUG` not compiled |
+| Semiconductor | `SOXX` | `SMH` exists as a plain symbol, not compiled with membership data |
+| Software | `IGV` | `SKYY`/`WCLD` not compiled |
+| Robotics / AI | *(none)* | `ROBO`/`BOTZ`/`ARKQ` never compiled — a real, open gap, not silently dropped |
+
+A single real anchor per theme is enough to run H-THEME-01/02 (breadth
+is 1-vs-2-vs-3+ *within* a theme's real constituent count, not across
+multiple redundant ETFs tracking the same theme) — the original
+4-anchor table was itself over-scoped for what the hypothesis actually
+needs. Robotics/AI has no real anchor yet; adding one (`BOTZ` is the
+more liquid of the two real candidates) is real, bounded, later work if
+this theme turns out to matter, not a blocker to starting 01/02 on the
+three themes that already have real data.
 
 ## Clustering: hardcoded for V0, not discovered
 

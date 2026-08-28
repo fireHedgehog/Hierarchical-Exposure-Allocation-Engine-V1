@@ -804,7 +804,22 @@ CREATE TABLE IF NOT EXISTS staging_symbols (
     tier TEXT NOT NULL DEFAULT 'free' CHECK (tier IN ('free', 'paid')),
     production_provider_key TEXT REFERENCES provider_onboarding_plan(plan_key),
     notes TEXT,
+    -- `active` was overloaded (found and split 2026-08-28): it gates ALL
+    -- FOUR real pipeline stages -- fetch_data (pull it), factor_engine
+    -- (rank it), allocation_engine (size exposure to it), instrument_engine
+    -- (propose it as a position). "Has real fetched price data" and "is a
+    -- live product candidate" were the same bit, violating this project's
+    -- own rule that research and live execution stay separate gates
+    -- (docs/README.md). `active` now means ONLY the live-product meaning,
+    -- unchanged from before for every symbol that already had it =1.
     active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+    -- New, purely additive: fetch_data_stage pulls a symbol if EITHER
+    -- active=1 OR fetch_only=1 -- real, deliberate research-only fetching
+    -- (e.g. a stage-2 theme's real constituents) without silently adding
+    -- hundreds of symbols to the live Today-desk ranking/allocation/
+    -- instrument-proposal universe. factor_engine/allocation_engine/
+    -- instrument_engine intentionally keep reading active=1 ONLY.
+    fetch_only INTEGER NOT NULL DEFAULT 0 CHECK (fetch_only IN (0, 1)),
     sort_order INTEGER NOT NULL,
     -- Real, queryable label so a future broad cross-sectional sweep (e.g. an
     -- H-SECT-style "rank every active symbol" study, or a future ML feature
@@ -819,6 +834,53 @@ CREATE TABLE IF NOT EXISTS staging_symbols (
     research_scope TEXT NOT NULL DEFAULT 'general' CHECK (research_scope IN (
         'general', 'narrow_proxy', 'reference_only'
     ))
+);
+
+-- Deliberately a separate table from staging_symbols, not a column on it.
+-- staging_symbols governs what gets FETCHED -- a careful, code-reviewed,
+-- rarely-changing decision. The dashboard watchlist is a personal,
+-- day-to-day preference ("watch this today") that the operator must be able
+-- to change directly from the UI, without a code change or migration. Same
+-- boundary this project already draws elsewhere: provider access, adapter
+-- integration, and engine readiness stay separate states (see docs/README.md
+-- non-negotiable rules) -- this is that same discipline applied to "what's
+-- fetched" vs. "what's currently pinned to the dashboard."
+CREATE TABLE IF NOT EXISTS watchlist_symbols (
+    symbol TEXT PRIMARY KEY REFERENCES staging_symbols(symbol),
+    added_at TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+-- The real, mineable dimension a frozen universe stage (see
+-- backend/universe/) actually carries: which of the anchor indices a
+-- symbol belonged to at freeze time -- a symbol in all 3 is a real,
+-- different tier than one in only 1. A symbol having ZERO rows here (not
+-- a NULL value -- genuinely no rows) is just as real and informative: it
+-- means that symbol belongs to no broad index or thematic basket this
+-- project tracks at all, a real fact about that name, never a "missing
+-- data" case to backfill or explain away. Deliberately its own table, not
+-- a column on staging_symbols: a symbol can belong to any number of
+-- stages' anchors, and a later stage's snapshot must never overwrite an
+-- earlier one's real, frozen membership record. `frozen_at` is the anchor
+-- data's own real "as of" date, not the day this got loaded into a
+-- database.
+CREATE TABLE IF NOT EXISTS staging_universe_membership (
+    symbol TEXT NOT NULL REFERENCES staging_symbols(symbol),
+    stage TEXT NOT NULL,
+    anchor TEXT NOT NULL,
+    -- 'index': a genuine market-cap-weighted broad index (SPY/QQQ/DIA).
+    -- 'thematic_etf': a fund manager's curated sector/theme basket (the XL
+    -- Select Sector SPDRs, SOXX, IGV) -- a real, different kind of
+    -- membership, disclosed separately per direct instruction, not lumped
+    -- into the same "index" bucket.
+    anchor_kind TEXT NOT NULL CHECK (anchor_kind IN ('index', 'thematic_etf')),
+    -- The anchor fund's own real disclosed weight for this holding, where
+    -- available (both SSGA and iShares holdings files carry this) -- a
+    -- real, already-available proxy for relative size within that basket,
+    -- used instead of a separate per-symbol market-cap fetch.
+    weight_pct REAL,
+    frozen_at TEXT NOT NULL,
+    PRIMARY KEY (symbol, stage, anchor)
 );
 
 -- Readiness definitions are application configuration. Their current state is
@@ -2076,6 +2138,7 @@ INSERT INTO staging_symbols (
     ('SPY', 'SPDR S&P 500 ETF Trust', 'broad_equity_etf', 'free', 'intrinio', NULL, 1, 20),
     ('QQQ', 'Invesco QQQ Trust', 'broad_equity_etf', 'free', 'intrinio', NULL, 1, 21),
     ('DIA', 'SPDR Dow Jones Industrial Average ETF Trust', 'broad_equity_etf', 'free', 'intrinio', NULL, 1, 22),
+    ('IWM', 'iShares Russell 2000 ETF', 'broad_equity_etf', 'free', 'intrinio', 'Small-cap control/reference series -- real small-vs-large divergence research, not a constituent-membership anchor. Deliberately no members fetched for this one.', 1, 23),
     ('TLT', 'iShares 20+ Year Treasury Bond ETF', 'bond_duration_etf', 'free', 'intrinio', NULL, 1, 30),
     ('IEF', 'iShares 7-10 Year Treasury Bond ETF', 'bond_duration_etf', 'free', 'intrinio', NULL, 1, 31),
     ('GLD', 'SPDR Gold Shares', 'commodity_etf', 'free', 'intrinio', NULL, 1, 40),
@@ -2095,6 +2158,10 @@ INSERT INTO staging_symbols (
     ('NVDA', 'NVIDIA Corporation', 'mega_cap_equity', 'free', 'intrinio', NULL, 1, 81),
     ('SMH', 'VanEck Semiconductor ETF', 'thematic_etf', 'free', 'intrinio', NULL, 1, 90),
     ('IGV', 'iShares Expanded Tech-Software Sector ETF', 'thematic_etf', 'free', 'intrinio', NULL, 1, 91),
+    ('SOXX', 'iShares Semiconductor ETF', 'thematic_etf', 'free', 'intrinio', 'Used as a stage-2 membership anchor (see backend/universe/) but was missing as a trackable symbol in its own right -- a real gap, found and fixed 2026-08-28, not an oversight left in place.', 1, 93),
+    ('XBI', 'SPDR S&P Biotech ETF', 'thematic_etf', 'free', 'intrinio', 'Stage-2 membership anchor -- real biotech/vaccine-era trade coverage.', 1, 94),
+    ('ARKX', 'ARK Space Exploration & Innovation ETF', 'thematic_etf', 'free', 'intrinio', 'Stage-2 membership anchor -- real space/rocket trade coverage. Real, disclosed liquidity check done before adding: most liquid of the 3 real space ETFs (ARKX/UFO/ROKT), ~$800M AUM.', 1, 95),
+    ('CIBR', 'First Trust NASDAQ Cybersecurity ETF', 'thematic_etf', 'free', 'intrinio', 'Stage-2 membership anchor -- largest, most liquid cybersecurity ETF ($11B+ AUM), real gap closed from the earlier theme-research design discussion which never made it into the compiled file.', 1, 96),
     ('VXX', 'iPath Series B S&P 500 VIX Short-Term Futures ETN', 'thematic_etf', 'free', 'intrinio', 'Rolling VIX-futures ETN, not spot VIX. Real fetched history only reaches 2018-01-25, not the 2009 launch -- the ticker was reissued as this Series B note in 2018 and Yahoo does not carry the earlier Series A history under this symbol (a real property of the free data source, found on fetch, not a fetch constraint). Added for a real, quantified VXX entry-timing question (H-TIME01, macro_regime_composite/VIXCLS already fetched); VIX options themselves stay out of scope, no free options-chain source exists. research_scope=narrow_proxy (see below) -- a real proxy for its own hypothesis, never pool into a general cross-sectional universe.', 1, 92)
 ON CONFLICT(symbol) DO UPDATE SET
     name = excluded.name,
@@ -2111,6 +2178,32 @@ ON CONFLICT(symbol) DO UPDATE SET
 -- here would fail with "no such column" on any pre-existing database --
 -- caught by actually running this against the real dev database, not
 -- assumed safe.
+
+-- Starter watchlist, INSERT OR IGNORE (one-time default, never
+-- re-asserted): the operator owns this list from here on via the real
+-- add/remove API -- if they've since removed one of these, a later app
+-- restart re-running this script must not silently put it back. Real
+-- broad-market and sector coverage, user-specified 2026-08-28.
+INSERT OR IGNORE INTO watchlist_symbols (symbol, added_at, sort_order) VALUES
+    ('SPY', '2026-08-28T00:00:00Z', 20),
+    ('QQQ', '2026-08-28T00:00:00Z', 21),
+    ('DIA', '2026-08-28T00:00:00Z', 22),
+    ('IWM', '2026-08-28T00:00:00Z', 23),
+    ('GLD', '2026-08-28T00:00:00Z', 40),
+    ('BTC-USD', '2026-08-28T00:00:00Z', 50),
+    ('XLC', '2026-08-28T00:00:00Z', 60),
+    ('XLY', '2026-08-28T00:00:00Z', 61),
+    ('XLP', '2026-08-28T00:00:00Z', 62),
+    ('XLE', '2026-08-28T00:00:00Z', 63),
+    ('XLF', '2026-08-28T00:00:00Z', 64),
+    ('XLV', '2026-08-28T00:00:00Z', 65),
+    ('XLI', '2026-08-28T00:00:00Z', 66),
+    ('XLB', '2026-08-28T00:00:00Z', 67),
+    ('XLRE', '2026-08-28T00:00:00Z', 68),
+    ('XLK', '2026-08-28T00:00:00Z', 69),
+    ('XLU', '2026-08-28T00:00:00Z', 70),
+    ('SMH', '2026-08-28T00:00:00Z', 90),
+    ('IGV', '2026-08-28T00:00:00Z', 91);
 
 INSERT INTO readiness_milestones (
     milestone_key, name, description, sort_order

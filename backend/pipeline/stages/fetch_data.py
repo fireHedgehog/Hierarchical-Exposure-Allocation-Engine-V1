@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
+from typing import Callable
 
 from backend.pipeline.stages.common import (
     FRED_OBSERVATION_WINDOW_DAYS,
@@ -29,11 +30,37 @@ def run_fetch_data_stage(
     price_fetcher: PriceFetcher,
     now: datetime,
     engine_mode: str,
+    on_item_progress: Callable[[int, int, str], None] | None = None,
 ) -> StageOutcome:
     """Fetch real macro observations (FRED) and price bars (Yahoo) into one
-    new unsealed dataset. Writes nothing if any fetch fails — no orphaned
-    partial dataset. The price-bar universe is read from `staging_symbols`
-    (DB-driven), never a ticker list embedded in this code.
+    new unsealed dataset. Per-item resilient (real fix, 2026-08-28, direct
+    user request): one bad symbol or series no longer aborts the whole
+    fetch and discards everything already fetched -- each item is tried
+    independently and failures are collected and reported by name.
+
+    Per-symbol commit durability (real fix, 2026-08-28, direct user
+    request: fetching "all in one big API call" with one commit at the
+    very end was flagged as genuinely naive -- the whole run lives inside
+    one open transaction on the caller's connection, so a process killed
+    mid-fetch (it has happened) loses every bar already fetched, and 700+
+    back-to-back requests with no pacing risks a real Yahoo block). This
+    stage now writes and commits the dataset row plus every FRED
+    observation first, then commits each symbol's bars right after that
+    symbol is fetched -- matching the same "commit per-symbol" pattern
+    already used by the separate library_fetch path. Real courtesy pacing
+    between individual Yahoo requests lives in `providers/yahoo.py`
+    itself (the one place every real call funnels through), not here.
+
+    A consequence of committing progressively: once the dataset row and
+    FRED data exist, a later total wipeout of the price-symbol loop can no
+    longer retroactively discard what's already durable on disk. Every
+    macro series failing is still a real, hard `failed` (checked before
+    anything is written -- an empty dataset is never useful), but every
+    price symbol failing now degrades to `completed_with_warnings` with a
+    macro-only dataset, rather than discarding real, already-committed
+    data to preserve an all-or-nothing illusion. The price-bar universe is
+    read from `staging_symbols` (DB-driven), never a ticker list embedded
+    in this code.
     """
 
     provider = connection.execute(
@@ -66,7 +93,17 @@ def run_fetch_data_stage(
     realtime = (as_of - timedelta(days=1)).isoformat()
 
     fetched_series: dict[str, list[FredObservation]] = {}
+    failed_series: dict[str, str] = {}
+    total_items = len(SERIES_METADATA) + len(
+        connection.execute(
+            "SELECT symbol FROM staging_symbols WHERE (active = 1 OR fetch_only = 1) AND category != 'macro_series'"
+        ).fetchall()
+    )
+    item_index = 0
     for series_id in SERIES_METADATA:
+        item_index += 1
+        if on_item_progress:
+            on_item_progress(item_index, total_items, series_id)
         try:
             observations = fred_fetcher(
                 secret.value,
@@ -77,51 +114,40 @@ def run_fetch_data_stage(
                 realtime_end=realtime,
             )
         except FredFetchError as error:
-            return StageOutcome(
-                status="failed",
-                message=f"FRED fetch failed, no dataset was written: {error}",
-                error_code="fred_fetch_failed",
-            )
+            failed_series[series_id] = str(error)
+            continue
         if not observations:
-            return StageOutcome(
-                status="failed",
-                message=f"FRED returned zero observations for {series_id}; no dataset was written.",
-                error_code="fred_empty_series",
-            )
+            failed_series[series_id] = "FRED returned zero observations."
+            continue
         fetched_series[series_id] = observations
+
+    if not fetched_series:
+        return StageOutcome(
+            status="failed",
+            message=f"Every FRED series failed, no dataset was written: {failed_series}",
+            error_code="fred_fetch_failed",
+        )
 
     staging_rows = connection.execute(
         """
         SELECT symbol, name, category FROM staging_symbols
-        WHERE active = 1 AND category != 'macro_series'
+        WHERE (active = 1 OR fetch_only = 1) AND category != 'macro_series'
         ORDER BY sort_order
         """
     ).fetchall()
-    fetched_bars: dict[str, list[PriceBar]] = {}
-    for row in staging_rows:
-        try:
-            bars = price_fetcher(row["symbol"], start_date=STAGING_UNIVERSE_START_DATE)
-        except PriceFetchError as error:
-            return StageOutcome(
-                status="failed",
-                message=f"Price fetch failed, no dataset was written: {error}",
-                error_code="price_fetch_failed",
-            )
-        if not bars:
-            return StageOutcome(
-                status="failed",
-                message=f"No usable price bars returned for {row['symbol']}; no dataset was written.",
-                error_code="price_empty_series",
-            )
-        fetched_bars[row["symbol"]] = bars
 
     dataset_id = f"real-macro-{uuid.uuid4()}"
     timestamp = _iso_z(now)
+    # A placeholder manifest, written now so the dataset row exists before a
+    # single Yahoo request is made; replaced with the real fetched/failed
+    # symbol lists once the price loop below finishes.
     manifest = _json(
         {
             "source": "fred+yahoo",
-            "macro_series": list(SERIES_METADATA),
-            "price_symbols": [row["symbol"] for row in staging_rows],
+            "macro_series": list(fetched_series),
+            "macro_series_failed": failed_series,
+            "price_symbols": [],
+            "price_symbols_failed": {},
             "engine_mode": engine_mode,
             "observation_window": {"start": observation_start, "end": observation_end},
             "realtime_vintage": realtime,
@@ -210,13 +236,31 @@ def run_fetch_data_stage(
             ),
         )
 
-    category_by_symbol = {row["symbol"]: row["category"] for row in staging_rows}
-    name_by_symbol = {row["symbol"]: row["name"] for row in staging_rows}
+    # Durable checkpoint: the dataset row and every FRED observation are
+    # committed before a single Yahoo request is made below. If everything
+    # after this point failed outright, this much still survives.
+    connection.commit()
+
+    fetched_bars: dict[str, list[PriceBar]] = {}
+    failed_symbols: dict[str, str] = {}
     total_bars = 0
     earliest_bar_date: str | None = None
     latest_bar_date: str | None = None
-    for symbol, bars in fetched_bars.items():
-        category = category_by_symbol[symbol]
+    for row in staging_rows:
+        symbol, name, category = row["symbol"], row["name"], row["category"]
+        item_index += 1
+        if on_item_progress:
+            on_item_progress(item_index, total_items, symbol)
+        try:
+            bars = price_fetcher(symbol, start_date=STAGING_UNIVERSE_START_DATE)
+        except PriceFetchError as error:
+            failed_symbols[symbol] = str(error)
+            continue
+        if not bars:
+            failed_symbols[symbol] = "Provider returned zero usable bars."
+            continue
+        fetched_bars[symbol] = bars
+
         security_id = _security_id_for(symbol, category)
         connection.execute(
             """
@@ -224,7 +268,7 @@ def run_fetch_data_stage(
                 security_id, primary_symbol, name, asset_type, exchange, currency, sector, active
             ) VALUES (?, ?, ?, ?, NULL, 'USD', NULL, 1)
             """,
-            (security_id, symbol, name_by_symbol[symbol], _asset_type_for(category)),
+            (security_id, symbol, name, _asset_type_for(category)),
         )
         bar_rows = [
             (
@@ -257,7 +301,6 @@ def run_fetch_data_stage(
         earliest_bar_date = min(filter(None, [earliest_bar_date, min(dates)]))
         latest_bar_date = max(filter(None, [latest_bar_date, max(dates)]))
 
-    if fetched_bars:
         connection.execute(
             """
             INSERT INTO data_assets (
@@ -289,17 +332,46 @@ def run_fetch_data_stage(
                 timestamp,
                 PRICE_SOFT_MAX_AGE_DAYS * 86400,
                 dataset_id,
-                f"{total_bars} real daily bars across {len(fetched_bars)} staging symbols (unofficial Yahoo Finance chart endpoint).",
+                f"{total_bars} real daily bars across {len(fetched_bars)} staging symbols so far (unofficial Yahoo Finance chart endpoint).",
                 timestamp,
             ),
         )
+        # Commit per-symbol: real, deliberate partial-progress durability,
+        # the same pattern already used by library_fetch.py -- if the
+        # process dies mid-fetch, every symbol fetched so far survives and
+        # this run's real Yahoo requests were not wasted.
+        connection.commit()
 
+    all_failed = {**failed_series, **failed_symbols}
+    final_manifest = _json(
+        {
+            "source": "fred+yahoo",
+            "macro_series": list(fetched_series),
+            "macro_series_failed": failed_series,
+            "price_symbols": list(fetched_bars),
+            "price_symbols_failed": failed_symbols,
+            "engine_mode": engine_mode,
+            "observation_window": {"start": observation_start, "end": observation_end},
+            "realtime_vintage": realtime,
+            "price_fetch_start_date": STAGING_UNIVERSE_START_DATE,
+        }
+    )
+    connection.execute(
+        "UPDATE dataset_snapshots SET source_manifest_json = ? WHERE id = ?",
+        (final_manifest, dataset_id),
+    )
+    connection.commit()
+
+    message = (
+        f"Fetched {total_rows} real FRED observations across {len(fetched_series)} series "
+        f"and {total_bars} real daily bars across {len(fetched_bars)} staging symbols."
+    )
+    if all_failed:
+        failure_detail = "; ".join(f"{key}: {reason}" for key, reason in all_failed.items())
+        message += f" {len(all_failed)} item(s) failed and were skipped: {failure_detail}"
     return StageOutcome(
-        status="completed",
-        message=(
-            f"Fetched {total_rows} real FRED observations across {len(SERIES_METADATA)} series "
-            f"and {total_bars} real daily bars across {len(fetched_bars)} staging symbols."
-        ),
+        status="completed_with_warnings" if all_failed else "completed",
+        message=message,
         records_read=total_rows + total_bars,
         records_written=total_rows + total_bars,
         dataset_snapshot_id=dataset_id,

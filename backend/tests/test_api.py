@@ -53,6 +53,7 @@ def test_empty_database_boots_without_inventing_a_snapshot(empty_client: TestCli
     assert empty_client.get("/api/v1/symbols").json() == {
         "snapshot": None,
         "symbols": [],
+        "scope": "watchlist",
     }
     assert empty_client.get("/api/v1/symbols/SPY").status_code == 404
 
@@ -217,7 +218,10 @@ def test_cross_section_contract_includes_nullable_values_and_provenance(
 
 
 def test_symbol_list_and_detail_contract(seeded_client: TestClient) -> None:
-    listing = seeded_client.get("/api/v1/symbols")
+    # scope=all: this test is about the general listing/detail contract shape,
+    # not the watchlist dashboard filter -- the seed fixture's symbols (e.g.
+    # IWM) aren't in staging_symbols' curated watchlist set.
+    listing = seeded_client.get("/api/v1/symbols?scope=all")
     assert listing.status_code == 200
     assert len(listing.json()["symbols"]) == 6
     assert listing.json()["symbols"][0]["security_id"].startswith("us-etf-")

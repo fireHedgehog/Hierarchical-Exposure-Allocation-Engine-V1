@@ -339,11 +339,13 @@ export interface SymbolSummary {
   freshness_status?: Nullable<string>;
   freshness_as_of?: Nullable<string>;
   candidate_count?: Nullable<number>;
+  watchlist?: Nullable<boolean>;
 }
 
 export interface SymbolsResponse {
   snapshot?: Nullable<Snapshot>;
   symbols?: Nullable<SymbolSummary[]>;
+  scope?: Nullable<string>;
 }
 
 export interface PriceBar extends Provenance {
@@ -759,6 +761,8 @@ export interface AdminDataResponse {
   summary: AdminDataCounts;
   assets?: Nullable<AdminDataAsset[]>;
   symbols?: Nullable<AdminSymbolData[]>;
+  scope?: Nullable<string>;
+  symbol_search?: Nullable<AdminSymbolSearch>;
 }
 
 export interface AdminSymbolData {
@@ -773,6 +777,16 @@ export interface AdminSymbolData {
   freshness?: Nullable<string>;
   status?: Nullable<string>;
   dataset_snapshot_id?: Nullable<string>;
+  watchlist?: Nullable<boolean>;
+  category?: Nullable<string>;
+}
+
+export interface AdminSymbolSearch {
+  q?: Nullable<string>;
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
 }
 
 export interface StrategyDecay {

@@ -17,6 +17,8 @@ from backend.pipeline.stages import (
     run_regime_filter_stage,
     run_validate_data_stage,
 )
+from backend.pipeline_progress import set_item_progress
+from backend.pipeline_progress import set_stage as set_progress_stage
 from backend.providers import ProviderVerifier, VerificationResult
 from backend.readiness_repository import get_readiness
 from backend.secrets import SecretStore
@@ -612,10 +614,13 @@ def verify_provider(
 def list_staging_symbols(connection: sqlite3.Connection) -> dict[str, Any]:
     rows = connection.execute(
         """
-        SELECT staging.*, plan.name AS production_provider_name
+        SELECT staging.*, plan.name AS production_provider_name,
+               watch.symbol IS NOT NULL AS watchlist
         FROM staging_symbols AS staging
         LEFT JOIN provider_onboarding_plan AS plan
           ON plan.plan_key = staging.production_provider_key
+        LEFT JOIN watchlist_symbols AS watch
+          ON watch.symbol = staging.symbol
         ORDER BY staging.sort_order, staging.symbol
         """
     ).fetchall()
@@ -629,6 +634,8 @@ def list_staging_symbols(connection: sqlite3.Connection) -> dict[str, Any]:
             "production_provider_name": row["production_provider_name"],
             "notes": row["notes"],
             "active": bool(row["active"]),
+            "fetch_only": bool(row["fetch_only"]),
+            "watchlist": bool(row["watchlist"]),
         }
         for row in rows
     ]
@@ -645,8 +652,66 @@ def list_staging_symbols(connection: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
+class SymbolNotInStagingUniverseError(LookupError):
+    pass
+
+
+def list_watchlist(connection: sqlite3.Connection) -> dict[str, Any]:
+    rows = connection.execute(
+        """
+        SELECT watch.symbol, watch.added_at, staging.name, staging.category
+        FROM watchlist_symbols AS watch
+        JOIN staging_symbols AS staging ON staging.symbol = watch.symbol
+        ORDER BY watch.sort_order, watch.symbol
+        """
+    ).fetchall()
+    return {"symbols": [dict(row) for row in rows]}
+
+
+def add_to_watchlist(connection: sqlite3.Connection, symbol: str, now: datetime) -> dict[str, Any]:
+    normalized = symbol.strip().upper()
+    staging_row = connection.execute(
+        "SELECT symbol FROM staging_symbols WHERE symbol = ?", (normalized,)
+    ).fetchone()
+    if staging_row is None:
+        raise SymbolNotInStagingUniverseError(normalized)
+    next_sort = connection.execute(
+        "SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort FROM watchlist_symbols"
+    ).fetchone()["next_sort"]
+    connection.execute(
+        """
+        INSERT INTO watchlist_symbols (symbol, added_at, sort_order) VALUES (?, ?, ?)
+        ON CONFLICT(symbol) DO NOTHING
+        """,
+        (normalized, iso_z(now), next_sort),
+    )
+    connection.commit()
+    return list_watchlist(connection)
+
+
+def remove_from_watchlist(connection: sqlite3.Connection, symbol: str) -> dict[str, Any]:
+    normalized = symbol.strip().upper()
+    connection.execute("DELETE FROM watchlist_symbols WHERE symbol = ?", (normalized,))
+    connection.commit()
+    return list_watchlist(connection)
+
+
+SYMBOL_SORT_KEYS = {
+    "symbol", "category", "row_count", "period_start", "period_end",
+    "last_observation_at", "last_fetched_at", "freshness", "status",
+}
+
+
 def get_data_inventory(
-    connection: sqlite3.Connection, now: datetime
+    connection: sqlite3.Connection,
+    now: datetime,
+    scope: str = "watchlist",
+    q: str | None = None,
+    page: int = 1,
+    page_size: int = 25,
+    health: str = "all",
+    sort: str = "symbol",
+    order: str = "asc",
 ) -> dict[str, Any]:
     rows = connection.execute(
         "SELECT * FROM data_assets ORDER BY label, asset_key"
@@ -731,11 +796,17 @@ def get_data_inventory(
             SELECT symbols.symbol, symbols.name, COUNT(bars.time) AS row_count,
                    MIN(bars.time) AS period_start, MAX(bars.time) AS period_end,
                    MAX(COALESCE(bars.observed_at, bars.time)) AS last_observation_at,
-                   MAX(bars.ingested_at) AS last_fetched_at
+                   MAX(bars.ingested_at) AS last_fetched_at,
+                   watch.symbol IS NOT NULL AS watchlist,
+                   staging.category AS category
             FROM symbols
             LEFT JOIN symbol_bars AS bars
               ON bars.dataset_snapshot_id = ?
              AND bars.security_id = symbols.security_id
+            LEFT JOIN staging_symbols AS staging
+              ON staging.symbol = symbols.symbol
+            LEFT JOIN watchlist_symbols AS watch
+              ON watch.symbol = symbols.symbol
             WHERE symbols.snapshot_id = ?
             GROUP BY symbols.symbol, symbols.name
             ORDER BY symbols.symbol
@@ -752,6 +823,8 @@ def get_data_inventory(
         ).fetchone()
         max_age_seconds = price_policy["max_age_seconds"] if price_policy else None
         for symbol in symbol_rows:
+            if scope == "watchlist" and not symbol["watchlist"]:
+                continue
             observed = _parse_time(symbol["last_observation_at"])
             age_seconds = int((now - observed).total_seconds()) if observed else None
             if (
@@ -786,6 +859,8 @@ def get_data_inventory(
                     "freshness": freshness,
                     "status": status,
                     "dataset_snapshot_id": latest_snapshot["dataset_snapshot_id"],
+                    "watchlist": bool(symbol["watchlist"]),
+                    "category": symbol["category"],
                 }
             )
     invalid_assets = counts["invalid"]
@@ -797,11 +872,50 @@ def get_data_inventory(
         "invalid_assets": invalid_assets,
         "invalid_symbols": invalid_symbols,
     }
+
+    # Search/health-filter/sort/pagination apply only to the symbol table --
+    # the real pain point once the universe grows past a couple dozen
+    # tickers. `assets` (macro series, demo fixtures) stays small and
+    # unfiltered.
+    needle = q.strip().lower() if q else None
+    if needle:
+        symbols = [
+            symbol for symbol in symbols
+            if needle in symbol["symbol"].lower() or needle in (symbol["name"] or "").lower()
+        ]
+    if health == "unhealthy":
+        symbols = [symbol for symbol in symbols if symbol["status"] != "ready"]
+
+    sort_key = sort if sort in SYMBOL_SORT_KEYS else "symbol"
+    reverse = order == "desc"
+    # None sorts last regardless of direction (a real "not fetched yet" row
+    # shouldn't jump to the top just because desc puts None first in Python).
+    symbols.sort(
+        key=lambda item: (item[sort_key] is None, item[sort_key] if item[sort_key] is not None else ""),
+        reverse=reverse,
+    )
+    if reverse:
+        symbols.sort(key=lambda item: item[sort_key] is None)
+
+    total_symbols = len(symbols)
+    safe_page = max(1, page)
+    safe_page_size = max(1, min(page_size, 200))
+    start = (safe_page - 1) * safe_page_size
+    page_symbols = symbols[start : start + safe_page_size]
+
     return {
         "as_of": iso_z(now),
         "summary": summary,
         "assets": assets,
-        "symbols": symbols,
+        "symbols": page_symbols,
+        "scope": scope,
+        "symbol_search": {
+            "q": q,
+            "page": safe_page,
+            "page_size": safe_page_size,
+            "total": total_symbols,
+            "total_pages": max(1, -(-total_symbols // safe_page_size)),
+        },
     }
 
 
@@ -917,7 +1031,17 @@ def run_pipeline(
     fred_observation_fetcher: FredFetcher,
     price_fetcher: PriceFetcher,
     pipeline_key: str = "daily_desk",
+    stop_after: str | None = None,
+    progress_run_id: str | None = None,
 ) -> dict[str, Any]:
+    """`stop_after`: run stages in the normal order, but stop once the
+    named stage (e.g. 'fetch_data') completes -- real, direct user request
+    ("sometimes I only want to get data"). Deliberately "run through stage
+    N," not "run only stage N in isolation": starting a later stage
+    (e.g. regime_filter alone) would need to safely reuse a possibly-stale
+    dataset snapshot, a real, separate design question not solved here --
+    every stop_after run still starts fresh from fetch_data.
+    """
     pipeline = get_pipeline(connection, pipeline_key)["definition"]
     if not pipeline["enabled"]:
         raise PipelineNotFoundError(f"{pipeline_key}:disabled")
@@ -990,7 +1114,11 @@ def run_pipeline(
         any(values for values in issues.values())
         for issues in stage_provider_issues.values()
     )
-    inventory = get_data_inventory(connection, now)
+    # scope="all": pipeline preflight validation must cover the entire real
+    # universe, never just the curated dashboard watchlist -- an invalid
+    # future-dated record on a non-watchlist symbol (e.g. AAPL/NVDA/TLT/IEF)
+    # must still block/warn the pipeline.
+    inventory = get_data_inventory(connection, now, scope="all")
     invalid_data = inventory["summary"]["invalid"]
     preflight_issues = provider_issues or invalid_data > 0
     preflight_status = "completed_with_warnings" if preflight_issues else "completed"
@@ -1043,8 +1171,14 @@ def run_pipeline(
         summary = "Preflight completed; dry run made no data or decision changes."
     else:
         blocked = False
+        stopped = False
         stage_statuses: list[str] = []
         for stage in remaining:
+            if stopped:
+                stage_results.append(
+                    (run_id, stage["key"], stage["order"], "skipped", None, None, None, None, f"Not run: this run stopped after '{stop_after}', per request.", None)
+                )
+                continue
             if blocked:
                 stage_results.append(
                     (run_id, stage["key"], stage["order"], "pending", None, None, None, None, "Not started because an earlier required stage was blocked.", None)
@@ -1076,9 +1210,17 @@ def run_pipeline(
                 blocked = True
                 continue
 
+            if progress_run_id:
+                set_progress_stage(progress_run_id, stage["key"])
+
             if stage["key"] == "fetch_data":
+                item_progress_callback = (
+                    (lambda done, total, current: set_item_progress(progress_run_id, done, total, current))
+                    if progress_run_id else None
+                )
                 outcome = run_fetch_data_stage(
-                    connection, secret_store, fred_observation_fetcher, price_fetcher, now, engine_mode
+                    connection, secret_store, fred_observation_fetcher, price_fetcher, now, engine_mode,
+                    on_item_progress=item_progress_callback,
                 )
             elif stage["key"] == "validate_data":
                 outcome = run_validate_data_stage(connection, now, dataset_snapshot_id)
@@ -1117,6 +1259,8 @@ def run_pipeline(
             stage_statuses.append(outcome.status)
             if outcome.status in {"blocked", "failed"}:
                 blocked = True
+            if stop_after is not None and stage["key"] == stop_after:
+                stopped = True
 
         if any(status == "failed" for status in stage_statuses):
             run_status = "failed"
@@ -1411,7 +1555,10 @@ def get_overview(
     provider_payload = list_providers(connection, secret_store, now, runtime_id)[
         "providers"
     ]
-    data = get_data_inventory(connection, now)
+    # scope="all": the operator data-health overview must reflect the whole
+    # real universe's health, not a filtered subset -- hiding a problem on a
+    # non-watchlist symbol here would defeat the page's purpose.
+    data = get_data_inventory(connection, now, scope="all")
     pipeline = get_pipeline(connection)
     strategies = list_strategies(connection)
     return {

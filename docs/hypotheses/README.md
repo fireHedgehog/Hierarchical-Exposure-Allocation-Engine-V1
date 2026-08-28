@@ -29,7 +29,7 @@ folder-per-layer, not a repeat of that bug.
 
 ## Known methodology limitations (project-wide, read before trusting any p-value here)
 
-Three real, verified gaps apply across many papers in this tree — recorded
+Four real, verified gaps apply across many papers in this tree — recorded
 once here rather than re-stated in every affected file. Checked against
 the real code on 2026-08-28, not asserted from memory.
 
@@ -85,6 +85,17 @@ the real code on 2026-08-28, not asserted from memory.
    block-permutation re-test of the two most consequential findings
    (H-MACRO09, H-MACRO11) that respects this real autocorrelation instead
    of assuming independence.
+4. **No delisting/survivorship tracking.** `staging_symbols` has no
+   "delisted on" field, and none of the fetch/research code checks
+   whether a symbol stopped trading partway through the sample window —
+   every backtest here implicitly assumes every universe member survived
+   intact to today. Real, accepted limitation, not a solved one: this
+   project's universe is deliberately large, liquid, index-member names
+   (broad ETFs, mega-cap equities) chosen partly *because* survivorship
+   risk is low there, not zero — a real name can still delist (Enron was
+   a large-cap name once too). Honestly disclosed rather than quietly
+   ignored; fixing it (a real "delisted_at" field, point-in-time universe
+   membership) is real, deferred work, not attempted here.
 
 **Parked, not fixed:** true per-date ALFRED vintage fetching (gap #1's
 real remedy) is a real, substantial software change — re-architecting

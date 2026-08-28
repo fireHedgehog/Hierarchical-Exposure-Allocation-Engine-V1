@@ -605,21 +605,24 @@ def get_latest_cross_section(connection: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
-def list_latest_symbols(connection: sqlite3.Connection) -> dict[str, Any]:
+def list_latest_symbols(connection: sqlite3.Connection, scope: str = "watchlist") -> dict[str, Any]:
     try:
         snapshot = _latest_snapshot(connection)
     except SnapshotNotFoundError:
-        return {"snapshot": None, "symbols": []}
+        return {"snapshot": None, "symbols": [], "scope": scope}
     snapshot_id = snapshot["id"]
     rows = connection.execute(
         """
         SELECT s.security_id, s.symbol, s.name, s.asset_type, s.sector, s.exchange,
                s.currency, s.status, s.summary, s.last_price, s.price_as_of,
                s.composite_score, s.rank, s.freshness_status, s.freshness_as_of,
-               COUNT(pc.candidate_id) AS candidate_count
+               COUNT(pc.candidate_id) AS candidate_count,
+               watch.symbol IS NOT NULL AS watchlist
         FROM symbols s
         LEFT JOIN position_candidates pc
           ON pc.snapshot_id = s.snapshot_id AND pc.symbol = s.symbol
+        LEFT JOIN watchlist_symbols AS watch
+          ON watch.symbol = s.symbol
         WHERE s.snapshot_id = ?
         GROUP BY s.snapshot_id, s.symbol
         ORDER BY s.rank IS NULL, s.rank, s.symbol
@@ -628,12 +631,15 @@ def list_latest_symbols(connection: sqlite3.Connection) -> dict[str, Any]:
     ).fetchall()
     return {
         "snapshot": _snapshot_meta(snapshot),
+        "scope": scope,
         "symbols": [
             {
                 **dict(row),
                 "candidate_count": int(row["candidate_count"]),
+                "watchlist": bool(row["watchlist"]),
             }
             for row in rows
+            if scope != "watchlist" or row["watchlist"]
         ],
     }
 
