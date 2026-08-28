@@ -6,6 +6,14 @@ and *when* to act (timing, its own folder now). Same lifecycle and
 rules as the parent [`docs/hypotheses/README.md`](../README.md); own
 index for the same reason `macro-research/` got one.
 
+**Read the parent's [Known methodology limitations](../README.md#known-methodology-limitations-project-wide-read-before-trusting-any-p-value-here) first.**
+Most papers here are pure-price (unaffected by the point-in-time gap) —
+H-SECT01, H-SECT03, H-SECT06-08, H-SECT10, both trend-conditioned
+re-tests. The ones that use `macro_regime_composite` directly (H-SECT02,
+H-SECT04, H-SECT05, H-SECT09) inherit that caveat and the
+OOS-reuse caveat; the overlapping-sample caveat applies to any test
+using the shared `STRIDE_DAYS=21` convention, regardless of data type.
+
 ## Real universe (corrected framing, 2026-08-27)
 
 This project doesn't have individual-stock cross-sectional data at any

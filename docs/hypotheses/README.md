@@ -15,6 +15,60 @@ matching folder, not by which indicator happens to be involved:
 | Timing | Given a position (or instrument), when do I act — enter/hold/trim/exit? | [`timing-research/`](timing-research/README.md) |
 | Portfolio construction | How much in each specific instrument? | Not a hypothesis folder yet — currently `backend/engine/instruments/` (conviction-scaled structure/sizing), naive-v1 |
 
+## Known methodology limitations (project-wide, read before trusting any p-value here)
+
+Three real, verified gaps apply across many papers in this tree — recorded
+once here rather than re-stated in every affected file. Checked against
+the real code on 2026-08-28, not asserted from memory.
+
+1. **Macro data is not true point-in-time.** `fetch_data.py` pins FRED's
+   `realtime_start`/`realtime_end` to the pipeline's own run date for the
+   *entire* historical fetch — every historical row gets today's
+   fully-revised value, not the value actually known/published at that
+   historical date. A true point-in-time backtest needs a separate ALFRED
+   vintage query per historical anchor date; this project has never done
+   that (see "Parked" below). **Real impact is concentrated, not uniform**:
+   `INDPRO`, `PAYEMS`, `GDPC1`, `CPIAUCSL`, `PCEPILFE`, `PPIACO` (the
+   `growth_inflation` cluster) are real BLS/BEA survey data with genuine
+   historical revisions — any paper using `macro_regime_composite` or these
+   factors directly inherits this risk (`macro-research/` in full;
+   `asset-selection-research/`'s regime-conditioned addenda in H-STREV,
+   H-SECT02/05/09/11). Daily market-observed series (`DGS10`, `DGS30`,
+   `DFII10`, `VIXCLS`, credit spreads) and every **pure-price** paper
+   (H-SECT01, H-SECT07, H-SECT08, H-SECT10, both SPY-trend-conditioned
+   re-tests, all of `timing-research/`) are genuinely unaffected — they
+   never touch FRED data at all.
+2. **"OOS" language has been overclaimed.** The 2019-01-01 chronological
+   split has been reused across many papers (H-MACRO09 and its own OOS
+   follow-up, threshold-sensitivity, H-SECT02, H-SECT07, H-SECT08,
+   H-MACRO11). Each individual paper's walk-forward discipline was real
+   (weights learned in-sample only, held fixed, no lookahead *within* that
+   test) — but reusing the same holdout across a growing set of hypotheses
+   is a real, cumulative form of the thing OOS splits exist to prevent.
+   Read "holds OOS" throughout this tree as **"holds in a later temporal
+   subsample," not a blind, untouched holdout** — real evidence of
+   robustness, not proof against overfitting.
+3. **Overlapping samples inflate reported significance.** The common
+   `STRIDE_DAYS=21` sampling against 63- or 126-day forward windows still
+   leaves 67-83% overlap between adjacent samples — striding reduces
+   pseudo-replication, it does not eliminate it. Pearson/Fisher tests
+   assume independent observations; a single event (2008, 2020) can
+   inflate the effective sample size of "successes." Treat reported p-values
+   and probability differentials as directionally real, not exact — see
+   `research_lab/macro_significance_robustness_check.py` for a real
+   block-permutation re-test of the two most consequential findings
+   (H-MACRO09, H-MACRO11) that respects this real autocorrelation instead
+   of assuming independence.
+
+**Parked, not fixed:** true per-date ALFRED vintage fetching (gap #1's
+real remedy) is a real, substantial software change — re-architecting
+`fetch_data.py` to do many historical vintage calls instead of one,
+meaningfully slower against the real FRED API. Deliberately not
+undertaken now, per direct instruction: research validity gaps get
+disclosed and worked around statistically where possible, not used to
+justify a radical software rewrite. Revisit if/when this specific gap
+becomes the binding constraint on a real decision.
+
 ## Data sources, by type
 
 A second, orthogonal axis to the 4 layers above — what kind of data a

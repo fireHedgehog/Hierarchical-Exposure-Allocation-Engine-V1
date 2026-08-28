@@ -90,12 +90,16 @@ often beats "optimized" weighting out-of-sample precisely because
 optimization fits noise in the estimation sample that a naive scheme
 never tries to fit in the first place.
 
+| 2026-08-28 | Real robustness re-check, `research_lab/macro_significance_robustness_check.py` — same moving-block permutation as H-MACRO09's own re-check (block size 6, 2,000 reps), applied to the OOS comparison above, since naive Pearson assumes independent observations and this project's `STRIDE_DAYS=21`/126-day-window sampling doesn't fully deliver that. | **The correction gets stronger, not weaker.** Cluster-equal: naive p=0.0038 → block-permutation p=0.0185, still significant. IC-weighted: naive p=0.0097 → block-permutation p=0.0890, **no longer significant** under the more honest test — it had looked marginally significant under the naive test, and doesn't survive real scrutiny. The gap between "keep the existing design" and "switch to IC-weighting" is more decisive under rigorous testing, not less. |
+
 ## Promotion criteria
 
-Not met, and the direction reversed from the first, wrong-target pass.
-Real conclusion: `macro_regime_composite`'s existing cluster-equal
-design is not obviously improvable by simple IC-weighting once tested
-against its actual, validated target — if anything, this paper is now
-a real, independent piece of evidence *for* keeping the naive-v3
-design as-is, not a case to change it. `scoring_v3.py` stays
+Not met, and the direction reversed from the first, wrong-target pass
+— then reinforced by a real robustness re-check. `macro_regime_
+composite`'s existing cluster-equal design is not improvable by simple
+IC-weighting once tested against its actual, validated target, with
+real, autocorrelation-aware significance testing: cluster-equal's OOS
+result survives that scrutiny, IC-weighted's does not. This paper is
+now real, independent, and doubly-checked evidence *for* keeping the
+naive-v3 design as-is, not a case to change it. `scoring_v3.py` stays
 unchanged.

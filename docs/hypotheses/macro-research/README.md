@@ -6,6 +6,11 @@ inheriting one from commentary. Same lifecycle and rules as the parent
 [`docs/hypotheses/`](../README.md); this subfolder exists because "many
 aspects to test" needs its own index, not an ever-growing flat table.
 
+**Read the parent's [Known methodology limitations](../README.md#known-methodology-limitations-project-wide-read-before-trusting-any-p-value-here) first.**
+Every paper in this folder uses `macro_regime_composite` or a real,
+revision-prone macro factor directly — the point-in-time and OOS-reuse
+caveats there apply throughout, not repeated per paper below.
+
 **Update, 2026-08-27:** the freeze is lifted. `macro_regime_composite` was
 promoted to **naive-v3** (`backend/engine/regime/scoring_v3.py`) after a
 real, out-of-sample-validated evidence chain — see
@@ -88,11 +93,11 @@ cross-sectional factor set.
 | [Duration outcome predictors](duration-outcome-predictors.md) (H-MACRO06) | observing | 23 indicators vs. 10Y yield forward change. 18/23 significant — richest result in the folder; rate-level mean-reversion vs. fundamentals-continuation, two distinct real mechanisms. |
 | [USD outcome predictors](usd-outcome-predictors.md) (H-MACRO07) | observing | 24 indicators vs. broad dollar index forward change (new series, `DTWEXBGS`). 15/24 significant; rate-mean-reversion group plausibly chains from H-MACRO06's own finding. |
 | [Indicator redundancy](indicator-redundancy.md) (H-MACRO08) | observing | **The prerequisite for any composite.** 17-23 raw indicators → only ~3.5-4.1 effective independent bets. Real factor structure: inflation/growth, rate level, market stress, policy operations — 4 clusters, not 17-26 signals. |
-| [Composite forward risk](composite-forward-risk.md) (H-MACRO09) | observing | Reframed composite test (risk-context, not timing): stressed reading is 5-7x more likely to precede a real ≥10% SPY drawdown within 3-6mo (p<0.0001 both windows). |
+| [Composite forward risk](composite-forward-risk.md) (H-MACRO09) | observing | Reframed composite test (risk-context, not timing): stressed reading is 5-7x more likely to precede a real ≥10% SPY drawdown within 3-6mo (p<0.0001 both windows). Real block-permutation robustness re-check (2026-08-28): holds under autocorrelation-aware testing too (p=0.0065-0.0075), not just naive Pearson. |
 | [Composite forward risk — out-of-sample](composite-forward-risk-oos.md) | observing | Chronological split at 2019-01-01. Replicates cleanly on held-out data; 6mo effect is *stronger* out-of-sample (+42.9pp vs. +21.8pp in-sample) — the opposite of overfitting. |
 | [Composite threshold sensitivity](composite-threshold-sensitivity.md) | observing | 14/16 threshold×split combinations significant. 6-month window robust across every choice tested — not an artifact of the original -10%/tercile pick. |
 | [Exposure policy calibration](exposure-policy-calibration.md) (H-MACRO10) | concluded-confirmed | Found a real, more severe issue than "untested": naive-v1's confidence→multiplier formula was directionally backwards after the naive-v3 promotion (stressed got more exposure than calm). Fixed (naive-v2, live in production) and backtested: beats static exposure on Sharpe and drawdown, consistently across full-sample/in-sample/out-of-sample. |
-| [Factor breadth-weighting](factor-breadth-weighting.md) (H-MACRO11) | concluded-rejected against the real target | Does a real, walk-forward IC-weighted combination of the 13 factors beat naive-v3's cluster-equal weighting? First pass (wrong target: forward return) looked exciting, +0.400 vs +0.210 OOS IC — but had a real sign bug in the weighting formula. Fixed, then re-tested against the composite's actual target (real drawdown probability): the *existing* cluster-equal design wins OOS (significant, p=0.014) vs. the "improved" alternative (not significant, p=0.121). Real evidence *for* keeping naive-v3 as-is, not a case to change it. |
+| [Factor breadth-weighting](factor-breadth-weighting.md) (H-MACRO11) | concluded-rejected against the real target | Does a real, walk-forward IC-weighted combination of the 13 factors beat naive-v3's cluster-equal weighting? First pass (wrong target: forward return) looked exciting, +0.400 vs +0.210 OOS IC — but had a real sign bug in the weighting formula. Fixed, then re-tested against the composite's actual target (real drawdown probability): the *existing* cluster-equal design wins OOS (significant, p=0.014) vs. the "improved" alternative (not significant, p=0.121). A real block-permutation robustness re-check strengthens this further: cluster-equal survives (p=0.0185), IC-weighted does not (p=0.089). Real, doubly-checked evidence *for* keeping naive-v3 as-is, not a case to change it. |
 
 **Layer 3 complete** — all 5 market-outcome dimensions (Equity, Credit,
 Volatility, Duration, USD) now have a real indicator-vs-target table.
