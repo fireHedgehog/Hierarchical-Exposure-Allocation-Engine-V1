@@ -81,7 +81,7 @@ Do not purchase or enter those three keys yet. Their adapters, entitlement-speci
 
 The free-data engine build (all six compute stages) is done — see [engine milestones](docs/engine-milestones.md). Next:
 
-1. decide whether the correlated four-index `ES` observation from [H-XSEC-S2-003](docs/hypotheses/staging_v2/cross-sectional/h-xsec-s2-003-moving-average-state-transition.md) deserves a separately frozen Timing hypothesis; its Development stock study nominated no candidate, so Cross Validation/Holdout remain locked, while Amihud remains an unregistered research candidate;
+1. manually audit the designed, not-yet-run [H-TIME-S2-002 confirmation-and-path surface](docs/hypotheses/staging_v2/timing/h-time-s2-002-confirmation-and-path-surface.md); if accepted, implement its four families in one disposable loop without opening H-XSEC-S2-003's locked folds or changing production Timing;
 2. build the point-in-time security master and versioned universe (roadmap phase 2) — the staging universe is still a free-data fixture, not a governed, effective-dated eligibility contract;
 3. decide whether `publish_snapshot` needs its own implementation or is redundant now that the orchestrator seals snapshots directly;
 4. optimize within pilot mode (Milestone 4) — the naive factor/backtest formulas are real but currently lose to buy-and-hold on average.

@@ -32,6 +32,12 @@ Holdout remain unopened. The correlated index ES panel is a useful observation
 for a new timing design, not authority to translate or promote this Cross study.
 H-THEME-S2-001 remains a diagnostic of the retired clock and authorizes no
 broader Theme conclusion.
+H-TIME-S2-002 is now designed but not run. One consolidated confirmation-and-
+path loop freezes four families: confirmation after damage, trend birth and
+acceptance, compression and directional release, and deterioration warning.
+It uses next-open stock path measurement, landmark-safe controls, competing-risk path
+statistics, stationary date-block bootstrap, and family-level data-snooping
+tests. No production Timing change is authorized by the design.
 
 ## Research types
 

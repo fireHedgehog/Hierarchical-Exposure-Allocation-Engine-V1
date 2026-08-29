@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Research design - H-TIME-S2-002 confirmation and path surface
+
+- Added one consolidated, English Timing design instead of a paper per indicator: confirmation after frozen dislocations, trend birth/acceptance, volatility compression/directional release, and deterioration warning.
+- Froze the post-landmark stock path at next adjusted open and separated it from the close-only index transfer panel. The design conditions on the current descriptive cross-sectional selector without claiming that selector is validated alpha.
+- Added landmark-safe risk sets, same-date optimal matching, Aalen-Johansen competing paths, date-level stationary bootstrap, Romano-Wolf stepdown inference, and MAE/MFE/tail reporting. Policy P&L, costs, and turnover remain outside S2. No experiment was run and no production algorithm was changed.
+
 ### Application — pluggable cross-sectional research ranking
 
 - Added a read-only Cross-sectional ranking workspace between Today and Timing. It selects the existing Stage 2 membership, symbol metadata, security identity, and `library-fetch-ongoing` price layers rather than creating another database table.

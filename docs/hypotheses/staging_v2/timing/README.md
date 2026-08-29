@@ -3,11 +3,18 @@
 Timing asks when to act on an already-selected candidate. Existing staging code
 continues to run until a later translation is explicitly approved.
 
-## Current study
+## Current studies
 
 | Study | Role | Status | Production use |
 | --- | --- | --- | --- |
 | H-TIME-S2-001 - Dislocation Repair Surface | S2 | Completed; no repair edge | None |
+| [H-TIME-S2-002 - Confirmation and Path Surface](h-time-s2-002-confirmation-and-path-surface.md) | S2 | Design; not run | None |
+
+H-TIME-S2-002 is the single restart document for the next loop. It contains
+four related experiments -- confirmation after damage, trend birth/acceptance,
+compression/directional release, and deterioration warning -- under one data,
+event-clock, matching, and statistical contract. Do not split its grid into one
+paper per indicator or p-value.
 
 ## Why this follows the macro audit
 
