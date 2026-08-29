@@ -15,6 +15,8 @@ export const endpoints = {
   adminData: "/api/v1/admin/data",
   adminDataTestFetch: (symbol: string) => `/api/v1/admin/data/${encodeURIComponent(symbol)}/test-fetch`,
   adminLibraryFetch: "/api/v1/admin/library-fetch",
+  adminResultsFilingCoverage: "/api/v1/admin/results-filings/coverage",
+  adminResultsFilingFetch: "/api/v1/admin/results-filings/fetch",
   adminWatchlist: "/api/v1/admin/watchlist",
   adminWatchlistSymbol: (symbol: string) => `/api/v1/admin/watchlist/${encodeURIComponent(symbol)}`,
   adminPipeline: "/api/v1/admin/pipeline",

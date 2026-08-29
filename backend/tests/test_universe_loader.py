@@ -16,8 +16,56 @@ def test_frozen_stage2_universe_loads_inactive_and_membership_is_queryable(tmp_p
 
     total = connection.execute("SELECT COUNT(*) AS n FROM staging_symbols").fetchone()["n"]
     active = connection.execute("SELECT COUNT(*) AS n FROM staging_symbols WHERE active = 1").fetchone()["n"]
-    assert total > 700  # the real 32-symbol seed plus the frozen stage-2 file
-    assert active == 32  # 27 original + IWM + SOXX/XBI/ARKX/CIBR -- stage-2 constituent rows load inactive
+    # The reviewed snapshot has 775 price identities. AAPL and NVDA already
+    # exist in the 32-row active seed, so it contributes 773 new rows.
+    assert total == 805
+    assert active == 32
+
+    snapshot_symbols = connection.execute(
+        """
+        SELECT COUNT(DISTINCT symbol) AS n
+        FROM staging_universe_membership
+        WHERE stage = 'stage-2'
+        """
+    ).fetchone()["n"]
+    assert snapshot_symbols == 775
+
+    mapped_snapshot_symbols = connection.execute(
+        """
+        SELECT COUNT(DISTINCT membership.symbol) AS n
+        FROM staging_universe_membership AS membership
+        JOIN securities AS sec ON sec.primary_symbol = membership.symbol
+        WHERE membership.stage = 'stage-2'
+        """
+    ).fetchone()["n"]
+    ambiguous_mappings = connection.execute(
+        """
+        SELECT COUNT(*) AS n FROM (
+            SELECT membership.symbol
+            FROM staging_universe_membership AS membership
+            JOIN securities AS sec ON sec.primary_symbol = membership.symbol
+            WHERE membership.stage = 'stage-2'
+            GROUP BY membership.symbol
+            HAVING COUNT(DISTINCT sec.security_id) != 1
+        )
+        """
+    ).fetchone()["n"]
+    assert mapped_snapshot_symbols == 775
+    assert ambiguous_mappings == 0
+
+    anchor_audit = connection.execute(
+        """
+        SELECT source_roster_complete, price_symbol_mapping_complete,
+               complete_for_price_universe
+        FROM staging_universe_anchors
+        WHERE stage = 'stage-2'
+        ORDER BY anchor
+        """
+    ).fetchall()
+    assert len(anchor_audit) == 19
+    assert all(row["source_roster_complete"] == 1 for row in anchor_audit)
+    assert all(row["price_symbol_mapping_complete"] == 1 for row in anchor_audit)
+    assert all(row["complete_for_price_universe"] == 1 for row in anchor_audit)
 
     # IWM: a real small-cap control/reference series, added active with no
     # membership rows of its own (it's not a constituent of anything here).
@@ -122,27 +170,22 @@ def test_frozen_stage2_universe_loads_inactive_and_membership_is_queryable(tmp_p
     assert total_again == total
 
 
-def test_fetch_only_flag_is_independent_of_the_live_product_active_flag(tmp_path: Path) -> None:
-    # Real regression test for a real design gap the user caught directly:
-    # `active` was overloaded -- it gated fetch_data_stage (pull real
-    # price data) AND factor_engine/allocation_engine/instrument_engine
-    # (rank/size/propose it in the live Today-desk product), the same bit
-    # doing two different jobs. `fetch_only` lets a symbol's real price
-    # history be fetched for research use without silently adding it to
-    # the live product's universe -- exact SQL fragments used by the real
-    # pipeline stages, not a reimplementation, so this can't drift from
-    # what actually runs.
+def test_stage_members_use_library_path_not_live_pipeline(tmp_path: Path) -> None:
+    # The live fetch stage and live engines use active=1. Explicit stage
+    # membership uses the separately paced, per-symbol library path; one bad or
+    # slow research symbol must never enlarge or abort the Today-desk fetch.
     database = initialize_database(tmp_path / "fetch_only.db")
     connection = connect(database)
-    connection.execute(
-        "UPDATE staging_symbols SET fetch_only = 1 WHERE symbol = 'MRVL' AND active = 0"
-    )
-    connection.commit()
-
     fetch_data_targets = {
         row["symbol"]
         for row in connection.execute(
-            "SELECT symbol FROM staging_symbols WHERE (active = 1 OR fetch_only = 1) AND category != 'macro_series'"
+            "SELECT symbol FROM staging_symbols WHERE active = 1 AND category != 'macro_series'"
+        ).fetchall()
+    }
+    library_fetch_targets = {
+        row["symbol"]
+        for row in connection.execute(
+            "SELECT DISTINCT symbol FROM staging_universe_membership WHERE stage = 'stage-2'"
         ).fetchall()
     }
     live_product_targets = {
@@ -152,6 +195,7 @@ def test_fetch_only_flag_is_independent_of_the_live_product_active_flag(tmp_path
         ).fetchall()
     }
 
-    assert "MRVL" in fetch_data_targets  # fetch_only=1 -- real price data pulled
+    assert "MRVL" in library_fetch_targets
+    assert "MRVL" not in fetch_data_targets
     assert "MRVL" not in live_product_targets  # never ranked/allocated/proposed
-    assert "SPY" in fetch_data_targets and "SPY" in live_product_targets  # active=1 untouched, both as before
+    assert "SPY" in fetch_data_targets and "SPY" in live_product_targets

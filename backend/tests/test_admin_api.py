@@ -16,13 +16,18 @@ from backend.database import connect, initialize_database
 from backend.main import create_app
 from backend.providers import VerificationResult
 from backend.providers.fred import FredObservation, FredV2Verifier
-from backend.providers.yahoo import PriceBar, PriceFetchError
+from backend.providers.yahoo import PriceBar, PriceFetchError, PriceHistory
+from backend.pipeline.stages.common import _security_id_for
 from backend.secrets import (
     KeyringEnvironmentSecretStore,
     SecretStoreUnavailable,
     SecretValue,
 )
 from backend.seed import DEMO_DATASET_ID, DEMO_SNAPSHOT_ID, seed_demo
+from backend.universe.library_fetch import (
+    LIBRARY_DATASET_ID,
+    fetch_library_batch,
+)
 
 
 NOW = datetime(2026, 8, 24, 12, 0, tzinfo=timezone.utc)
@@ -224,7 +229,7 @@ def test_empty_v6_database_has_operator_and_readiness_catalog_but_no_decision_sn
         base_url="http://127.0.0.1:8000",
         client=("127.0.0.1", 52000),
     ) as client:
-        assert client.get("/api/health").json()["schema_version"] == "16"
+        assert client.get("/api/health").json()["schema_version"] == "20"
         assert client.get("/api/v1/desk/latest").status_code == 404
         payload = client.get("/api/v1/admin/providers").json()
         providers = payload["providers"]
@@ -356,11 +361,8 @@ def test_background_pipeline_run_is_pollable_to_completion(
     progress_run_id = started.json()["progress_run_id"]
     assert progress_run_id
 
-    # A real, full fetch across every staging symbol (709+ real rows,
-    # ~190k bar inserts even with an instant fake fetcher) genuinely takes
-    # real wall-clock time -- measured directly at ~10s on this machine.
-    # 30s leaves real margin for slower test hardware without masking an
-    # actual hang.
+    # The live pipeline deliberately fetches only the 32 active rows. The 773
+    # fetch_only research rows use the separate resumable library endpoint.
     deadline = time.monotonic() + 30.0
     final: dict | None = None
     saw_live_progress = False
@@ -492,17 +494,11 @@ def test_staging_universe_is_seeded_by_default_with_no_paid_provider_references(
         client=("127.0.0.1", 52000),
     ) as client:
         universe = client.get("/api/v1/admin/universe").json()
-    # 32 originally-curated symbols (27 + IWM + SOXX/XBI/ARKX/CIBR, all
-    # active) + 677 new stage-2 index/thematic-ETF constituents (frozen
-    # backend/universe/stage-2-2026-08-27.json, after a real, live-caught
-    # fix that dropped 14 non-ticker rows -- CUSIP-style earnout/contra
-    # identifiers and E-mini sector futures contracts, real artifacts of
-    # the source holdings files, never real tradeable tickers) loaded as
-    # active=0, fetch_only=1 -- real rows for real cross-sectional
-    # membership queries and real, deliberate admin-owned library fetching
-    # (library_fetch.py), deliberately not eligible for fetch_data_stage's
-    # live-pipeline fetch until someone deliberately activates them.
-    assert universe["summary"]["total"] == 709
+    # 32 originally-curated active rows plus 773 non-overlapping members from
+    # the reviewed 775-identity stage-2-2026-08-29 snapshot. The additions load
+    # as active=0, fetch_only=1 for membership queries and deliberate
+    # admin-owned library fetching, never live ranking/allocation by default.
+    assert universe["summary"]["total"] == 805
     assert universe["summary"]["active"] == 32
     assert universe["summary"]["by_category"]["macro_series"] == 4
     assert universe["summary"]["by_category"]["sector_equity_etf"] == 11
@@ -564,29 +560,69 @@ def test_watchlist_is_independently_editable_from_the_staging_universe(
         assert "AAPL" not in removed_symbols
 
         universe = client.get("/api/v1/admin/universe").json()
-        assert universe["summary"]["total"] == 709  # data library untouched by watchlist edits
+        assert universe["summary"]["total"] == 805  # data library untouched by watchlist edits
 
 
-def test_library_fetch_batch_is_per_symbol_atomic_and_never_touches_active_or_live_dataset(
+def test_library_fetch_batch_is_per_symbol_atomic_and_preserves_product_eligibility_and_live_dataset(
     tmp_path: Path,
 ) -> None:
     # Real regression test for the actual design ask: fetch real price data
-    # for staging_symbols.fetch_only=1 extended-library symbols (the
-    # stage-2 universe) without the live pipeline's all-or-nothing
-    # fetch_data_stage semantics, and without ever touching active=1 or a
+    # for the explicit stage-2 cohort without the live pipeline's all-or-nothing
+    # fetch_data_stage semantics, and without changing product eligibility or a
     # sealed production dataset snapshot. Admin-owned work, not "research
     # fetch" -- see developer-letter.md's precise line on this.
     database = initialize_database(tmp_path / "library-fetch.db")
     store = MemorySecretStore()
+    with connect(database, read_only=True) as before:
+        security_count_before = before.execute("SELECT COUNT(*) FROM securities").fetchone()[0]
+        active_before = {
+            row["symbol"]: row["active"]
+            for row in before.execute(
+                """
+                SELECT DISTINCT s.symbol, s.active
+                FROM staging_symbols AS s
+                JOIN staging_universe_membership AS membership
+                  ON membership.symbol = s.symbol
+                WHERE membership.stage = 'stage-2'
+                """
+            ).fetchall()
+        }
 
     calls: list[str] = []
 
-    def fetcher(symbol: str, *, range_: str = "1y", start_date: str | None = None) -> list[PriceBar]:
+    def fetcher(
+        symbol: str,
+        *,
+        range_: str = "1y",
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> PriceHistory:
         calls.append(symbol)
         if symbol == "MRVL":
             raise PriceFetchError("MRVL: simulated real fetch failure.")
-        bar_date = (date(2026, 8, 24) - timedelta(days=1)).isoformat()
-        return [PriceBar(symbol=symbol, time=bar_date, open=1.0, high=1.0, low=1.0, close=1.0, volume=1.0)]
+        bar_date = "2026-08-27"
+        return PriceHistory(
+            [
+                PriceBar(
+                    symbol=symbol,
+                    time=bar_date,
+                    open=1.0,
+                    high=1.0,
+                    low=1.0,
+                    close=1.0,
+                    volume=1.0,
+                    raw_close=1.0,
+                    adjusted_close=1.0,
+                    adjusted_open=1.0,
+                    adjusted_high=1.0,
+                    adjusted_low=1.0,
+                    adjustment_factor=1.0,
+                )
+            ],
+            provider_first_trade_date=bar_date,
+            provider_data_granularity="1d",
+            provider_exchange_timezone="America/New_York",
+        )
 
     app = create_app(
         database,
@@ -602,6 +638,7 @@ def test_library_fetch_batch_is_per_symbol_atomic_and_never_touches_active_or_li
         client=("127.0.0.1", 52000),
     ) as client:
         result = client.post("/api/v1/admin/library-fetch?batch_size=5").json()
+        coverage = client.get("/api/v1/admin/library-fetch").json()
 
     fetched_symbols = {item["symbol"] for item in result["fetched"]}
     failed_symbols = {item["symbol"] for item in result["failed"]}
@@ -612,6 +649,13 @@ def test_library_fetch_batch_is_per_symbol_atomic_and_never_touches_active_or_li
         assert len(fetched_symbols) == 4
     assert result["dataset_snapshot_id"] == "library-fetch-ongoing"
     assert result["remaining"] > 0  # far more than 5 fetch_only=1 symbols exist
+    assert coverage["accepted_symbols"] == len(fetched_symbols)
+    assert coverage["failed_symbols"] == len(failed_symbols)
+    assert coverage["remaining_symbols"] == result["remaining"]
+    assert coverage["contract_revision"] == "yahoo-adjclose-scaled-ohlc-v2"
+    assert coverage["eligible_symbols"] == 775
+    assert coverage["mapped_security_symbols"] == 775
+    assert coverage["blocked_by_security_mapping"] == 0
 
     # Never a sealed production snapshot -- a real, always-mutable library one.
     connection = connect(database, read_only=True)
@@ -620,15 +664,16 @@ def test_library_fetch_batch_is_per_symbol_atomic_and_never_touches_active_or_li
     ).fetchone()
     assert dataset["mode"] == "research"
     assert dataset["immutable"] == 0
+    assert connection.execute("SELECT COUNT(*) FROM securities").fetchone()[0] == security_count_before
 
-    # Fetched symbols must never have been touched by the live pipeline's
-    # active flag -- these stay research-only, fetch_only=1, active=0.
+    # The library path must never mutate product eligibility. AAPL/NVDA are
+    # legitimate active/cohort overlaps; the other current members remain
+    # inactive. All retain exactly their pre-fetch state.
     for symbol in fetched_symbols:
         row = connection.execute(
             "SELECT active, fetch_only FROM staging_symbols WHERE symbol = ?", (symbol,)
         ).fetchone()
-        assert row["active"] == 0
-        assert row["fetch_only"] == 1
+        assert row["active"] == active_before[symbol]
 
     # Resumable: calling again skips already-fetched symbols, never re-fetches them.
     with TestClient(
@@ -639,6 +684,296 @@ def test_library_fetch_batch_is_per_symbol_atomic_and_never_touches_active_or_li
         second = client.post("/api/v1/admin/library-fetch?batch_size=5").json()
     second_fetched = {item["symbol"] for item in second["fetched"]}
     assert fetched_symbols.isdisjoint(second_fetched)
+
+
+def test_library_refetch_rejects_short_response_without_erasing_longer_legacy_history(
+    tmp_path: Path,
+) -> None:
+    database = initialize_database(tmp_path / "library-partial-refetch.db")
+    with connect(database) as connection:
+        row = connection.execute(
+            """
+            SELECT DISTINCT s.symbol, s.name, s.category
+            FROM staging_symbols AS s
+            JOIN staging_universe_membership AS membership
+              ON membership.symbol = s.symbol
+            WHERE membership.stage = 'stage-2'
+            ORDER BY s.sort_order LIMIT 1
+            """
+        ).fetchone()
+        security_id = connection.execute(
+            "SELECT security_id FROM securities WHERE primary_symbol = ?",
+            (row["symbol"],),
+        ).fetchone()["security_id"]
+        reference_dataset_id = "sealed-prior-price-history"
+        connection.execute(
+            """
+            INSERT INTO dataset_snapshots (
+                id, as_of, created_at, mode, data_classification, is_live,
+                is_demo, status, immutable, source_manifest_json
+            ) VALUES (?, ?, ?, 'research', 'real', 0, 0, 'ongoing', 0, '{}')
+            """,
+            (reference_dataset_id, NOW.isoformat(), NOW.isoformat()),
+        )
+        connection.executemany(
+            """
+            INSERT INTO symbol_bars (
+                dataset_snapshot_id, security_id, time, open, high, low, close,
+                volume, source_key, observed_at, available_at, ingested_at
+            ) VALUES (?, ?, ?, 10, 10, 10, 10, 100, 'yahoo', ?, ?, ?)
+            """,
+            [
+                (
+                    reference_dataset_id,
+                    security_id,
+                    day,
+                    f"{day}T00:00:00Z",
+                    f"{day}T00:00:00Z",
+                    NOW.isoformat(),
+                )
+                for day in (
+                    "2026-08-20", "2026-08-21", "2026-08-24", "2026-08-25",
+                    "2026-08-26", "2026-08-27",
+                )
+            ],
+        )
+        connection.execute(
+            "UPDATE dataset_snapshots SET status = 'validated', immutable = 1 WHERE id = ?",
+            (reference_dataset_id,),
+        )
+        connection.commit()
+
+        def short_fetcher(
+            symbol: str, *, start_date: str, end_date: str
+        ) -> PriceHistory:
+            return PriceHistory(
+                [
+                    PriceBar(symbol, day, 10, 10, 10, 10, 100, 10, 10, 10, 10, 10, 1)
+                    for day in (
+                        "2026-08-20", "2026-08-24", "2026-08-25",
+                        "2026-08-26", "2026-08-27",
+                    )
+                ],
+                provider_first_trade_date="2026-08-20",
+                provider_data_granularity="1d",
+                provider_exchange_timezone="America/New_York",
+            )
+
+        result = fetch_library_batch(connection, short_fetcher, NOW, batch_size=1)
+
+        assert result["fetched"] == []
+        assert result["failed"][0]["symbol"] == row["symbol"]
+        assert "fewer than the best existing 6" in result["failed"][0]["error"]
+        assert connection.execute(
+            "SELECT COUNT(*) FROM symbol_bars WHERE dataset_snapshot_id = ? AND security_id = ?",
+            (reference_dataset_id, security_id),
+        ).fetchone()[0] == 6
+        status = connection.execute(
+            "SELECT * FROM staging_price_fetch_status WHERE symbol = ?", (row["symbol"],)
+        ).fetchone()
+        assert status["coverage_status"] == "failed"
+        assert status["returned_bar_count"] == 5
+
+
+def test_library_fetch_rejects_missing_explicit_adjusted_ohlc(tmp_path: Path) -> None:
+    database = initialize_database(tmp_path / "library-missing-adjusted.db")
+    with connect(database) as connection:
+        row = connection.execute(
+            """
+            SELECT DISTINCT s.symbol
+            FROM staging_symbols AS s
+            JOIN staging_universe_membership AS membership
+              ON membership.symbol = s.symbol
+            WHERE membership.stage = 'stage-2'
+            ORDER BY s.sort_order LIMIT 1
+            """
+        ).fetchone()
+
+        def incomplete_fetcher(
+            symbol: str, *, start_date: str, end_date: str
+        ) -> PriceHistory:
+            # Original seven-field shape: compatible for close-only callers,
+            # explicitly ineligible for adjusted-OHLC research.
+            return PriceHistory(
+                [PriceBar(symbol, "2026-08-27", 10, 10, 10, 10, 100)],
+                provider_first_trade_date="2026-08-27",
+                provider_data_granularity="1d",
+                provider_exchange_timezone="America/New_York",
+            )
+
+        result = fetch_library_batch(connection, incomplete_fetcher, NOW, batch_size=1)
+
+        assert result["fetched"] == []
+        assert result["failed"][0]["symbol"] == row["symbol"]
+        assert "full dual-basis OHLC contract" in result["failed"][0]["error"]
+        status = connection.execute(
+            "SELECT * FROM staging_price_fetch_status WHERE symbol = ?", (row["symbol"],)
+        ).fetchone()
+        assert status["coverage_status"] == "failed"
+
+
+def test_library_fetch_accepts_sub_cent_adjusted_ohlc_rounding_noise(tmp_path: Path) -> None:
+    database = initialize_database(tmp_path / "library-adjusted-rounding.db")
+    with connect(database) as connection:
+        def rounded_fetcher(
+            symbol: str, *, start_date: str, end_date: str
+        ) -> PriceHistory:
+            return PriceHistory(
+                [
+                    PriceBar(
+                        symbol,
+                        end_date,
+                        99.0,
+                        100.0,
+                        98.0,
+                        100.0,
+                        100.0,
+                        100.0,
+                        100.0,
+                        99.0,
+                        100.0 - 1e-10,
+                        98.0,
+                        1.0,
+                    )
+                ],
+                provider_first_trade_date=end_date,
+                provider_data_granularity="1d",
+                provider_exchange_timezone="America/New_York",
+            )
+
+        result = fetch_library_batch(connection, rounded_fetcher, NOW, batch_size=1)
+
+        assert len(result["fetched"]) == 1
+        assert result["failed"] == []
+
+
+def test_library_fetch_accepts_source_reported_range_anomaly(tmp_path: Path) -> None:
+    database = initialize_database(tmp_path / "library-provider-range-anomaly.db")
+    with connect(database) as connection:
+        def anomalous_fetcher(
+            symbol: str, *, start_date: str, end_date: str
+        ) -> PriceHistory:
+            # Mirrors Yahoo's official low above an auction/open value.
+            return PriceHistory(
+                [
+                    PriceBar(
+                        symbol, end_date, 99.0, 101.0, 100.9, 100.0, 100.0,
+                        100.0, 100.0, 99.0, 101.0, 100.9, 1.0,
+                    )
+                ],
+                provider_first_trade_date=end_date,
+                provider_data_granularity="1d",
+                provider_exchange_timezone="America/New_York",
+            )
+
+        result = fetch_library_batch(connection, anomalous_fetcher, NOW, batch_size=1)
+
+        assert len(result["fetched"]) == 1
+        assert result["failed"] == []
+
+
+def test_library_first_fetch_rejects_sparse_multi_decade_response(tmp_path: Path) -> None:
+    database = initialize_database(tmp_path / "library-sparse-first-fetch.db")
+    with connect(database) as connection:
+        def sparse_fetcher(
+            symbol: str, *, start_date: str, end_date: str
+        ) -> PriceHistory:
+            return PriceHistory(
+                [
+                    PriceBar(symbol, day, 10, 10, 10, 10, 100, 10, 10, 10, 10, 10, 1)
+                    for day in (start_date, end_date)
+                ],
+                provider_first_trade_date=start_date,
+                provider_data_granularity="1d",
+                provider_exchange_timezone="America/New_York",
+            )
+
+        result = fetch_library_batch(connection, sparse_fetcher, NOW, batch_size=1)
+
+        assert result["fetched"] == []
+        assert "daily coverage requires" in result["failed"][0]["error"]
+
+
+def test_library_failed_upgrade_preserves_last_accepted_receipt_and_bars(
+    tmp_path: Path,
+) -> None:
+    database = initialize_database(tmp_path / "library-preserve-success.db")
+    with connect(database) as connection:
+        symbol = connection.execute(
+            """
+            SELECT s.symbol
+            FROM staging_symbols AS s
+            JOIN staging_universe_membership AS membership
+              ON membership.symbol = s.symbol
+            WHERE membership.stage = 'stage-2'
+            ORDER BY s.sort_order LIMIT 1
+            """
+        ).fetchone()["symbol"]
+        connection.execute(
+            """
+            DELETE FROM securities
+            WHERE primary_symbol IN (
+                SELECT symbol FROM staging_universe_membership WHERE stage = 'stage-2'
+            ) AND primary_symbol != ?
+            """,
+            (symbol,),
+        )
+        connection.commit()
+
+        def accepted_fetcher(
+            requested_symbol: str, *, start_date: str, end_date: str
+        ) -> PriceHistory:
+            return PriceHistory(
+                [
+                    PriceBar(
+                        requested_symbol, end_date, 10, 10, 10, 10, 100,
+                        10, 10, 10, 10, 10, 1,
+                    )
+                ],
+                provider_first_trade_date=end_date,
+                provider_data_granularity="1d",
+                provider_exchange_timezone="America/New_York",
+            )
+
+        first = fetch_library_batch(connection, accepted_fetcher, NOW, batch_size=1)
+        assert first["fetched"][0]["symbol"] == symbol
+        connection.execute(
+            "UPDATE staging_price_fetch_status SET contract_revision = 'old-contract' "
+            "WHERE symbol = ?",
+            (symbol,),
+        )
+        connection.commit()
+
+        def fail(*args, **kwargs):
+            raise PriceFetchError("temporary Yahoo outage")
+
+        second = fetch_library_batch(connection, fail, NOW, batch_size=1)
+        status = connection.execute(
+            "SELECT * FROM staging_price_fetch_status WHERE symbol = ?", (symbol,)
+        ).fetchone()
+
+        assert second["failed"][0]["symbol"] == symbol
+        assert status["coverage_status"] == "accepted"
+        assert status["last_attempt_status"] == "failed"
+        assert status["last_error"] == "temporary Yahoo outage"
+        assert connection.execute(
+            "SELECT COUNT(*) FROM symbol_bars WHERE dataset_snapshot_id = ?",
+            (LIBRARY_DATASET_ID,),
+        ).fetchone()[0] == 1
+
+
+def test_results_filing_fetch_requires_declared_sec_user_agent(
+    admin_context: tuple[Path, TestClient, MemorySecretStore, FakeVerifier],
+) -> None:
+    _, client, _, _ = admin_context
+
+    coverage = client.get("/api/v1/admin/results-filings/coverage")
+    assert coverage.status_code == 200
+    assert coverage.json()["timing_basis"] == "sec_acceptance_proxy_not_first_public"
+
+    response = client.post("/api/v1/admin/results-filings/fetch")
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "sec_user_agent_required"
 
 
 def test_seeded_admin_inventory_strategies_signals_and_chart_annotations(

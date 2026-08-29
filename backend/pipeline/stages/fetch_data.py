@@ -96,7 +96,7 @@ def run_fetch_data_stage(
     failed_series: dict[str, str] = {}
     total_items = len(SERIES_METADATA) + len(
         connection.execute(
-            "SELECT symbol FROM staging_symbols WHERE (active = 1 OR fetch_only = 1) AND category != 'macro_series'"
+            "SELECT symbol FROM staging_symbols WHERE active = 1 AND category != 'macro_series'"
         ).fetchall()
     )
     item_index = 0
@@ -131,7 +131,7 @@ def run_fetch_data_stage(
     staging_rows = connection.execute(
         """
         SELECT symbol, name, category FROM staging_symbols
-        WHERE (active = 1 OR fetch_only = 1) AND category != 'macro_series'
+        WHERE active = 1 AND category != 'macro_series'
         ORDER BY sort_order
         """
     ).fetchall()
@@ -280,9 +280,19 @@ def run_fetch_data_stage(
                 bar.low,
                 bar.close,
                 bar.volume,
+                bar.raw_close,
+                bar.adjusted_close,
+                bar.adjusted_open,
+                bar.adjusted_high,
+                bar.adjusted_low,
+                bar.adjustment_factor,
                 "yahoo",
-                f"{bar.time}T00:00:00Z",
-                f"{bar.time}T00:00:00Z",
+                # Yahoo's daily chart labels the trading session but does not
+                # supply an auditable close-publication timestamp. Midnight
+                # UTC was false precision (and before the U.S. session), so
+                # availability remains unknown rather than fabricated.
+                None,
+                None,
                 timestamp,
             )
             for bar in bars
@@ -291,8 +301,10 @@ def run_fetch_data_stage(
             """
             INSERT OR IGNORE INTO symbol_bars (
                 dataset_snapshot_id, security_id, time, open, high, low, close,
-                volume, source_key, observed_at, available_at, ingested_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                volume, raw_close, adjusted_close, adjusted_open, adjusted_high, adjusted_low,
+                adjustment_factor, source_key, observed_at, available_at,
+                ingested_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             bar_rows,
         )

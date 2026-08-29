@@ -6,7 +6,7 @@ import sqlite3
 import threading
 import uuid
 from contextlib import asynccontextmanager, contextmanager
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Iterator, Literal, Mapping
 
@@ -54,9 +54,22 @@ from backend.pipeline_progress import finish_run as finish_background_run
 from backend.pipeline_progress import get_progress
 from backend.pipeline_progress import start_run as start_background_run
 from backend.universe.library_fetch import DEFAULT_BATCH_SIZE as DEFAULT_LIBRARY_FETCH_BATCH_SIZE
-from backend.universe.library_fetch import fetch_library_batch
+from backend.universe.library_fetch import fetch_library_batch, get_library_fetch_coverage
+from backend.universe.earnings_fetch import (
+    DEFAULT_BATCH_SIZE as DEFAULT_RESULTS_FILING_FETCH_BATCH_SIZE,
+    DEFAULT_START_DATE as DEFAULT_RESULTS_FILING_START_DATE,
+    fetch_results_filing_batch,
+    get_results_filing_coverage_summary,
+)
 from backend.providers import ProviderVerifier
 from backend.providers.fred import FredV2Verifier, fetch_series_observations
+from backend.providers.sec_edgar import (
+    SecEdgarFetchError,
+    SecSubmissionHistory,
+    SecTickerIdentity,
+    fetch_company_ticker_map,
+    fetch_results_filings,
+)
 from backend.providers.yahoo import PriceFetchError, fetch_daily_bars
 from backend.repository import (
     SnapshotNotFoundError,
@@ -102,6 +115,9 @@ def create_app(
     provider_verifiers: Mapping[str, ProviderVerifier] | None = None,
     fred_observation_fetcher: FredFetcher | None = None,
     price_fetcher: PriceFetcher | None = None,
+    sec_ticker_map_fetcher: Callable[[str], dict[str, tuple[SecTickerIdentity, ...]]] | None = None,
+    sec_submission_fetcher: Callable[..., SecSubmissionHistory] | None = None,
+    sec_user_agent: str | None = None,
     now: Callable[[], datetime] | None = None,
 ) -> FastAPI:
     path = resolve_database_path(database_path or os.getenv("HEAE_DATABASE_PATH"))
@@ -110,10 +126,14 @@ def create_app(
     verifiers = dict(provider_verifiers or {"fred_v2": FredV2Verifier()})
     fred_fetcher = fred_observation_fetcher or fetch_series_observations
     price_fetcher_fn = price_fetcher or fetch_daily_bars
+    sec_ticker_fetcher_fn = sec_ticker_map_fetcher or fetch_company_ticker_map
+    sec_submission_fetcher_fn = sec_submission_fetcher or fetch_results_filings
+    sec_user_agent_value = sec_user_agent if sec_user_agent is not None else os.getenv("HEAE_SEC_USER_AGENT", "")
     now_fn = now or utc_now
     runtime_id = f"runtime-{uuid.uuid4()}"
     provider_operation_locks: dict[str, threading.Lock] = {}
     provider_operation_locks_guard = threading.Lock()
+    results_filing_fetch_lock = threading.Lock()
     admin_origins = validate_admin_origins(os.getenv("HEAE_ADMIN_ALLOWED_ORIGINS"))
 
     @asynccontextmanager
@@ -134,6 +154,8 @@ def create_app(
     application.state.provider_verifiers = verifiers
     application.state.fred_observation_fetcher = fred_fetcher
     application.state.price_fetcher = price_fetcher_fn
+    application.state.sec_ticker_map_fetcher = sec_ticker_fetcher_fn
+    application.state.sec_submission_fetcher = sec_submission_fetcher_fn
     application.state.admin_origins = admin_origins
     application.state.runtime_id = runtime_id
     application.state.provider_operation_locks = provider_operation_locks
@@ -565,24 +587,92 @@ def create_app(
             "period_end": max(bar.time for bar in bars),
         }
 
+    @application.get(
+        "/api/v1/admin/library-fetch",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_library_fetch_coverage() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            return get_library_fetch_coverage(connection)
+
     @application.post(
         "/api/v1/admin/library-fetch",
         tags=["operator"],
         dependencies=[Depends(direct_loopback_guard)],
     )
     def admin_library_fetch_batch(batch_size: int = DEFAULT_LIBRARY_FETCH_BATCH_SIZE) -> dict[str, Any]:
-        # Real, per-symbol atomic fetch for staging_symbols.fetch_only=1
-        # rows (the stage-2 extended data library) -- admin/production
+        # Real, per-symbol atomic fetch for the explicit stage-2 membership
+        # cohort -- admin/production
         # work, deliberately NOT called "research fetch" (see developer-
         # letter.md) and deliberately NOT the live pipeline's
-        # fetch_data_stage; never touches active=1 or the live product's
-        # dataset. One bad symbol in this batch never blocks the rest, and
+        # fetch_data_stage; never changes product eligibility or writes the
+        # live product's dataset. Active/cohort overlaps remain active. One bad symbol in this batch never blocks the rest, and
         # never blocks the live Today-desk product's own daily refresh.
         # Naturally resumable -- already-fetched symbols are skipped, so
         # repeated clicks over multiple sessions just continue.
         safe_batch_size = max(1, min(batch_size, 100))
         with connect(path) as connection:
             return fetch_library_batch(connection, price_fetcher_fn, now_fn(), batch_size=safe_batch_size)
+
+    @application.get(
+        "/api/v1/admin/results-filings/coverage",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_results_filing_coverage() -> dict[str, Any]:
+        with connect(path, read_only=True) as connection:
+            return get_results_filing_coverage_summary(connection)
+
+    @application.post(
+        "/api/v1/admin/results-filings/fetch",
+        tags=["operator"],
+        dependencies=[Depends(direct_loopback_guard)],
+    )
+    def admin_results_filing_fetch(
+        batch_size: int = DEFAULT_RESULTS_FILING_FETCH_BATCH_SIZE,
+        start_date: date = DEFAULT_RESULTS_FILING_START_DATE,
+        end_date: date | None = None,
+    ) -> dict[str, Any]:
+        # Bounded source ingestion only: this records SEC Item 2.02 filing
+        # rows, never launches a hypothesis, and never changes live strategy
+        # state. One process lock prevents two browser tabs doubling traffic.
+        if not sec_user_agent_value.strip():
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "sec_user_agent_required",
+                    "message": "Set HEAE_SEC_USER_AGENT to an application name and contact email before SEC ingestion.",
+                },
+            )
+        if not results_filing_fetch_lock.acquire(blocking=False):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "results_filing_fetch_in_progress",
+                    "message": "Another SEC results-filing batch is already running.",
+                },
+            )
+        try:
+            safe_batch_size = max(1, min(batch_size, 100))
+            with connect(path) as connection:
+                return fetch_results_filing_batch(
+                    connection,
+                    sec_user_agent_value,
+                    now_fn(),
+                    batch_size=safe_batch_size,
+                    start_date=start_date,
+                    end_date=end_date,
+                    ticker_map_fetcher=sec_ticker_fetcher_fn,
+                    submission_fetcher=sec_submission_fetcher_fn,
+                )
+        except SecEdgarFetchError as error:
+            raise HTTPException(
+                status_code=502,
+                detail={"code": "sec_edgar_fetch_failed", "message": str(error)},
+            ) from error
+        finally:
+            results_filing_fetch_lock.release()
 
     @application.get(
         "/api/v1/admin/pipeline",

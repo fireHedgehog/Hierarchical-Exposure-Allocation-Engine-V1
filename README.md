@@ -60,13 +60,13 @@ make verify
 
 Version `0.1.0` is the initial manual-first application draft. It provides the application shell, persistence model, operational controls, synthetic examples, and inspection surfaces needed to develop the engine in small, testable vertical slices.
 
-The manual pipeline's six compute stages — from fetching source data through classifying the market regime, ranking candidates, sizing exposure, and proposing an instrument — are real, running on free-tier data (FRED for macro, Yahoo for prices) over a database-seeded staging universe of 32 tradeable symbols, alongside a separate, frozen 677-symbol reference snapshot (real index and sector/thematic ETF membership) used for cross-sectional research, not the live product. One stage (publishing the final snapshot) remains a placeholder. Some strategies are now built from smaller, independently swappable pieces rather than one fixed formula, and a research scorecard checks how much genuinely new information a candidate factor adds before it's trusted. See [engine milestones](docs/engine-milestones.md) for verified status and examples. Live paid-provider ingestion, a governed production universe, scheduling, broker connectivity, and order handling remain outside this milestone. The application is therefore a research and simulation environment; its records are not trading instructions.
+The manual pipeline's six compute stages — from fetching source data through classifying the market regime, ranking candidates, sizing exposure, and proposing an instrument — are real, running on free-tier data (FRED for macro, Yahoo for prices) over an 805-row database-seeded staging library with 32 active rows. A separate, dated and disposable [`stage-2-2026-08-29.json`](backend/universe/stage-2-2026-08-29.json) snapshot carries 775 real index and sector/thematic ETF price identities; its 773 non-overlapping additions are research-only rather than live-product candidates. One stage (publishing the final snapshot) remains a placeholder. Some strategies are now built from smaller, independently swappable pieces rather than one fixed formula, and a research scorecard checks how much genuinely new information a candidate factor adds before it's trusted. See [engine milestones](docs/engine-milestones.md) for verified status and examples. Live paid-provider ingestion, a governed production universe, scheduling, broker connectivity, and order handling remain outside this milestone. The application is therefore a research and simulation environment; its records are not trading instructions.
 
 Runtime databases, caches, vendor data, and generated run artifacts live outside version control. Provider secrets are resolved from the operating-system keychain or injected environment variables. They are neither stored in the application database nor returned to the browser after submission. See [Operations](docs/operations.md) for credential setup, verification behavior, and the scheduling gate.
 
 ## Data-provider onboarding
 
-The next FRED/ALFRED regime slice needs one provider account: FRED. After that credential is healthy, there are **zero additional registrations needed now**. A healthy key proves access only; the FRED/ALFRED ingestion adapter and stored dataset are still the next implementation work.
+FRED and Yahoo ingestion are implemented and have already produced the stored data used by the six-stage free-data engine. FRED remains the only actionable provider account; there are **zero additional registrations needed now**. A healthy credential proves access, while stored-data health and engine readiness remain separate checks.
 
 The researched full-desk plan currently adds three accounts later:
 
@@ -80,9 +80,10 @@ Do not purchase or enter those three keys yet. Their adapters, entitlement-speci
 
 The free-data engine build (all six compute stages) is done — see [engine milestones](docs/engine-milestones.md). Next:
 
-1. build the point-in-time security master and versioned universe (roadmap phase 2) — the staging universe is still a free-data fixture, not a governed, effective-dated eligibility contract;
-2. decide whether `publish_snapshot` needs its own implementation or is redundant now that the orchestrator seals snapshots directly;
-3. optimize within pilot mode (Milestone 4) — the naive factor/backtest formulas are real but currently lose to buy-and-hold on average.
+1. review the continuous event-time leadership design in [H-XSEC-S2-002](docs/hypotheses/staging_v2/cross-sectional/h-xsec-s2-002-continuous-leadership-state.md) before running it; the earlier calendar-quarter Cross/Theme result is retained only as a diagnosed failed design, while optional SEC Item 2.02 ingestion remains a filing-time proxy rather than an earnings timestamp;
+2. build the point-in-time security master and versioned universe (roadmap phase 2) — the staging universe is still a free-data fixture, not a governed, effective-dated eligibility contract;
+3. decide whether `publish_snapshot` needs its own implementation or is redundant now that the orchestrator seals snapshots directly;
+4. optimize within pilot mode (Milestone 4) — the naive factor/backtest formulas are real but currently lose to buy-and-hold on average.
 
 Scheduling becomes appropriate only after repeated manual runs are reproducible and operationally safe.
 

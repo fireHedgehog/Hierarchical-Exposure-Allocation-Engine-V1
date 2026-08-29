@@ -22,6 +22,36 @@ interface LibraryFetchResult {
   remaining: number;
 }
 
+interface LibraryFetchCoverage {
+  contract_revision: string;
+  requested_to: string;
+  eligible_symbols: number;
+  mapped_security_symbols: number;
+  blocked_by_security_mapping: number;
+  accepted_symbols: number;
+  failed_symbols: number;
+  remaining_symbols: number;
+}
+
+interface ResultsFilingCoverage {
+  eligible_symbols: number;
+  mapped_security_symbols: number;
+  blocked_by_security_mapping: number;
+  attempted_symbols: number;
+  remaining_fetchable: number;
+  issuer_filings: number;
+  timing_basis: string;
+}
+
+interface ResultsFilingFetchResult {
+  processed: { symbol: string; status: string; filing_count: number }[];
+  failed: { symbol: string; error: string }[];
+  issuer_filings_seen: number;
+  remaining_fetchable: number;
+  blocked_by_security_mapping: number;
+  timing_basis: string;
+}
+
 /** Shared query state (search/sort/health/page) for one compact symbol
  * table instance. Two independent instances back the watchlist and the
  * full data library -- separate tables, separate state, per the real
@@ -67,6 +97,8 @@ function useSymbolTableQuery(scope: "watchlist" | "all") {
 export function DataManagementPage() {
   const watchlistTable = useSymbolTableQuery("watchlist");
   const libraryTable = useSymbolTableQuery("all");
+  const libraryFetchCoverage = useApi<LibraryFetchCoverage>(endpoints.adminLibraryFetch);
+  const resultsFilingCoverage = useApi<ResultsFilingCoverage>(endpoints.adminResultsFilingCoverage);
 
   const assets = watchlistTable.state.data?.assets ?? [];
   const summary = watchlistTable.state.data?.summary;
@@ -120,10 +152,33 @@ export function DataManagementPage() {
       const payload: LibraryFetchResult = await response.json();
       setLibraryFetchResult(payload);
       libraryTable.state.reload();
+      libraryFetchCoverage.reload();
     } catch {
       setLibraryFetchError("Request failed.");
     } finally {
       setLibraryFetchPending(false);
+    }
+  }
+
+  const [resultsFilingFetchPending, setResultsFilingFetchPending] = useState(false);
+  const [resultsFilingFetchResult, setResultsFilingFetchResult] = useState<ResultsFilingFetchResult | null>(null);
+  const [resultsFilingFetchError, setResultsFilingFetchError] = useState<string | null>(null);
+  async function fetchResultsFilingBatch() {
+    setResultsFilingFetchPending(true);
+    setResultsFilingFetchError(null);
+    try {
+      const response = await fetch(endpoints.adminResultsFilingFetch, { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) {
+        const message = payload?.detail?.message;
+        throw new Error(typeof message === "string" ? message : `HTTP ${response.status}`);
+      }
+      setResultsFilingFetchResult(payload as ResultsFilingFetchResult);
+      resultsFilingCoverage.reload();
+    } catch (error) {
+      setResultsFilingFetchError(error instanceof Error ? error.message : "Request failed.");
+    } finally {
+      setResultsFilingFetchPending(false);
     }
   }
 
@@ -137,9 +192,18 @@ export function DataManagementPage() {
             <button
               className="button button--quiet"
               type="button"
+              onClick={fetchResultsFilingBatch}
+              disabled={resultsFilingFetchPending || libraryFetchPending}
+              title="Fetches a paced, resumable batch of SEC 8-K Item 2.02 filing rows. Acceptance time is only a filing-time proxy; this does not run an experiment."
+            >
+              <Download aria-hidden="true" size={15} /> {resultsFilingFetchPending ? "Fetching SEC filings…" : "Fetch SEC results filings"}
+            </button>
+            <button
+              className="button button--quiet"
+              type="button"
               onClick={fetchLibraryBatch}
-              disabled={libraryFetchPending}
-              title="Fetches real price history for the extended data library (staging_symbols.fetch_only=1) -- admin work, never touches the live Today-desk product's active symbols or dataset. Resumable: click again for the next batch."
+              disabled={libraryFetchPending || resultsFilingFetchPending}
+              title="Fetches real price history for the explicit stage-2 cohort. This admin action never changes Today-desk eligibility or writes its live dataset. Resumable: click again for the next batch."
             >
               <Download aria-hidden="true" size={15} /> {libraryFetchPending ? "Fetching…" : "Fetch data library"}
             </button>
@@ -149,8 +213,10 @@ export function DataManagementPage() {
               onClick={() => {
                 watchlistTable.state.reload();
                 libraryTable.state.reload();
+                libraryFetchCoverage.reload();
+                resultsFilingCoverage.reload();
               }}
-              disabled={watchlistTable.state.loading || libraryTable.state.loading}
+              disabled={watchlistTable.state.loading || libraryTable.state.loading || libraryFetchCoverage.loading || resultsFilingCoverage.loading}
             >
               <RefreshCw aria-hidden="true" size={15} /> Refresh inventory
             </button>
@@ -169,6 +235,31 @@ export function DataManagementPage() {
               {" "}Failed: {libraryFetchResult.failed.map((item) => `${item.symbol} (${item.error})`).join(", ")}
             </span>
           ) : null}
+        </div>
+      ) : libraryFetchCoverage.data ? (
+        <div className="library-fetch-banner">
+          <strong>Adjusted-OHLC library:</strong>{" "}
+          {libraryFetchCoverage.data.accepted_symbols}/{libraryFetchCoverage.data.eligible_symbols} symbols accepted through {libraryFetchCoverage.data.requested_to}; {libraryFetchCoverage.data.remaining_symbols} remaining.
+          {libraryFetchCoverage.data.blocked_by_security_mapping ? <span> {libraryFetchCoverage.data.blocked_by_security_mapping} lack a unique compiled price identity.</span> : null}
+          {libraryFetchCoverage.data.failed_symbols ? <span> {libraryFetchCoverage.data.failed_symbols} latest attempts failed and remain retryable.</span> : null}
+        </div>
+      ) : null}
+      {resultsFilingFetchError ? (
+        <div className="library-fetch-banner library-fetch-banner--error">{resultsFilingFetchError}</div>
+      ) : null}
+      {resultsFilingFetchResult ? (
+        <div className="library-fetch-banner">
+          <strong>SEC results-filing batch:</strong>{" "}
+          {resultsFilingFetchResult.processed.length} symbols inspected, {resultsFilingFetchResult.issuer_filings_seen} issuer filing rows seen, {resultsFilingFetchResult.failed.length} request failures, {resultsFilingFetchResult.remaining_fetchable} fetchable symbols remaining.
+          {resultsFilingFetchResult.blocked_by_security_mapping ? <span> {resultsFilingFetchResult.blocked_by_security_mapping} await price-security mapping.</span> : null}
+          <span> SEC acceptance is a filing-time proxy, not issuer first-public time.</span>
+        </div>
+      ) : resultsFilingCoverage.data ? (
+        <div className="library-fetch-banner">
+          <strong>SEC results-filing coverage:</strong>{" "}
+          {resultsFilingCoverage.data.attempted_symbols}/{resultsFilingCoverage.data.mapped_security_symbols} price-mapped symbols inspected; {resultsFilingCoverage.data.issuer_filings} linked issuer filing rows stored; {resultsFilingCoverage.data.remaining_fetchable} fetchable remaining.
+          {resultsFilingCoverage.data.blocked_by_security_mapping ? <span> {resultsFilingCoverage.data.blocked_by_security_mapping}/{resultsFilingCoverage.data.eligible_symbols} symbols still await price-security mapping.</span> : null}
+          <span> Current-CIK Item 2.02 rows only; not complete earnings history.</span>
         </div>
       ) : null}
       <ResourceState loading={watchlistTable.state.loading} error={watchlistTable.state.error} onRetry={watchlistTable.state.reload} resource="data inventory" />

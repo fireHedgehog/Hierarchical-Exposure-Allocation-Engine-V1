@@ -1,41 +1,32 @@
 # Cross-Sectional Research - Staging V2
 
-This type asks where an existing risk budget should be expressed relative to a
-declared peer group. The larger disposable Stage 2 dataset is research-only; its
-symbols do not enter the live desk universe.
+This folder asks whether price leadership contains a small, usable relationship.
+It does not require sector diffusion, an earnings story, or a trading rule.
 
 ## Current studies
 
-| Study | Role | Status | Production use |
-| --- | --- | --- | --- |
-| [Gold Reaction Function](h-xsec-s7-001-gold-reaction-function.md) | S7 | Observing | None |
-| H-XSEC-S2-001 - Broad-Universe Factor Matrix | S2 | Design; wait for fetch completion | None |
+| Study | Status | Honest reading |
+| --- | --- | --- |
+| [H-XSEC-S2-001](h-xsec-s2-001-quarter-start-leadership-acceptance.md) | Inconclusive; design retired | Its calendar-quarter, new-top-three chain was unstable. This does not reject relative strength or persistent leadership. |
+| [H-XSEC-S6-001](h-xsec-s6-001-quarter-clock-design-audit.md) | Confirmed diagnosis | The clock and eligibility rules systematically omit long-lived leaders and confound leader continuation with sector diffusion. |
+| [H-XSEC-S2-002](h-xsec-s2-002-continuous-leadership-state.md) | Design; not run | Observe emergence, persistence, and accepted price shocks on an event-time clock, then measure the full forward path. |
+| [H-XSEC-S7-001](h-xsec-s7-001-gold-reaction-function.md) | Observation | Gold reaction-function note; separate from equity leadership. |
 
-## H-XSEC-S2-001 initial design
+## What the first run did and did not find
 
-Hypothesis: some candidate characteristics have a stable relationship with
-later relative performance across a declared peer universe. One loop replaces a
-separate paper for every factor, target, and horizon.
+The completed run found that one very specific chain was not stable:
 
-| Loop axis | Initial values |
-| --- | --- |
-| Signal family | Cross-sectional momentum; low volatility; MAX effect; relative strength; dispersion; beta-adjusted and regime-conditioned variants |
-| Target family | Forward relative return; rank persistence; forward volatility; maximum adverse excursion |
-| Horizon | 1W; 1M; 3M; 6M; 12M where data supports it |
-| Universe slice | Broad market; sector; thematic membership; asset sleeve |
-| Validation | Time-ordered splits; symbol coverage and membership limitations shown |
+```text
+new top-three name in the first 21 calendar-quarter sessions
+-> still top three at calendar-quarter end
+-> leader and sector continue during the next complete calendar quarter
+```
 
-Parameters and universe slices are frozen before reading results. A variant is a
-new row in the loop, not a new document.
+That chain excluded any name already top three at the prior quarter-end. It also
+missed leaders beginning after session 21 and delayed the outcome clock until
+the next calendar quarter. A stock can therefore lead the market for years and
+appear only occasionally in the event ledger.
 
-| Family | Signal | Target | Horizon | Universe | N | Dev IC | Test IC | IC rank | Effect | p | BH q | q rank | Sign stable | Verdict |
-| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| _unrun_ | | | | | | | | | | | | | | |
-
-## Manual gates
-
-1. Wait for the current Stage 2 fetch to finish and audit actual coverage.
-2. Approve the peer universes, factor definitions, horizons, and split.
-3. Run the approved matrix once.
-4. Review ranked results manually; do not promote the lowest p-value.
-5. Open S3, S4, or S5 only for a result selected for a different question.
+The next study starts from daily leadership state and event time. Sector
+diffusion remains a secondary result. Earnings-specific work stays parked until
+actual event timestamps and company-specific fiscal periods exist.

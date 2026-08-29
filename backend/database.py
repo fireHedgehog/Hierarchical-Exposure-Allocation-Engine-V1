@@ -148,6 +148,94 @@ def _catalog_compatibility_prelude(connection: sqlite3.Connection) -> str:
 def _install_compatible_columns(connection: sqlite3.Connection) -> None:
     """Add nullable contract fields without rewriting already-sealed snapshots."""
 
+    bar_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(symbol_bars)").fetchall()
+    }
+    # Existing rows keep NULL in these fields and therefore remain explicitly
+    # ineligible for adjusted-OHLC research. Sealed snapshots stay untouched;
+    # the deliberately mutable library dataset can be replaced per security
+    # by its admin-owned, contract-versioned refetch path.
+    for column in (
+        "raw_close",
+        "adjusted_close",
+        "adjusted_open",
+        "adjusted_high",
+        "adjusted_low",
+        "adjustment_factor",
+    ):
+        if column not in bar_columns:
+            connection.execute(f"ALTER TABLE symbol_bars ADD COLUMN {column} REAL")
+
+    price_status_table = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'staging_price_fetch_status'"
+    ).fetchone()
+    if price_status_table is not None:
+        price_status_columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(staging_price_fetch_status)"
+            ).fetchall()
+        }
+        if "security_id" not in price_status_columns:
+            connection.execute(
+                "ALTER TABLE staging_price_fetch_status ADD COLUMN security_id TEXT "
+                "REFERENCES securities(security_id)"
+            )
+        for column in (
+            "provider_first_trade_date",
+            "provider_data_granularity",
+            "provider_exchange_timezone",
+        ):
+            if column not in price_status_columns:
+                connection.execute(
+                    f"ALTER TABLE staging_price_fetch_status ADD COLUMN {column} TEXT"
+                )
+        if "last_attempt_status" not in price_status_columns:
+            connection.execute(
+                "ALTER TABLE staging_price_fetch_status ADD COLUMN last_attempt_status TEXT "
+                "CHECK (last_attempt_status IN ('accepted', 'failed'))"
+            )
+            connection.execute(
+                "UPDATE staging_price_fetch_status "
+                "SET last_attempt_status = coverage_status"
+            )
+        connection.execute(
+            """
+            UPDATE staging_price_fetch_status
+            SET security_id = (
+                SELECT MIN(sec.security_id)
+                FROM securities AS sec
+                WHERE sec.primary_symbol = staging_price_fetch_status.symbol
+                HAVING COUNT(*) = 1
+            )
+            WHERE security_id IS NULL
+            """
+        )
+
+    results_status_table = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'staging_results_filing_fetch_status'"
+    ).fetchone()
+    if results_status_table is not None:
+        results_status_columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(staging_results_filing_fetch_status)"
+            ).fetchall()
+        }
+        for column in (
+            "contract_revision",
+            "identity_revision",
+            "last_attempted_cik",
+            "last_attempt_identity_revision",
+        ):
+            if column not in results_status_columns:
+                connection.execute(
+                    f"ALTER TABLE staging_results_filing_fetch_status ADD COLUMN {column} TEXT"
+                )
+
     columns = {
         row["name"]
         for row in connection.execute("PRAGMA table_info(position_candidates)").fetchall()

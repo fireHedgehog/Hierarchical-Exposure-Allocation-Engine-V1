@@ -15,14 +15,21 @@ Research reads data prepared by Admin Operations. It does not fetch provider
 data, write to the application database, switch strategy versions, or dispatch
 another experiment automatically.
 
+Current checkpoint: H-XSEC-S2-001 completed on 2026-08-29, but the later
+H-XSEC-S6-001 audit confirmed that its calendar-quarter and new-top-three rules
+omit persistent leaders. The result retires that narrow design, not relative
+strength. H-XSEC-S2-002 now holds the unrun continuous leadership-state design.
+H-THEME-S2-001 remains a diagnostic of the retired clock and authorizes no
+broader Theme conclusion.
+
 ## Research types
 
 | Type | Question |
 | --- | --- |
 | [Macro](macro/README.md) | What macro-financial state exists, what follows it, and how much total risk should it eventually permit? |
-| [Cross-Sectional](cross-sectional/README.md) | Which asset or sleeve is stronger relative to a declared peer group? |
+| [Cross-Sectional](cross-sectional/README.md) | When does a security emerge as or remain a leader, and what follows on an event-time clock? |
 | [Timing](timing/README.md) | When should an already-selected candidate be entered, held, trimmed, or exited? |
-| [Theme](theme/README.md) | Once a theme is recognized, how broad is it and how long does it survive? |
+| [Theme](theme/README.md) | Does group participation add information after an individual leader is already observable? |
 
 Add another type only when its experiment genuinely cannot fit one of these.
 Do not create empty folders in anticipation.
@@ -69,7 +76,9 @@ an independent result or observation log needs its own lifecycle.
 ## Working rules
 
 - Prefer one ranked result table to repeated prose.
-- Show effect size, sample size, stability, raw p-value, and adjusted q-value.
+- Show effect size, sample size, and stability. Show raw p-value and adjusted
+  q-value only when the frozen design actually declares an inferential family;
+  do not manufacture them for a fold-and-comparison design.
 - A low p-value is not a business decision.
 - Preserve nulls and failed results.
 - No hashes, approval chains, or research-specific SQL schema are required.

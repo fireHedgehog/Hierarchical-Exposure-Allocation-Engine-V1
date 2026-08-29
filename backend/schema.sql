@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS schema_metadata (
     value TEXT NOT NULL
 );
 
-INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '16')
+INSERT INTO schema_metadata (key, value) VALUES ('schema_version', '20')
 ON CONFLICT(key) DO UPDATE SET value = excluded.value;
 
 INSERT OR IGNORE INTO schema_metadata (key, value) VALUES
@@ -382,6 +382,16 @@ CREATE TABLE IF NOT EXISTS symbol_bars (
     low REAL,
     close REAL,
     volume REAL,
+    -- Yahoo supplies raw quote OHLC plus a separate adjusted close. `close`
+    -- remains adjusted for backward compatibility; these additive fields make
+    -- the two bases explicit and provide internally consistent adjusted OHLC
+    -- for gap/range research without breaking existing return consumers.
+    raw_close REAL,
+    adjusted_close REAL,
+    adjusted_open REAL,
+    adjusted_high REAL,
+    adjusted_low REAL,
+    adjustment_factor REAL,
     source_key TEXT,
     observed_at TEXT,
     available_at TEXT,
@@ -406,6 +416,113 @@ CREATE TABLE IF NOT EXISTS symbol_events (
     available_at TEXT,
     ingested_at TEXT NOT NULL,
     PRIMARY KEY (dataset_snapshot_id, security_id, event_id)
+);
+
+-- The first SEC draft used a security-keyed "earnings event" table. That
+-- abstraction was wrong: Item 2.02 is a filing row, EDGAR acceptance is only
+-- a timing proxy, and one issuer filing can map to multiple share classes.
+-- Research Staging V2 is disposable, so remove that never-shipped draft and
+-- keep one small, honest filing ledger instead of carrying compatibility
+-- bureaucracy forever.
+DROP TABLE IF EXISTS staging_earnings_fetch_status;
+DROP TABLE IF EXISTS staging_earnings_events;
+
+-- One issuer filing, independent of ticker/share class and price snapshot.
+-- This is NOT a quarterly-earnings event table and NOT first-public timing.
+CREATE TABLE IF NOT EXISTS staging_results_filings (
+    source_key TEXT NOT NULL,
+    accession_number TEXT NOT NULL,
+    cik TEXT NOT NULL,
+    form TEXT NOT NULL CHECK (form IN ('8-K', '8-K/A')),
+    items TEXT NOT NULL,
+    filing_date TEXT NOT NULL,
+    -- SEC period-of-report; never interpreted here as a fiscal quarter.
+    report_date TEXT,
+    sec_accepted_at_raw TEXT NOT NULL,
+    sec_accepted_at_utc TEXT NOT NULL,
+    sec_accepted_at_et TEXT NOT NULL,
+    acceptance_parse_basis TEXT NOT NULL CHECK (
+        acceptance_parse_basis IN (
+            'explicit_utc', 'explicit_offset', 'legacy_compact_et', 'naive_et'
+        )
+    ),
+    timing_basis TEXT NOT NULL CHECK (timing_basis = 'sec_acceptance_proxy'),
+    timing_quality TEXT NOT NULL CHECK (
+        timing_quality = 'filing_acceptance_proxy_not_first_public'
+    ),
+    primary_document TEXT,
+    source_url TEXT NOT NULL,
+    retrieved_at TEXT NOT NULL,
+    PRIMARY KEY (source_key, accession_number)
+);
+
+CREATE INDEX IF NOT EXISTS staging_results_filings_cik_time
+ON staging_results_filings (cik, sec_accepted_at_utc);
+
+-- A filing is stored once, then linked to every explicitly mapped security.
+-- GOOG/GOOGL-like share classes therefore remain two price series but one
+-- issuer information arrival.
+CREATE TABLE IF NOT EXISTS staging_results_filing_securities (
+    source_key TEXT NOT NULL,
+    accession_number TEXT NOT NULL,
+    security_id TEXT NOT NULL REFERENCES securities(security_id),
+    symbol_at_fetch TEXT NOT NULL,
+    linked_at TEXT NOT NULL,
+    PRIMARY KEY (source_key, accession_number, security_id),
+    FOREIGN KEY (source_key, accession_number)
+        REFERENCES staging_results_filings(source_key, accession_number)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS staging_results_filing_securities_security
+ON staging_results_filing_securities (security_id, source_key, accession_number);
+
+-- One compact, resumable audit row per already-mapped price security. Coverage
+-- means only "the requested current-CIK SEC submissions slice was inspected";
+-- predecessor CIKs, foreign 6-Ks, exhibit release times and issuer first-public
+-- timestamps remain explicit gaps.
+CREATE TABLE IF NOT EXISTS staging_results_filing_fetch_status (
+    security_id TEXT NOT NULL REFERENCES securities(security_id),
+    source_key TEXT NOT NULL,
+    contract_revision TEXT NOT NULL,
+    identity_revision TEXT NOT NULL,
+    requested_symbol TEXT NOT NULL,
+    resolved_cik TEXT,
+    last_attempted_cik TEXT,
+    last_attempt_identity_revision TEXT,
+    identity_status TEXT NOT NULL CHECK (
+        identity_status IN ('matched', 'unmatched', 'ambiguous', 'mismatch')
+    ),
+    lineage_scope TEXT NOT NULL CHECK (lineage_scope = 'current_cik_only'),
+    issuer_form_class TEXT NOT NULL CHECK (
+        issuer_form_class IN ('domestic_8k', 'foreign_6k', 'mixed', 'unknown')
+    ),
+    coverage_status TEXT NOT NULL CHECK (
+        coverage_status IN (
+            'retrieved_current_cik_8k_2_02_rows',
+            'no_matching_2_02_in_current_cik',
+            'no_filings_in_requested_range',
+            'item_metadata_missing',
+            'foreign_6k_unsupported',
+            'unmatched', 'ambiguous', 'identity_mismatch', 'failed'
+        )
+    ),
+    last_requested_from TEXT NOT NULL,
+    last_requested_to TEXT NOT NULL,
+    covered_from TEXT,
+    covered_to TEXT,
+    first_result_filing_date TEXT,
+    last_result_filing_date TEXT,
+    filing_count INTEGER NOT NULL DEFAULT 0 CHECK (filing_count >= 0),
+    items_metadata_missing_count INTEGER NOT NULL DEFAULT 0 CHECK (
+        items_metadata_missing_count >= 0
+    ),
+    row_parse_error_count INTEGER NOT NULL DEFAULT 0 CHECK (row_parse_error_count >= 0),
+    last_successful_at TEXT,
+    last_attempted_at TEXT NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 1 CHECK (attempt_count >= 1),
+    last_error TEXT,
+    PRIMARY KEY (security_id, source_key)
 );
 
 -- Raw fetched FRED series observations, point-in-time (ALFRED vintage) aware.
@@ -812,12 +929,9 @@ CREATE TABLE IF NOT EXISTS staging_symbols (
     -- (docs/README.md). `active` now means ONLY the live-product meaning,
     -- unchanged from before for every symbol that already had it =1.
     active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
-    -- New, purely additive: fetch_data_stage pulls a symbol if EITHER
-    -- active=1 OR fetch_only=1 -- real, deliberate research-only fetching
-    -- (e.g. a stage-2 theme's real constituents) without silently adding
-    -- hundreds of symbols to the live Today-desk ranking/allocation/
-    -- instrument-proposal universe. factor_engine/allocation_engine/
-    -- instrument_engine intentionally keep reading active=1 ONLY.
+    -- Legacy-compatible library hint. The live pipeline reads active=1 only;
+    -- the manual library path reads an explicit staging-universe membership
+    -- revision, so stale bits can never enlarge or shrink a research cohort.
     fetch_only INTEGER NOT NULL DEFAULT 0 CHECK (fetch_only IN (0, 1)),
     sort_order INTEGER NOT NULL,
     -- Real, queryable label so a future broad cross-sectional sweep (e.g. an
@@ -836,8 +950,8 @@ CREATE TABLE IF NOT EXISTS staging_symbols (
 );
 
 -- Deliberately a separate table from staging_symbols, not a column on it.
--- staging_symbols governs what gets FETCHED -- a careful, code-reviewed,
--- rarely-changing decision. The dashboard watchlist is a personal,
+-- staging_symbols carries live-product and provider metadata. The dashboard
+-- watchlist is a personal,
 -- day-to-day preference ("watch this today") that the operator must be able
 -- to change directly from the UI, without a code change or migration. Same
 -- boundary this project already draws elsewhere: provider access, adapter
@@ -859,10 +973,10 @@ CREATE TABLE IF NOT EXISTS watchlist_symbols (
 -- project tracks at all, a real fact about that name, never a "missing
 -- data" case to backfill or explain away. Deliberately its own table, not
 -- a column on staging_symbols: a symbol can belong to any number of
--- stages' anchors, and a later stage's snapshot must never overwrite an
--- earlier one's real, frozen membership record. `frozen_at` is the anchor
--- data's own real "as of" date, not the day this got loaded into a
--- database.
+-- stages' anchors. Within one disposable staging revision, the reviewed JSON
+-- is authoritative and the loader replaces that stage's rows exactly; a
+-- differently named stage remains separate. `frozen_at` is the anchor data's
+-- own real "as of" date, not the day this got loaded into a database.
 CREATE TABLE IF NOT EXISTS staging_universe_membership (
     symbol TEXT NOT NULL REFERENCES staging_symbols(symbol),
     stage TEXT NOT NULL,
@@ -880,6 +994,60 @@ CREATE TABLE IF NOT EXISTS staging_universe_membership (
     weight_pct REAL,
     frozen_at TEXT NOT NULL,
     PRIMARY KEY (symbol, stage, anchor)
+);
+
+-- One row per current-vintage anchor keeps source coverage auditable without
+-- repeating the same provenance on every member. Staging remains disposable;
+-- the reviewed JSON snapshot is reloaded as the exact source of truth.
+CREATE TABLE IF NOT EXISTS staging_universe_anchors (
+    stage TEXT NOT NULL,
+    anchor TEXT NOT NULL,
+    anchor_kind TEXT NOT NULL CHECK (anchor_kind IN ('index', 'thematic_etf')),
+    source_url TEXT NOT NULL,
+    source_kind TEXT NOT NULL,
+    source_as_of TEXT,
+    source_as_of_raw TEXT,
+    coverage_status TEXT NOT NULL,
+    source_row_count INTEGER NOT NULL CHECK (source_row_count >= 0),
+    source_reported_count INTEGER CHECK (source_reported_count IS NULL OR source_reported_count >= 0),
+    eligible_row_count INTEGER NOT NULL CHECK (eligible_row_count >= 0),
+    mapped_member_count INTEGER NOT NULL CHECK (mapped_member_count >= 0),
+    excluded_row_count INTEGER NOT NULL CHECK (excluded_row_count >= 0),
+    rejected_row_count INTEGER NOT NULL CHECK (rejected_row_count >= 0),
+    source_roster_complete INTEGER NOT NULL CHECK (source_roster_complete IN (0, 1)),
+    price_symbol_mapping_complete INTEGER NOT NULL CHECK (price_symbol_mapping_complete IN (0, 1)),
+    complete_for_price_universe INTEGER NOT NULL CHECK (complete_for_price_universe IN (0, 1)),
+    excluded_rows_json TEXT NOT NULL DEFAULT '[]',
+    rejected_rows_json TEXT NOT NULL DEFAULT '[]',
+    compiled_at TEXT NOT NULL,
+    PRIMARY KEY (stage, anchor)
+);
+
+-- A bar is not proof that a multi-decade symbol fetch completed. This compact
+-- per-symbol receipt records the exact requested window and dual-basis
+-- contract. The mutable library fetch replaces one security's requested
+-- window atomically, then marks it accepted only after every returned bar has
+-- explicit raw-close and adjusted OHLC fields.
+CREATE TABLE IF NOT EXISTS staging_price_fetch_status (
+    dataset_snapshot_id TEXT NOT NULL REFERENCES dataset_snapshots(id),
+    symbol TEXT NOT NULL REFERENCES staging_symbols(symbol),
+    source_key TEXT NOT NULL,
+    security_id TEXT NOT NULL REFERENCES securities(security_id),
+    contract_revision TEXT NOT NULL,
+    requested_from TEXT NOT NULL,
+    requested_to TEXT NOT NULL,
+    returned_from TEXT,
+    returned_to TEXT,
+    returned_bar_count INTEGER NOT NULL DEFAULT 0 CHECK (returned_bar_count >= 0),
+    provider_first_trade_date TEXT,
+    provider_data_granularity TEXT,
+    provider_exchange_timezone TEXT,
+    coverage_status TEXT NOT NULL CHECK (coverage_status IN ('accepted', 'failed')),
+    completed_at TEXT,
+    last_attempt_status TEXT NOT NULL CHECK (last_attempt_status IN ('accepted', 'failed')),
+    last_attempted_at TEXT NOT NULL,
+    last_error TEXT,
+    PRIMARY KEY (dataset_snapshot_id, symbol, source_key)
 );
 
 -- Readiness definitions are application configuration. Their current state is
