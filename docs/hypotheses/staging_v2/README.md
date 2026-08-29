@@ -18,7 +18,12 @@ another experiment automatically.
 Current checkpoint: H-XSEC-S2-001 completed on 2026-08-29, but the later
 H-XSEC-S6-001 audit confirmed that its calendar-quarter and new-top-three rules
 omit persistent leaders. The result retires that narrow design, not relative
-strength. H-XSEC-S2-002 now holds the unrun continuous leadership-state design.
+strength. H-XSEC-S2-002 replaced it with a completed 15-factor monthly screen;
+sector-neutral Amihud illiquidity is the one confirmed discovery relationship,
+positive at 42/63 sessions in validation and holdout. H-XSEC-S5-001's rough
+next-session long-only translation retained positive full/holdout excess through
+50 bps assumed-cost stress, but real spread/impact and historical PIT membership
+remain untested. It is a research candidate, not a registered production factor.
 H-THEME-S2-001 remains a diagnostic of the retired clock and authorizes no
 broader Theme conclusion.
 

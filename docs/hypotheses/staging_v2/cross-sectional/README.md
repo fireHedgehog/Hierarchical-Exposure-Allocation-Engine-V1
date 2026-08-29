@@ -9,8 +9,20 @@ It does not require sector diffusion, an earnings story, or a trading rule.
 | --- | --- | --- |
 | [H-XSEC-S2-001](h-xsec-s2-001-quarter-start-leadership-acceptance.md) | Inconclusive; design retired | Its calendar-quarter, new-top-three chain was unstable. This does not reject relative strength or persistent leadership. |
 | [H-XSEC-S6-001](h-xsec-s6-001-quarter-clock-design-audit.md) | Confirmed diagnosis | The clock and eligibility rules systematically omit long-lived leaders and confound leader continuation with sector diffusion. |
-| [H-XSEC-S2-002](h-xsec-s2-002-continuous-leadership-state.md) | Design; not run | Observe emergence, persistence, and accepted price shocks on an event-time clock, then measure the full forward path. |
+| [H-XSEC-S2-002](h-xsec-s2-002-price-volume-factor-screen.md) | Confirmed discovery relationship | Sector-neutral Amihud illiquidity has positive 42/63-session IC and spread in validation and holdout; implementation costs remain untested. |
+| [H-XSEC-S5-001](h-xsec-s5-001-amihud-long-only-rough-check.md) | Rough candidate gate passed; research only | A next-session, long-only translation retained positive full/holdout excess under explicit assumed costs. Real slippage and historical PIT membership remain untested. |
 | [H-XSEC-S7-001](h-xsec-s7-001-gold-reaction-function.md) | Observation | Gold reaction-function note; separate from equity leadership. |
+
+## Candidate ledger
+
+This is the reminder list, not a production registry.
+
+| Candidate | Evidence | Turnover / cost / liquidity reading | Status |
+| --- | --- | --- | --- |
+| Sector-neutral Amihud illiquidity | [Discovery H-XSEC-S2-002](h-xsec-s2-002-price-volume-factor-screen.md); [rough implementation H-XSEC-S5-001](h-xsec-s5-001-amihud-long-only-rough-check.md) | Three monthly sleeves: 7.23% full / 8.57% holdout one-way turnover. Full/holdout excess stayed positive at assumed 25 and 50 bps. Historical 1% ADV capacity p10/median was $0.5m/$1.5m; real spread and impact are unmeasured. | **Candidate passed for further research only. Not registered.** |
+| Low dollar volume | [H-XSEC-S2-002](h-xsec-s2-002-price-volume-factor-screen.md) | No implementation run: its holdout IC changed sign even though the long-horizon spread stayed slightly positive. | Parked; do not confuse it with Amihud. |
+| Five-session reversal | [H-XSEC-S2-002](h-xsec-s2-002-price-volume-factor-screen.md) | No implementation run: the 10-session discovery cell reversed in holdout. | Parked as decayed evidence. |
+| Classical price momentum family | [H-XSEC-S2-002](h-xsec-s2-002-price-volume-factor-screen.md) | 3-1, 6-1, 12-1, 52-week-high, and residual momentum had no useful screen result here. | No current candidate; a different design may revisit leadership. |
 
 ## What the first run did and did not find
 
@@ -27,6 +39,9 @@ missed leaders beginning after session 21 and delayed the outcome clock until
 the next calendar quarter. A stock can therefore lead the market for years and
 appear only occasionally in the event ledger.
 
-The next study starts from daily leadership state and event time. Sector
-diffusion remains a secondary result. Earnings-specific work stays parked until
-actual event timestamps and company-specific fiscal periods exist.
+The replacement study returned to ordinary monthly characteristic ranking. Of
+15 price/volume factors, sector-neutral Amihud illiquidity was the only
+relationship with stable validation/holdout IC and spread at its useful 42/63-
+session horizon. Its first rough long-only translation survived assumed cost and
+liquidity-floor stress, but quote-based slippage is absent and historical
+capacity was sometimes small. It remains a candidate, not a production factor.

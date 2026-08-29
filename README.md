@@ -80,7 +80,7 @@ Do not purchase or enter those three keys yet. Their adapters, entitlement-speci
 
 The free-data engine build (all six compute stages) is done — see [engine milestones](docs/engine-milestones.md). Next:
 
-1. review the continuous event-time leadership design in [H-XSEC-S2-002](docs/hypotheses/staging_v2/cross-sectional/h-xsec-s2-002-continuous-leadership-state.md) before running it; the earlier calendar-quarter Cross/Theme result is retained only as a diagnosed failed design, while optional SEC Item 2.02 ingestion remains a filing-time proxy rather than an earnings timestamp;
+1. keep the sector-neutral Amihud result in the [Cross candidate ledger](docs/hypotheses/staging_v2/cross-sectional/README.md) after its rough long-only cost/capacity check passed; do not register it in production until a separately approved test measures real friction and challenges the unusually large survivor-conditioned return;
 2. build the point-in-time security master and versioned universe (roadmap phase 2) — the staging universe is still a free-data fixture, not a governed, effective-dated eligibility contract;
 3. decide whether `publish_snapshot` needs its own implementation or is redundant now that the orchestrator seals snapshots directly;
 4. optimize within pilot mode (Milestone 4) — the naive factor/backtest formulas are real but currently lose to buy-and-hold on average.
