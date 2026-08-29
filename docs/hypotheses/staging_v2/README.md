@@ -24,6 +24,12 @@ positive at 42/63 sessions in validation and holdout. H-XSEC-S5-001's rough
 next-session long-only translation retained positive full/holdout excess through
 50 bps assumed-cost stress, but real spread/impact and historical PIT membership
 remain untested. It is a research candidate, not a registered production factor.
+H-XSEC-S2-003 has now released Development only. Its fixed `20/50/100/200` loop
+found no stock-selection candidate: continuous broad/within-sector ICs were
+near zero or negative, and no E1/E5/EB20/ES transition passed the sector-excess,
+persistent-control, drawdown, and curve-q gates together. Validation and
+Holdout remain unopened. The correlated index ES panel is a useful observation
+for a new timing design, not authority to translate or promote this Cross study.
 H-THEME-S2-001 remains a diagnostic of the retired clock and authorizes no
 broader Theme conclusion.
 
