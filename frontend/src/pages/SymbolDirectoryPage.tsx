@@ -30,9 +30,9 @@ export function SymbolDirectoryPage() {
     <div className="workspace symbols-page">
       <header className="workspace-header">
         <div>
-          <p className="eyebrow">Research universe</p>
-          <h1>Symbol research</h1>
-          <p>Open a security’s persisted decision lineage, bars, events, metrics, and proposed structures.</p>
+          <p className="eyebrow">Research workspace</p>
+          <h1>Timing</h1>
+          <p>Symbol-level timing research and persisted lineage. Placeholder methods are not guaranteed to validate or produce trading edge.</p>
         </div>
         <div className="workspace-header__actions">
           <button className="button button--quiet" type="button" onClick={() => setShowAll((value) => !value)}>

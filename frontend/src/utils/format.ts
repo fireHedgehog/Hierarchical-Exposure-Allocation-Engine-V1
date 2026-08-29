@@ -8,12 +8,13 @@ export function isFiniteNumber(value: unknown): value is number {
 
 export function formatNumber(
   value: number | null | undefined,
-  options: Intl.NumberFormatOptions = {},
+  options: Intl.NumberFormatOptions | number = {},
 ): string {
   if (!isFiniteNumber(value)) return NOT_AVAILABLE;
+  const resolvedOptions = typeof options === "number" ? { maximumFractionDigits: options } : options;
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 2,
-    ...options,
+    ...resolvedOptions,
   }).format(value);
 }
 

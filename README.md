@@ -28,6 +28,7 @@ The original product thesis is preserved in [Edition V1](docs/editions/edition-v
 The initial application draft includes:
 
 - a Today workspace for portfolio posture and top-down decision flow;
+- a configurable Cross-sectional ranking workspace that descriptively sorts the disposable Stage 2 library by relative strength, moving-average structure, and 52-week-high proximity while explicitly making no validated-alpha claim;
 - a hierarchy graph and cross-sectional comparison of allocation candidates;
 - data-health and provenance views backed by SQLite snapshots;
 - symbol pages with current signal state, chart annotations, historical execution events, metrics, and position candidates;

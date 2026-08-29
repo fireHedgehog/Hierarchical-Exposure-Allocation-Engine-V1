@@ -7,6 +7,7 @@ export const endpoints = {
   health: "/api/health",
   deskLatest: "/api/v1/desk/latest",
   crossSectionLatest: "/api/v1/cross-section/latest",
+  crossSectionalRanking: "/api/v1/cross-sectional-ranking",
   symbols: "/api/v1/symbols",
   symbol: (symbol: string) => `/api/v1/symbols/${encodeURIComponent(symbol)}`,
   adminOverview: "/api/v1/admin/overview",

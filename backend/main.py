@@ -48,6 +48,7 @@ from backend.admin_repository import (
 )
 from backend.admin_security import direct_loopback_guard, operator_guard, validate_admin_origins
 from backend.database import PROJECT_ROOT, connect, initialize_database, resolve_database_path
+from backend.cross_sectional_ranking import get_cross_sectional_ranking
 from backend.pipeline.stages import FredFetcher, PriceFetcher
 from backend.pipeline.stages.common import STAGING_UNIVERSE_START_DATE
 from backend.pipeline_progress import finish_run as finish_background_run
@@ -293,6 +294,12 @@ def create_app(
                 "snapshot_not_found",
                 "No cross-sectional snapshot is available.",
             ) from error
+
+    @application.get("/api/v1/cross-sectional-ranking", tags=["desk"])
+    def cross_sectional_ranking() -> dict[str, Any]:
+        """Read-only descriptive ranking over the disposable Stage 2 library."""
+        with connect(path, read_only=True) as connection:
+            return get_cross_sectional_ranking(connection)
 
     @application.get("/api/v1/symbols", tags=["symbols"])
     def symbols(scope: Literal["watchlist", "all"] = "watchlist") -> dict[str, Any]:

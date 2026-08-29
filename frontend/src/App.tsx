@@ -10,12 +10,15 @@ import { StrategyDetailPage } from "./pages/StrategyDetailPage";
 import { StrategyRegistryPage } from "./pages/StrategyRegistryPage";
 import { SymbolDirectoryPage } from "./pages/SymbolDirectoryPage";
 import { SymbolPage } from "./pages/SymbolPage";
+import { CrossSectionalRankingPage } from "./pages/CrossSectionalRankingPage";
+import { workspaceModuleEnabled } from "./workspaceModules";
 
 export function App() {
   return (
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<DeskPage />} />
+        {workspaceModuleEnabled("crossSectionalRanking") ? <Route path="cross-sectional-ranking" element={<CrossSectionalRankingPage />} /> : null}
         <Route path="symbols" element={<SymbolDirectoryPage />} />
         <Route path="symbols/:symbol" element={<SymbolPage />} />
         <Route path="operations" element={<OperationsOverviewPage />} />

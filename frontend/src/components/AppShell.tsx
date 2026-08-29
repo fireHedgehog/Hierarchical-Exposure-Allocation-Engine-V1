@@ -24,6 +24,7 @@ import type { HealthResponse, SymbolsResponse } from "../types";
 import { humanize, toneForStatus } from "../utils/format";
 import { resolveSnapshotPresentation, snapshotRunState } from "../utils/snapshot";
 import { StatusPill } from "./Ui";
+import { workspaceModules } from "../workspaceModules";
 
 export function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -100,9 +101,14 @@ export function AppShell() {
             <span>Today</span>
             <ChevronRight className="nav-chevron" aria-hidden="true" />
           </NavLink>
-          <NavLink to="/symbols">
+          {workspaceModules.crossSectionalRanking.enabled ? <NavLink to={workspaceModules.crossSectionalRanking.path}>
             <BarChart3 aria-hidden="true" />
-            <span>Symbol research</span>
+            <span>{workspaceModules.crossSectionalRanking.label}</span>
+            <ChevronRight className="nav-chevron" aria-hidden="true" />
+          </NavLink> : null}
+          <NavLink to={workspaceModules.timing.path}>
+            <BarChart3 aria-hidden="true" />
+            <span>{workspaceModules.timing.label}</span>
             <ChevronRight className="nav-chevron" aria-hidden="true" />
           </NavLink>
           <a href="/#hierarchy">

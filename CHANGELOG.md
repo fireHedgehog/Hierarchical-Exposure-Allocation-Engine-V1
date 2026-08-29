@@ -4,6 +4,12 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Application — pluggable cross-sectional research ranking
+
+- Added a read-only Cross-sectional ranking workspace between Today and Timing. It selects the existing Stage 2 membership, symbol metadata, security identity, and `library-fetch-ongoing` price layers rather than creating another database table.
+- Added a clearly labelled descriptive V0 rank: price-above-four-MAs screen plus 3/6/12-month excess return versus SPY, 52-week-high proximity, MA distance, and slope. The page links the rejected H-XSEC-S2-003 study and makes no validated-alpha or production-strategy claim.
+- Centralized the two research workspace switches in `frontend/src/workspaceModules.ts`; renamed Symbol research to Timing without changing its URLs or persisted data.
+
 ### Research — measured, not guessed: how big is the point-in-time gap, really
 
 - User's direct follow-up to the methodology audit: does the point-in-time gap influence findings a lot, or only minor -- answered with real, live ALFRED evidence instead of a qualitative guess.

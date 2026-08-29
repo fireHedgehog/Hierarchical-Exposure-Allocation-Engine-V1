@@ -1,5 +1,7 @@
 export type Nullable<T> = T | null;
 export type Scalar = string | number | boolean | null;
+export interface CrossSectionalRankingRow { symbol: string; name: string; category: string; as_of: string; price: number; score: number | null; rs_3m: number | null; rs_6m: number | null; rs_12m: number | null; high_52w_distance: number | null; trend_distance: number | null; slope: number | null; above_all_mas: boolean; ordered_mas: boolean; median_dollar_volume_21d: number | null; }
+export interface CrossSectionalRankingResponse { status: string; dataset_snapshot_id: string; benchmark_dataset_snapshot_id: string | null; universe_stage: string; member_count: number; eligible_count: number; latest_price_date: string | null; rows: CrossSectionalRankingRow[]; sources: { role: string; table: string; selection: string }[]; }
 
 export interface Provenance {
   as_of?: Nullable<string>;
