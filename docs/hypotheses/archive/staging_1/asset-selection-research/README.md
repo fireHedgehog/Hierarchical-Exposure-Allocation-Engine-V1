@@ -53,8 +53,10 @@ sector/asset-class comparisons:
 - MAX effect / lottery demand — rejected
 - Vol-scaled cross-sectional momentum — inconclusive
 
-`cross_sectional_momentum` (12-1) is the one graduated result from that
-line of work, live in production — it ranks *within* one universe. This
+`cross_sectional_momentum` remains a running, explicitly naive product rank,
+but its old strategy-level return proof was invalidated by a calendar bug.
+H-XSEC-S2-004 now supplies narrower tail evidence, not blanket 12-1 validation.
+The strategy ranks *within* one universe. This
 folder is the layer above: which *dimension* to rank across (sector,
 asset class, theme, fundamental characteristic), not which signal to
 rank with inside one universe.

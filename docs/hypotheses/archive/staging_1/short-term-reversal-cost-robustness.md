@@ -1,8 +1,16 @@
 # Short-term reversal: transaction-cost / turnover robustness (H-STREV02)
 
-Status: concluded-confirmed (cost-sensitive — real edge survives realistic costs for this universe, breaks down beyond ~20-25bps; see Observation log)
+Status: invalidated by calendar-alignment and turnover bugs; historical output retained below only as context
 Version: v0.1
 Registered: 2026-08-26
+
+> **Correction, 2026-08-30:** the script used the same integer row index
+> across securities with different listing dates, so formation and exit dates
+> were not shared. It also counted a complete replacement as 200% turnover
+> while applying a round-trip cost rate. The +444.2% curve and its cost
+> thresholds have no evidence status. H-XSEC-S2-004 later found a much smaller,
+> correctly aligned liquid-stock reversal relationship; it did not rerun this
+> trading/cost claim.
 
 Not wired into any pipeline stage. Direct follow-up to `short-term-mean-
 reversion.md` (H-STREV01, confirmed, strengthened on 2004-2026): that paper

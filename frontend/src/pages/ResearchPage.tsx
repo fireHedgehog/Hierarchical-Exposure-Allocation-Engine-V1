@@ -66,7 +66,7 @@ export function ResearchPage() {
         <StrategyBacktestSection
           strategyKey="cross_sectional_momentum"
           title="Cross-sectional momentum"
-          description="Naive-v1 walk-forward: rank the universe with the real production ranking, buy the top symbols equal-weighted, hold to the next rebalance, chain the real returns into an equity curve."
+          description="Current-version walk-forward: rank the universe with the registered production version, buy the top symbols equal-weighted, hold to the next rebalance, and chain exact-date returns into an equity curve."
         />
       </GranularitySection>
 
@@ -289,6 +289,7 @@ function StrategyBacktestSection({
       {actionError ? <div className="operator-action-message operator-action-message--error" role="alert"><AlertTriangle aria-hidden="true" size={16} />{actionError}</div> : null}
       {run ? (
         <>
+          {run.invalidated_reason ? <div className="operator-action-message operator-action-message--error" role="alert"><AlertTriangle aria-hidden="true" size={16} />Invalidated evidence: {run.invalidated_reason}</div> : null}
           <dl className="strategy-identity-grid">
             <div><dt>CAGR</dt><dd><strong>{formatScalar(run.cagr, "fraction")}</strong></dd></div>
             <div><dt>Sharpe ratio</dt><dd>{formatScalar(run.sharpe_ratio, "ratio")}</dd></div>

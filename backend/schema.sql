@@ -1663,15 +1663,12 @@ WHERE strategy_key = 'macd_rsi_single_name_timing' AND component_key = 'macd_cro
 
 -- Candidate replacement, registered honestly as draft -- NOT wired into the
 -- pipeline yet (code_reference is NULL: the entry-trigger function itself
--- has not been engineered, only researched). Real, replicated, cost-checked
--- evidence exists (docs/hypotheses/short-term-mean-reversion.md,
--- short-term-reversal-cost-robustness.md): trailing 5-day return vs. 5-day
--- forward return, r=-0.057 (adjusted p<0.0001) on the real 2004-2026
--- dataset, and a real tradable weekly walk-forward version of it survives
--- realistic transaction costs for this specific liquid universe (net Sharpe
--- 0.96 at 5bps, 0.77 at 10bps) but not more conservative cost assumptions
--- (0.21 at 25bps, negative at 50bps) -- cost-sensitive, not universally
--- tradable. verification_status stays 'registered_only', not 'verified':
+-- has not been engineered, only researched). Short-horizon relationship
+-- evidence exists, but the former transaction-cost backtest was invalidated
+-- on 2026-08-30: it mixed different calendar dates and doubled one-way
+-- turnover. H-XSEC-S2-004 later found a correctly aligned, smaller Top-100
+-- weekly loser-tail relationship; it did not validate this exact threshold or
+-- its costs. verification_status stays 'registered_only', not 'verified':
 -- real research evidence is not the same bar as an engineered, pipeline-
 -- wired, regression-tested entry rule -- graduating this from a draft
 -- registry row into real code is separate, deliberate future work.
@@ -1683,7 +1680,7 @@ INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurre
      'macd_crossover retired as an entry trigger: a real event study found no real edge (r~=0.002, p~=0.66). The only registered entry trigger for this strategy, so the pipeline now honestly reports no_entry_signal_active with zero trades rather than a fabricated rule -- a real, disclosed consequence, not a bug.',
      'naive-v2'),
     ('short_term_reversal_entry-registered-2026-08-26', 'macd_rsi_single_name_timing', '2026-08-26T00:00:00Z', NULL, 'draft',
-     'short_term_reversal_entry registered as a draft candidate replacement for the retired macd_crossover entry trigger: real, replicated, cost-checked evidence exists (docs/hypotheses/), but the entry-trigger function itself has not been engineered or wired into the pipeline yet -- research evidence and a production-ready rule are different bars.',
+     'short_term_reversal_entry registered as a draft candidate replacement for the retired macd_crossover entry trigger. Relationship evidence exists, but its former cost check was later invalidated by date-alignment and turnover bugs; research evidence and a production-ready rule are different bars.',
      'naive-v2');
 
 -- naive-v3 (2026-08-26): the draft candidate above graduated into real,
@@ -1698,8 +1695,8 @@ INSERT OR IGNORE INTO strategy_lifecycle_events (event_id, strategy_key, occurre
 -- either stays honestly reproducible.
 INSERT OR IGNORE INTO strategy_versions (strategy_key, version, created_at, thesis, expected_edge, change_summary, parameters_json, code_reference, promoted_at, next_review_at) VALUES
     ('macd_rsi_single_name_timing', 'naive-v3', '2026-08-26T00:00:00Z',
-     'A real, replicated, cost-checked pullback (short-term reversal) is a more defensible entry trigger than a crossover rule with no measured edge. RSI-overbought as the exit trigger is carried forward unchanged -- its own evidence was never in question.',
-     'None claimed at the single-name specification level. H-STREV01 (IC) and H-STREV02 (a cross-sectional, bottom-N ranked strategy) both found a real effect, but this exact per-symbol absolute-threshold rule has not itself been backtested end to end -- naive/hand-picked threshold, not fit to this universe.',
+     'A short-horizon pullback relationship is a more defensible placeholder entry than a crossover rule with no measured edge. Its former cost proof was invalidated; RSI-overbought as the exit trigger is carried forward unchanged.',
+     'None claimed at the single-name specification level. H-XSEC-S2-004 found a correctly aligned liquid-stock loser-tail relationship, but this exact per-symbol absolute threshold and its implementation costs have not been validated end to end.',
      'naive-v3: macd_crossover retired as an entry trigger (no real edge, 0.29); replaced by short_term_reversal_entry (trailing 5-day return < -3% triggers entry, disclosed and naive, not fit). rsi_overbought_exit unchanged. New engine/timing/backtest_v3.py; v1 and v2 stay untouched and importable.',
      '{"reversal_lookback_days":5,"reversal_entry_threshold":-0.03,"rsi_period":14,"rsi_overbought":70.0,"min_bars":60,"components":["short_term_reversal_entry","rsi_overbought_exit"]}',
      'backend/engine/timing/backtest_v3.py', '2026-08-26T00:00:00Z', '2027-02-26');
@@ -1720,7 +1717,7 @@ INSERT OR IGNORE INTO strategy_diagnostics (strategy_key, version, metric_key, l
     ('macd_rsi_single_name_timing', 'naive-v3', 'decay_rate', 'Signal decay rate', NULL, 'fraction_per_period', 'not_computed', NULL, NULL,
      'Not yet measured at the strategy level. Component-level decay (per short_term_reversal_entry / rsi_overbought_exit) also not yet measured -- see strategy_components.decay_rate.', 1),
     ('macd_rsi_single_name_timing', 'naive-v3', 'estimated_capacity_usd', 'Estimated capacity', NULL, 'usd', 'not_computed', NULL, NULL,
-     'Not yet measured. Requires liquidity/market-impact modeling not yet built -- real evidence already shows this strategy is turnover-sensitive (docs/hypotheses/short-term-reversal-cost-robustness.md), so capacity is likely to be a real, binding constraint once measured, not a formality.', 2);
+     'Not yet measured. H-XSEC-S2-004 observed 85-86% weekly tail-membership turnover, but the former transaction-cost result was invalidated; real spread, impact, and capacity remain unmeasured.', 2);
 
 -- naive-v3 (2026-08-26): 12m_skip1m (Jegadeesh & Titman 1993 "12-1"
 -- momentum), registered draft since 0.16, promoted into the live blend as
@@ -2622,3 +2619,48 @@ CREATE INDEX IF NOT EXISTS idx_pipeline_runs_requested
 CREATE INDEX IF NOT EXISTS idx_strategy_status ON strategies(status, family);
 CREATE INDEX IF NOT EXISTS idx_research_runs_strategy
     ON research_runs(strategy_key, strategy_version, started_at DESC);
+
+-- 2026-08-30 evidence correction. Keep both product algorithms running, but
+-- revoke claims produced by a positional calendar bug and by a pooled
+-- own-history statistic that had been labelled as same-date cross-sectional
+-- IC. The corrected Stage 2 paper is relationship evidence only.
+UPDATE research_runs
+SET invalidated_reason =
+    'Invalidated 2026-08-30: the strategy backtest used the same integer row index across independently starting security histories, so formation and exit dates were not shared.'
+WHERE strategy_key = 'cross_sectional_momentum'
+  AND research_run_id LIKE 'strategy-backtest-%'
+  AND started_at < '2026-08-30T00:00:00Z'
+  AND invalidated_reason IS NULL;
+
+UPDATE research_runs
+SET invalidated_reason =
+    'Relabelled 2026-08-30: pooled within-symbol time-series pairs are not a same-date cross-sectional IC. The numeric relation may be descriptive, but it cannot validate the claimed cross-sectional estimand.'
+WHERE strategy_key = 'cross_sectional_momentum'
+  AND research_run_id LIKE 'momentum-significance-%'
+  AND started_at < '2026-08-30T00:00:00Z'
+  AND invalidated_reason IS NULL;
+
+UPDATE strategies
+SET summary = 'Provisional four-horizon relative-momentum rank kept as a running product placeholder. Exact-date Stage 2 evidence supports narrower liquid-stock winner tails, not the full live blend.',
+    updated_at = '2026-08-30T00:00:00Z'
+WHERE strategy_key = 'cross_sectional_momentum';
+
+UPDATE strategy_versions
+SET thesis = 'A four-horizon relative-momentum blend provides a usable descriptive rank while exact cross-sectional translation is researched separately.',
+    expected_edge = 'No general monotone edge is claimed. H-XSEC-S2-004 found diagnostic 1M/3M winner-tail relationships in a dynamic liquid Top-100; classic 12-1 and the full live blend did not pass the frozen stability gate.',
+    change_summary = 'Running naive-v3 formula retained for product continuity. On 2026-08-30 its old strategy-backtest proof was invalidated and its pooled own-history significance statistic was distinguished from same-date cross-sectional IC.'
+WHERE strategy_key = 'cross_sectional_momentum' AND version = 'naive-v3';
+
+UPDATE strategy_versions
+SET thesis = 'A short-horizon pullback relationship is retained as a runnable placeholder entry; its exact absolute threshold and costs remain unvalidated.',
+    expected_edge = 'H-XSEC-S2-004 found a correctly aligned liquid-stock loser-tail relationship. The former H-STREV02 strategy/cost result is invalid because security calendars and turnover were miscomputed.',
+    change_summary = 'Running naive-v3 entry/exit code retained. Evidence language corrected on 2026-08-30 without removing the Timing product feature.'
+WHERE strategy_key = 'macd_rsi_single_name_timing' AND version = 'naive-v3';
+
+INSERT OR IGNORE INTO strategy_lifecycle_events
+    (event_id, strategy_key, occurred_at, from_status, to_status, reason, strategy_version)
+VALUES
+    ('cross-sectional-evidence-corrected-2026-08-30', 'cross_sectional_momentum', '2026-08-30T00:00:00Z', 'active', 'active',
+     'Kept the runnable product rank, fixed exact-date as-of/backtest alignment, invalidated old strategy return evidence, and recorded H-XSEC-S2-004 as narrower S2 tail evidence only.', 'naive-v3'),
+    ('reversal-evidence-corrected-2026-08-30', 'macd_rsi_single_name_timing', '2026-08-30T00:00:00Z', 'active', 'active',
+     'Kept the runnable Timing feature, revoked the invalid calendar/turnover cost claim, and retained only the narrower correctly aligned H-XSEC-S2-004 loser-tail relationship as research context.', 'naive-v3');

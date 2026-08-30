@@ -4,6 +4,27 @@ This log records material changes to the product thesis, interaction design, dat
 
 ## Unreleased
 
+### Application - evidence-informed cross-sectional ranking
+
+- Manually translated H-XSEC-S5-002 into the read-only ranking surface without registering a strategy: the default pool is the dynamic liquid Top-100, current leadership is the exact-date 3M top decile versus SPY, and 13 weekly leader sleeves produce visible persistence and natural candidate weights.
+- Preserved every original ranking feature and sort. The former composite is now honestly labelled technical context; moving-average screens, 3/6/12-month relative returns, 52-week-high proximity, MA distance, slope, structure badges, search, and all-eligible inspection remain available.
+- Added an explicitly unweighted short-term rebound watch for extreme raw and sector-relative five-session losses. It discloses the measured 85-87% weekly turnover and failed 25 bp gate instead of blending the fragile reversal result into momentum.
+- All evidence calculations use the shared SPY session clock and exact symbol dates. The page reads stored Stage 2 bars in memory, creates no duplicate ranking table, writes nothing, and contacts no provider when refreshed.
+
+### Engine and research - corrected rerun plus H-XSEC-S5-002
+
+- Reran the repaired naive-v3 production strategy diagnostic without fetching data: 26 live-product symbols, 248 exact-date 21-session periods, +1,858.2% total return versus +1,409.4% equal-weight, 15.5% CAGR, 0.85 Sharpe, -47.1% maximum drawdown, and 33.9% one-way turnover. The result remains a provisional product backtest, not evidence for the Stage 2 library candidate.
+- Added one compact, read-only H-XSEC-S5-002 loop for the four frozen H-XSEC-S2-004 tails. It uses next-adjusted-open fills, a 13-week overlapping-sleeve winner portfolio, one-week reversal sleeves, measured target-weight turnover, and declared 0/5/10/25/50 bp one-way cost scenarios against a gross dynamic Top-100 benchmark.
+- The 3M winner passed the rough gate (+1.70% full annualized excess at 10 bp; 7.2% weekly turnover); 1M failed Development. Raw and sector-relative reversal passed at 10 bp but failed at 25 bp, rotated 85-87%, and materially worsened drawdown. The research run itself changed no product behavior; a later separate manual audit authorized the descriptive UI translation recorded above, but no factor or strategy registration.
+- Recorded that the anchor SPY history has no adjusted open and omitted that secondary comparison rather than mixing raw open or close-to-close data into the open-to-open implementation.
+
+### Engine and research - exact cross-sectional calendar plus H-XSEC-S2-004
+
+- Fixed the production momentum backtest's positional-calendar bug: every formation and exit now uses one real-session date, late/stale names enter dynamically only with an exact formation bar and enough history, and forward returns use exact date lookups. Current production and research-page rankings also exclude symbols not on the shared modal as-of date.
+- Corrected equal-weight turnover from symmetric difference (which made a complete replacement 200%) to one-way entrants (100%). Added staggered-listing, missing-date, endpoint-return, stale-as-of, and full-turnover regressions. The two archived scratch scripts with the same bug are date-aligned for any future rerun.
+- Invalidated the old +338% strategy, +117.7% volatility-scale, and +444.2% reversal-cost evidence. Historical strategy runs remain visible but now expose an invalidation warning; the running product algorithms and all UI functions remain available as provisional placeholders.
+- Added one compact, read-only H-XSEC-S2-004 loop over 775 accepted dual-basis histories and 1,056 exact weekly formations. Dynamic Top-100 1M/3M winner tails and raw/sector-relative five-session loser tails cleared the frozen diagnostic gate; classic 12-1/6M/12M failed early-period stability. Small/lower-liquidity names were controls only. U-shaped decile curves explain why a single monotone IC previously hid both tails.
+
 ### Research design - H-TIME-S2-002 confirmation and path surface
 
 - Added one consolidated, English Timing design instead of a paper per indicator: confirmation after frozen dislocations, trend birth/acceptance, volatility compression/directional release, and deterioration warning.

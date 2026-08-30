@@ -78,18 +78,24 @@ def run_cross_sectional_momentum_backtest(
     symbols = sorted(bars_by_symbol)
     ordered_by_symbol = {symbol: sorted(bars_by_symbol[symbol], key=lambda bar: bar.time) for symbol in symbols}
     dates_by_symbol = {symbol: [bar.time for bar in bars] for symbol, bars in ordered_by_symbol.items()}
-    closes_by_symbol = {symbol: [bar.close for bar in bars] for symbol, bars in ordered_by_symbol.items()}
+    index_by_symbol = {
+        symbol: {bar.time: index for index, bar in enumerate(bars)}
+        for symbol, bars in ordered_by_symbol.items()
+    }
 
-    # A rebalance date must have real bars for every symbol at that index --
-    # use the shortest history in the universe as the walk-forward spine so
-    # every step is comparing symbols on the same real calendar position.
-    min_length = min((len(bars) for bars in ordered_by_symbol.values()), default=0)
-    if min_length < 300:  # ~14 months: enough for compute_cross_section_v3's own 252-day floor plus room to walk forward
+    # Use one deterministic real-session calendar, then dynamically admit a
+    # symbol only when it has a bar on that exact formation date and 252 prior
+    # observations. The previous implementation used the same integer index in
+    # independently starting arrays; index 252 could therefore mean 2005 for
+    # one symbol and 2019 for another while being labelled as one period.
+    calendar_symbol = min(symbols, key=lambda symbol: (-len(dates_by_symbol[symbol]), symbol)) if symbols else None
+    calendar_dates = dates_by_symbol[calendar_symbol] if calendar_symbol else []
+    if len(calendar_dates) < 300:  # enough for the 252-session floor plus a real walk-forward window
         raise InsufficientBacktestHistoryError(
-            f"shortest symbol history is {min_length} bars; need at least 300 to walk forward at all."
+            f"reference market calendar has {len(calendar_dates)} bars; need at least 300 to walk forward at all."
         )
 
-    rebalance_indices = list(range(252, min_length - rebalance_days, rebalance_days))
+    rebalance_indices = list(range(252, len(calendar_dates) - rebalance_days, rebalance_days))
     if len(rebalance_indices) < MIN_REBALANCES:
         raise InsufficientBacktestHistoryError(
             f"only {len(rebalance_indices)} rebalance points available; need at least {MIN_REBALANCES}."
@@ -100,40 +106,69 @@ def run_cross_sectional_momentum_backtest(
     turnovers: list[float] = []
 
     for index in rebalance_indices:
-        truncated = {
-            symbol: [Bar(time=dates_by_symbol[symbol][i], close=closes_by_symbol[symbol][i]) for i in range(index + 1)]
-            for symbol in symbols
-        }
+        start_date = calendar_dates[index]
+        end_date = calendar_dates[index + rebalance_days]
+        truncated = {}
+        for symbol in symbols:
+            symbol_index = index_by_symbol[symbol].get(start_date)
+            if symbol_index is None or symbol_index < 252:
+                continue
+            truncated[symbol] = ordered_by_symbol[symbol][: symbol_index + 1]
+        if len(truncated) < top_n:
+            continue
         try:
             ranked, _weights = compute_cross_section_v3(truncated)
         except InsufficientPriceDataError:
             continue
 
         selected = tuple(item.symbol for item in ranked[:top_n])
+        if len(selected) < top_n:
+            continue
+        # A missing future endpoint invalidates the period; silently dropping a
+        # selected name would turn a delisting/data gap into survivorship bias.
+        if any(end_date not in index_by_symbol[symbol] for symbol in selected):
+            continue
+
+        benchmark_symbols = [
+            symbol
+            for symbol in truncated
+            if end_date in index_by_symbol[symbol]
+            and ordered_by_symbol[symbol][index_by_symbol[symbol][start_date]].close != 0
+        ]
+        if not benchmark_symbols:
+            continue
+
         selected_set = frozenset(selected)
         if previous_selection:
-            changed = len(selected_set.symmetric_difference(previous_selection))
-            turnovers.append(changed / max(len(selected_set), len(previous_selection)))
-        previous_selection = selected_set
+            # One-way equal-weight turnover: a completely replaced book is
+            # 100%, not the 200% symmetric-difference value used previously.
+            turnovers.append(len(selected_set - previous_selection) / len(selected_set))
 
-        end_index = index + rebalance_days
         selected_returns = [
-            (closes_by_symbol[symbol][end_index] - closes_by_symbol[symbol][index]) / closes_by_symbol[symbol][index]
+            (
+                ordered_by_symbol[symbol][index_by_symbol[symbol][end_date]].close
+                - ordered_by_symbol[symbol][index_by_symbol[symbol][start_date]].close
+            )
+            / ordered_by_symbol[symbol][index_by_symbol[symbol][start_date]].close
             for symbol in selected
-            if closes_by_symbol[symbol][index] != 0
+            if ordered_by_symbol[symbol][index_by_symbol[symbol][start_date]].close != 0
         ]
         benchmark_returns = [
-            (closes_by_symbol[symbol][end_index] - closes_by_symbol[symbol][index]) / closes_by_symbol[symbol][index]
-            for symbol in symbols
-            if closes_by_symbol[symbol][index] != 0
+            (
+                ordered_by_symbol[symbol][index_by_symbol[symbol][end_date]].close
+                - ordered_by_symbol[symbol][index_by_symbol[symbol][start_date]].close
+            )
+            / ordered_by_symbol[symbol][index_by_symbol[symbol][start_date]].close
+            for symbol in benchmark_symbols
         ]
         if not selected_returns:
             continue
+        previous_selection = selected_set
 
         periods.append(
             RebalancePeriod(
-                start_date=dates_by_symbol[symbols[0]][index],
-                end_date=dates_by_symbol[symbols[0]][end_index],
+                start_date=start_date,
+                end_date=end_date,
                 selected_symbols=selected,
                 period_return=statistics.fmean(selected_returns),
                 benchmark_return=statistics.fmean(benchmark_returns) if benchmark_returns else 0.0,
@@ -200,7 +235,9 @@ def run_cross_sectional_momentum_backtest(
             f"Naive-v1 walk-forward: every {rebalance_days} trading days, rank the universe with the real "
             f"production ranking (momentum_v3.compute_cross_section_v3, recomputed from only the history "
             f"available at that date), buy the top {top_n} symbols equal-weighted, hold to the next rebalance. "
-            f"Benchmark is an equal-weighted hold of the whole eligible universe over the same periods. "
+            f"Formation and exit use one exact real-session calendar; late or stale symbols enter only when "
+            f"they have a bar on the shared formation date and 252 prior observations. Benchmark is an "
+            f"equal-weighted hold of the formation-date eligible universe with the same exact endpoint. "
             "top_n and rebalance_days are disclosed, hand-picked parameters, not fit to this universe."
         ),
     )

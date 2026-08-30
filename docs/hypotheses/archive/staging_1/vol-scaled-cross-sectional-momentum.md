@@ -1,8 +1,14 @@
 # Volatility-scaled cross-sectional momentum (H-VOLSCALE01)
 
-Status: concluded-inconclusive (real drawdown improvement vs. the naive baseline, but not clearly attributable to the timing mechanism itself; see Observation log)
+Status: invalidated by calendar-alignment bug; historical output retained below only as context
 Version: v0.1
 Registered: 2026-08-26
+
+> **Correction, 2026-08-30:** the script compared the same integer row index
+> across independently starting security histories. Formation dates, forward
+> returns, and structure states were therefore not one shared cross-section.
+> The +117.7% baseline and scaling comparison have no evidence status. The
+> script is now date-aligned, but this archived experiment was not rerun.
 
 Not wired into any pipeline stage. Preregistered *before* running the
 comparison, per this session's own stated discipline (external review's

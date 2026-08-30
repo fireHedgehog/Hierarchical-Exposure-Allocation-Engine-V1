@@ -112,7 +112,7 @@ def main() -> None:
 
     staging_rows = connection.execute(
         "SELECT symbol, category FROM staging_symbols WHERE active = 1 "
-        "AND category NOT IN ('macro_series', 'crypto_reference')"
+        "AND category NOT IN ('macro_series', 'crypto_reference') AND research_scope = 'general'"
     ).fetchall()
 
     bars_by_symbol: dict[str, list[Bar]] = {}
@@ -133,13 +133,14 @@ def main() -> None:
 
     symbols = sorted(bars_by_symbol)
     dates_by_symbol = {s: [bar.time for bar in bars_by_symbol[s]] for s in symbols}
-    closes_by_symbol = {s: [bar.close for bar in bars_by_symbol[s]] for s in symbols}
-    min_length = min(len(bars_by_symbol[s]) for s in symbols)
-    if min_length < 300:
-        print(f"Insufficient history: shortest symbol has {min_length} bars, need >= 300.")
+    index_by_symbol = {s: {day: i for i, day in enumerate(dates_by_symbol[s])} for s in symbols}
+    calendar_symbol = min(symbols, key=lambda s: (-len(dates_by_symbol[s]), s))
+    calendar_dates = dates_by_symbol[calendar_symbol]
+    if len(calendar_dates) < 300:
+        print(f"Insufficient history: reference calendar has {len(calendar_dates)} bars, need >= 300.")
         return
 
-    rebalance_indices = list(range(252, min_length - REBALANCE_DAYS, REBALANCE_DAYS))
+    rebalance_indices = list(range(252, len(calendar_dates) - REBALANCE_DAYS, REBALANCE_DAYS))
     if len(rebalance_indices) < 4:
         print(f"Insufficient rebalance points: only {len(rebalance_indices)}.")
         return
@@ -149,21 +150,34 @@ def main() -> None:
     exposures: list[float] = []
 
     for index in rebalance_indices:
-        truncated = {
-            symbol: [Bar(time=dates_by_symbol[symbol][i], close=closes_by_symbol[symbol][i]) for i in range(index + 1)]
-            for symbol in symbols
-        }
+        start_date = calendar_dates[index]
+        end_date = calendar_dates[index + REBALANCE_DAYS]
+        truncated = {}
+        formation_index = {}
+        for symbol in symbols:
+            symbol_index = index_by_symbol[symbol].get(start_date)
+            if symbol_index is None or symbol_index < 252:
+                continue
+            formation_index[symbol] = symbol_index
+            truncated[symbol] = bars_by_symbol[symbol][: symbol_index + 1]
+        if len(truncated) < TOP_N:
+            continue
         try:
             ranked, _weights = compute_cross_section_v2(truncated)
         except InsufficientPriceDataError:
             continue
         selected = [item.symbol for item in ranked[:TOP_N]]
-        end_index = index + REBALANCE_DAYS
+        if len(selected) < TOP_N or any(end_date not in index_by_symbol[s] for s in selected):
+            continue
 
         selected_returns = [
-            (closes_by_symbol[s][end_index] - closes_by_symbol[s][index]) / closes_by_symbol[s][index]
+            (
+                bars_by_symbol[s][index_by_symbol[s][end_date]].close
+                - bars_by_symbol[s][formation_index[s]].close
+            )
+            / bars_by_symbol[s][formation_index[s]].close
             for s in selected
-            if closes_by_symbol[s][index] != 0
+            if bars_by_symbol[s][formation_index[s]].close != 0
         ]
         if not selected_returns:
             continue
@@ -171,7 +185,9 @@ def main() -> None:
         baseline_returns.append(period_return)
 
         broken_count = sum(
-            1 for s in selected if _is_structure_broken(highs_by_symbol[s], lows_by_symbol[s], index)
+            1
+            for s in selected
+            if _is_structure_broken(highs_by_symbol[s], lows_by_symbol[s], formation_index[s])
         )
         broken_fraction = broken_count / len(selected)
         exposure = 1.0 - BROKEN_EXPOSURE_HAIRCUT * broken_fraction

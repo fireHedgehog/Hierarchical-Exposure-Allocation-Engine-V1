@@ -15,7 +15,7 @@ this folder existed. These files stay where they are — `schema.sql`,
 current paths, so moving them would just be churn for no benefit:
 
 - [Short-term mean reversion](../short-term-mean-reversion.md) — confirmed (1-week window). Live as `short_term_reversal_entry` in `macd_rsi_single_name_timing` naive-v3.
-- [Short-term reversal cost robustness](../short-term-reversal-cost-robustness.md) — confirmed, cost-sensitive. Survives to 10bps, breaks down 25-50bps.
+- [Short-term reversal cost robustness](../short-term-reversal-cost-robustness.md) — invalidated: formation dates were misaligned and turnover was doubled. H-XSEC-S2-004 restores relationship evidence only, not a cost claim.
 - [Dow Theory risk-state](../dow-theory-risk-state.md) — confirmed. Broken trend structure predicts higher forward volatility (a risk-context finding, not an entry/exit trigger itself — same reframe pattern as the macro composite).
 - [Dow Theory trend structure](../dow-theory-trend-structure.md) — rejected.
 - [Opening gap-down fill](../gap-down-fill.md) — rejected.
@@ -39,7 +39,7 @@ up," but "should I act on it now."
 | --- | --- | --- |
 | 1 | Entry edge — does a specific price-path condition have real forward edge vs. an unconditional baseline | Tested: short-term reversal confirmed; Dow Theory trend, gap-down, large-drop all rejected |
 | 2 | Exit edge — does the exit rule itself have a real, independently-tested edge | **Corrected, 2026-08-27** — RSI(14)>=70's general predictive validity *was* tested and confirmed (milestone 0.29's event study: r=-0.015, adjusted p=0.0012). An earlier version of this table, and a `schema.sql` comment it was copied from, both wrongly said "never tested" — fixed in both places. The real, still-open gap is narrower: RSI's role specifically as an exit *conditional on an open `short_term_reversal_entry` position* (not the unconditional signal 0.29 tested) has not been isolated |
-| 3 | Cost/turnover robustness | Tested for the entry rule (confirmed cost-sensitive); not yet tested for the exit rule on its own |
+| 3 | Cost/turnover robustness | Prior entry-rule result invalidated by date/turnover bugs; not currently tested for entry or exit |
 | 4 | Regime-conditional timing — does entry/exit edge strength change across `macro_regime_composite` states (stressed/neutral/calm) | **Answered, confirmed** (see [`short-term-mean-reversion.md`](../short-term-mean-reversion.md)'s regime-conditioned addendum). 1-week reversal real in all 3 regimes, strongest when stressed. 2-week reversal real in stressed/neutral but flips to mild continuation when calm — new information the pooled test alone didn't show |
 | 5 | Holding-period / signal decay — real half-life of a *live, triggered* position, not the forward-return window a paper was tested at | Never started; distinct from #1's forward-window choice |
 | 6 | False-positive / whipsaw rate — how often a trigger fires with no real payoff, separate from average edge magnitude | Never started |

@@ -124,6 +124,20 @@ def test_compute_cross_section_v3_ranks_and_returns_weight_diagnostics() -> None
         assert -1.0 <= item.composite_score <= 1.0
 
 
+def test_cross_section_excludes_symbols_not_on_shared_as_of_date() -> None:
+    common_start = date(2016, 1, 1)
+    universe = {
+        "FRESH_A": _bars(_noisy_walk(300, seed=21, drift=0.001), common_start),
+        "FRESH_B": _bars(_noisy_walk(300, seed=22, drift=0.0005), common_start),
+        "STALE": _bars(_noisy_walk(299, seed=23, drift=0.002), common_start),
+    }
+
+    ranked, _ = compute_cross_section_v3(universe)
+
+    assert {item.symbol for item in ranked} == {"FRESH_A", "FRESH_B"}
+    assert {item.last_date for item in ranked} == {universe["FRESH_A"][-1].time}
+
+
 def test_all_symbols_thin_still_raises_like_v2() -> None:
     with pytest.raises(InsufficientPriceDataError):
         compute_cross_section_v3({"THIN": _bars(_noisy_walk(5, seed=1))})

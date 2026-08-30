@@ -30,6 +30,16 @@ near zero or negative, and no E1/E5/EB20/ES transition passed the sector-excess,
 persistent-control, drawdown, and curve-q gates together. Validation and
 Holdout remain unopened. The correlated index ES panel is a useful observation
 for a new timing design, not authority to translate or promote this Cross study.
+H-XSEC-S2-004 then separated the two tails that a monotone IC had mixed. On an
+exact SPY session clock, a dynamic liquid Top-100, and next-adjusted-open entry,
+1M/3M winner tails and raw/sector-relative five-session loser reversal cleared
+the frozen diagnostic gate. Classic 12-1/6M/12M were strong recently but failed
+the early-period sign gate. H-XSEC-S5-002 translated only those four rows into
+one next-open cost loop. The 13-sleeve 3M implementation passed all folds and
+10 bp with 7.2% weekly turnover; 1M failed Development. Both weekly reversals
+passed the permissive 10 bp gate but failed 25 bp and materially worsened
+drawdown, so they are parked pending real spread/impact data. No strategy or
+production change follows automatically.
 H-THEME-S2-001 remains a diagnostic of the retired clock and authorizes no
 broader Theme conclusion.
 H-TIME-S2-002 is now designed but not run. One consolidated confirmation-and-

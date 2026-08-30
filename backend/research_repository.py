@@ -1099,7 +1099,7 @@ def run_strategy_backtest_research(
     run_id = f"strategy-backtest-{uuid.uuid4()}"
     timestamp = _iso_z(now)
     summary = (
-        f"Naive-v1 walk-forward: top {backtest.top_n} of {len(bars_by_symbol)} tradable symbols, rebalanced every "
+        f"{strategy_version} walk-forward: top {backtest.top_n} of {len(bars_by_symbol)} tradable symbols, rebalanced every "
         f"{backtest.rebalance_days} trading days, {len(backtest.periods)} periods ({backtest.period_start} to "
         f"{backtest.period_end}). Total return {backtest.total_return:+.1%} vs. equal-weight universe benchmark "
         f"{backtest.benchmark_total_return:+.1%}. "
@@ -1172,7 +1172,8 @@ def get_latest_strategy_backtest_run(
 ) -> dict[str, object] | None:
     run_row = connection.execute(
         """
-        SELECT research_run_id, strategy_key, strategy_version, dataset_snapshot_id, summary, started_at, finished_at
+        SELECT research_run_id, strategy_key, strategy_version, dataset_snapshot_id, summary,
+               invalidated_reason, started_at, finished_at
         FROM research_runs
         WHERE strategy_key = ? AND research_run_id LIKE 'strategy-backtest-%'
         ORDER BY started_at DESC, rowid DESC LIMIT 1
@@ -1192,6 +1193,7 @@ def get_latest_strategy_backtest_run(
         "strategy_version": run_row["strategy_version"],
         "dataset_snapshot_id": run_row["dataset_snapshot_id"],
         "summary": run_row["summary"],
+        "invalidated_reason": run_row["invalidated_reason"],
         "started_at": run_row["started_at"],
         "finished_at": run_row["finished_at"],
         "cagr": metrics_by_key.get("cagr"),

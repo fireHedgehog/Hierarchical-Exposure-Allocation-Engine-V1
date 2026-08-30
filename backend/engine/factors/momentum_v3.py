@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import statistics
+from collections import Counter
 from dataclasses import dataclass
 
 from backend.engine.factors.momentum_v2 import _pooled_ic_samples
@@ -216,14 +217,34 @@ def compute_cross_section_v3(
     real significance test over this run's own fetched price history. See
     module docstring for the full mechanism and its honest limits."""
 
-    horizon_weights = compute_horizon_weights(bars_by_symbol)
+    ordered_by_symbol = {
+        symbol: sorted(bars, key=lambda bar: bar.time)
+        for symbol, bars in bars_by_symbol.items()
+        if bars
+    }
+    if not ordered_by_symbol:
+        raise InsufficientPriceDataError("no symbol in the universe has price history to score.")
+
+    # A cross-section is one as-of date, never a collection of each symbol's
+    # independently latest observation. Use the modal latest date (latest date
+    # wins a tie) and exclude stale/ahead rows rather than ranking old prices
+    # beside current ones. The pipeline normally fetches one US-market cohort,
+    # so this is a guardrail for partial or interrupted datasets.
+    latest_counts = Counter(bars[-1].time for bars in ordered_by_symbol.values())
+    shared_as_of = max(latest_counts, key=lambda day: (latest_counts[day], day))
+    synchronized = {
+        symbol: bars
+        for symbol, bars in ordered_by_symbol.items()
+        if bars[-1].time == shared_as_of
+    }
+
+    horizon_weights = compute_horizon_weights(synchronized)
     weight_by_horizon = {item.horizon: item.weight for item in horizon_weights}
 
     blended: dict[str, float] = {}
     returns_by_symbol: dict[str, list[HorizonReturn]] = {}
     latest_by_symbol: dict[str, Bar] = {}
-    for symbol, bars in bars_by_symbol.items():
-        ordered = sorted(bars, key=lambda bar: bar.time)
+    for symbol, ordered in synchronized.items():
         try:
             blend, returns = _horizon_returns_v3(ordered, weight_by_horizon)
         except InsufficientPriceDataError:

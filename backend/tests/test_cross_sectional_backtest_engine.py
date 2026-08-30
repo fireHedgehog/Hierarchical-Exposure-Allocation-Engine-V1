@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from datetime import date, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -75,3 +76,76 @@ def test_benchmark_is_real_equal_weight_not_fabricated() -> None:
     # universe, so on this deliberately mixed (some up, some down) universe
     # it should sit meaningfully below the top-N-only strategy return.
     assert result.benchmark_total_return != result.total_return
+
+
+def test_rebalance_uses_shared_dates_with_staggered_and_missing_histories(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    start = date(2020, 1, 1)
+    early = _trending_bars(520, 0.0010, seed=11, noise=0.0, start=start)
+    late = _trending_bars(490, 0.0015, seed=12, noise=0.0, start=start + timedelta(days=30))
+    holed = _trending_bars(520, 0.0005, seed=13, noise=0.0, start=start)
+    missing_formation_date = (start + timedelta(days=273)).isoformat()
+    holed = [bar for bar in holed if bar.time != missing_formation_date]
+    universe = {"EARLY": early, "HOLED": holed, "LATE": late}
+
+    scorer_inputs: dict[str, dict[str, str]] = {}
+
+    def fake_score(truncated: dict[str, list[Bar]]):
+        last_dates = {symbol: bars[-1].time for symbol, bars in truncated.items()}
+        formation = next(iter(last_dates.values()))
+        scorer_inputs[formation] = last_dates
+        preferred = "LATE" if "LATE" in truncated else sorted(truncated)[0]
+        ordered = [preferred, *(symbol for symbol in sorted(truncated) if symbol != preferred)]
+        return [SimpleNamespace(symbol=symbol) for symbol in ordered], []
+
+    monkeypatch.setattr(
+        "backend.engine.factors.cross_sectional_backtest.compute_cross_section_v3",
+        fake_score,
+    )
+    result = run_cross_sectional_momentum_backtest(universe, top_n=1, rebalance_days=21)
+
+    price_by_symbol = {
+        symbol: {bar.time: bar.close for bar in bars}
+        for symbol, bars in universe.items()
+    }
+    for period in result.periods:
+        inputs = scorer_inputs[period.start_date]
+        assert set(inputs.values()) == {period.start_date}
+        assert period.start_date in price_by_symbol[period.selected_symbols[0]]
+        assert period.end_date in price_by_symbol[period.selected_symbols[0]]
+        selected = period.selected_symbols[0]
+        expected_selected = (
+            price_by_symbol[selected][period.end_date] / price_by_symbol[selected][period.start_date] - 1
+        )
+        benchmark_returns = [
+            prices[period.end_date] / prices[period.start_date] - 1
+            for symbol, prices in price_by_symbol.items()
+            if symbol in inputs and period.end_date in prices
+        ]
+        assert period.period_return == pytest.approx(expected_selected)
+        assert period.benchmark_return == pytest.approx(sum(benchmark_returns) / len(benchmark_returns))
+
+    assert "HOLED" not in scorer_inputs[missing_formation_date]
+    assert all("LATE" not in inputs for day, inputs in scorer_inputs.items() if day < (start + timedelta(days=282)).isoformat())
+    assert any("LATE" in inputs for day, inputs in scorer_inputs.items() if day >= (start + timedelta(days=282)).isoformat())
+
+
+def test_turnover_is_one_way_fraction_not_symmetric_difference(monkeypatch: pytest.MonkeyPatch) -> None:
+    universe = _mixed_universe()
+    calls = 0
+
+    def alternating_score(truncated: dict[str, list[Bar]]):
+        nonlocal calls
+        selected = "UP1" if calls % 2 == 0 else "DOWN1"
+        calls += 1
+        ordered = [selected, *(symbol for symbol in sorted(truncated) if symbol != selected)]
+        return [SimpleNamespace(symbol=symbol) for symbol in ordered], []
+
+    monkeypatch.setattr(
+        "backend.engine.factors.cross_sectional_backtest.compute_cross_section_v3",
+        alternating_score,
+    )
+    result = run_cross_sectional_momentum_backtest(universe, top_n=1, rebalance_days=21)
+
+    assert result.portfolio_turnover == pytest.approx(1.0)

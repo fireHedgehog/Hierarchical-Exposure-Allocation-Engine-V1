@@ -2788,8 +2788,10 @@ def test_legacy_demo_gets_complete_versioned_v3_fixture_on_reseed(tmp_path: Path
         assert connection.execute("SELECT COUNT(*) FROM strategies").fetchone()[0] == 9
         assert connection.execute("SELECT COUNT(*) FROM strategy_versions").fetchone()[0] == 14
         assert connection.execute("SELECT COUNT(*) FROM strategy_diagnostics").fetchone()[0] == 30
-        # 16 original events plus 2 append-only translation clarifications.
-        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 18
+        # 16 original events, 2 translation clarifications, and 2 append-only
+        # evidence corrections (calendar/turnover findings keep the product
+        # active while revoking the invalid research claims).
+        assert connection.execute("SELECT COUNT(*) FROM strategy_lifecycle_events").fetchone()[0] == 20
         assert connection.execute("SELECT COUNT(*) FROM strategy_components").fetchone()[0] == 7
         synthetic_assets = connection.execute(
             """

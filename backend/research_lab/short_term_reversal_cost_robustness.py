@@ -67,7 +67,7 @@ def main() -> None:
 
     staging_rows = connection.execute(
         "SELECT symbol, category FROM staging_symbols WHERE active = 1 "
-        "AND category NOT IN ('macro_series', 'crypto_reference')"
+        "AND category NOT IN ('macro_series', 'crypto_reference') AND research_scope = 'general'"
     ).fetchall()
 
     closes_by_symbol: dict[str, list[float]] = {}
@@ -85,22 +85,31 @@ def main() -> None:
         dates_by_symbol[row["symbol"]] = [r["time"] for r in bar_rows]
 
     symbols = sorted(closes_by_symbol)
-    min_length = min(len(closes_by_symbol[s]) for s in symbols)
-    if min_length < LOOKBACK_DAYS + REBALANCE_DAYS + 50:
-        print(f"Insufficient history: shortest symbol has {min_length} bars.")
+    index_by_symbol = {s: {day: i for i, day in enumerate(dates_by_symbol[s])} for s in symbols}
+    calendar_symbol = min(symbols, key=lambda s: (-len(dates_by_symbol[s]), s))
+    calendar_dates = dates_by_symbol[calendar_symbol]
+    if len(calendar_dates) < LOOKBACK_DAYS + REBALANCE_DAYS + 50:
+        print(f"Insufficient history: reference calendar has {len(calendar_dates)} bars.")
         return
 
-    rebalance_indices = list(range(LOOKBACK_DAYS, min_length - REBALANCE_DAYS, REBALANCE_DAYS))
+    rebalance_indices = list(range(LOOKBACK_DAYS, len(calendar_dates) - REBALANCE_DAYS, REBALANCE_DAYS))
 
     gross_returns: list[float] = []
     turnovers: list[float] = []
     previous_selection: frozenset[str] = frozenset()
 
     for index in rebalance_indices:
+        lookback_date = calendar_dates[index - LOOKBACK_DAYS]
+        start_date = calendar_dates[index]
+        end_date = calendar_dates[index + REBALANCE_DAYS]
         trailing_returns = {}
         for s in symbols:
-            past_close = closes_by_symbol[s][index - LOOKBACK_DAYS]
-            now_close = closes_by_symbol[s][index]
+            past_index = index_by_symbol[s].get(lookback_date)
+            start_index = index_by_symbol[s].get(start_date)
+            if past_index is None or start_index is None:
+                continue
+            past_close = closes_by_symbol[s][past_index]
+            now_close = closes_by_symbol[s][start_index]
             if past_close == 0:
                 continue
             trailing_returns[s] = (now_close - past_close) / abs(past_close)
@@ -110,20 +119,24 @@ def main() -> None:
         # Buy the biggest losers: ascending trailing return, take the bottom N.
         ranked = sorted(trailing_returns, key=lambda s: trailing_returns[s])
         selected = ranked[:TOP_N]
+        if any(end_date not in index_by_symbol[s] for s in selected):
+            continue
         selected_set = frozenset(selected)
 
         if previous_selection:
-            changed = len(selected_set.symmetric_difference(previous_selection))
-            turnovers.append(changed / max(len(selected_set), len(previous_selection)))
+            turnovers.append(len(selected_set - previous_selection) / len(selected_set))
         else:
             turnovers.append(1.0)  # first period: the whole book is a real, real cost, not skipped
         previous_selection = selected_set
 
-        end_index = index + REBALANCE_DAYS
         period_returns = [
-            (closes_by_symbol[s][end_index] - closes_by_symbol[s][index]) / closes_by_symbol[s][index]
+            (
+                closes_by_symbol[s][index_by_symbol[s][end_date]]
+                - closes_by_symbol[s][index_by_symbol[s][start_date]]
+            )
+            / closes_by_symbol[s][index_by_symbol[s][start_date]]
             for s in selected
-            if closes_by_symbol[s][index] != 0
+            if closes_by_symbol[s][index_by_symbol[s][start_date]] != 0
         ]
         if not period_returns:
             continue

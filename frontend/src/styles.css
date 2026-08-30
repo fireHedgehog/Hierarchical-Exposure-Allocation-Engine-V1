@@ -2245,11 +2245,19 @@ summary:focus-visible,
 .ranking-controls input { width: 100%; border: 0; background: transparent; color: var(--text); outline: 0; }
 .ranking-controls select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-quiet); color: var(--text); }
 .ranking-source-table { min-width: 640px; }
-.ranking-table { min-width: 1080px; }
+.ranking-table { min-width: 1660px; }
 .ranking-table td { white-space: nowrap; }
 .ranking-table td:nth-child(2) { min-width: 170px; white-space: normal; }
 .ranking-table td:nth-child(2) a { display: flex; align-items: center; gap: 3px; color: var(--text); }
 .ranking-table td:nth-child(2) small { display: block; margin-top: 3px; color: var(--faint); }
+.ranking-cell-note { display: block; margin-top: 3px; color: var(--faint); font-size: 8px; text-align: right; }
+.ranking-evidence { display: grid; gap: 4px; min-width: 88px; }
+.ranking-evidence > span { font-variant-numeric: tabular-nums; text-align: right; }
+.ranking-evidence > div { height: 4px; overflow: hidden; border-radius: 99px; background: var(--surface-quiet); }
+.ranking-evidence__fill { display: block; height: 100%; border-radius: inherit; background: var(--mint); }
+.ranking-evidence__fill--warning { background: var(--amber); }
+.ranking-reversal-table { min-width: 820px; }
+.ranking-reversal-table a { display: inline-flex; align-items: center; gap: 3px; color: var(--text); }
 .ranking-footnote { margin: 9px 0 0; color: var(--faint); font-size: 8px; }
 .ranking-links { display: flex; flex-wrap: wrap; gap: 8px; }
 .ranking-links a { display: inline-flex; align-items: center; gap: 4px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; color: var(--text-soft); font-size: 9px; }
